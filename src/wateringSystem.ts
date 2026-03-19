@@ -91,6 +91,9 @@ let wateredCount = 0
 let bloomActive = false
 // True while petals are raining down
 let petalActive = false
+// True during the wind-down: petals keep falling but don't respawn,
+// land on the ground, rest, then shrink away
+let petalSettling = false
 
 // ---------------------------------------------------------------
 // Petal particle system
@@ -107,6 +110,8 @@ const PETAL_DRIFT_MAX     = 0.3 // m/s max horizontal drift
 const PETAL_LIFE_MIN_MS   = 3_000
 const PETAL_LIFE_MAX_MS   = 7_000
 const PETAL_SCALE         = 0.5
+const PETAL_REST_MS       = 2_000  // time resting on ground before shrinking
+const PETAL_SHRINK_MS     = 600    // duration of scale-to-zero shrink
 
 interface PetalState {
   entity:      Entity
@@ -116,6 +121,8 @@ interface PetalState {
   rotSpeed:    number
   lifetime:    number   // ms remaining
   maxLifetime: number   // ms total
+  grounded:    boolean  // true once petal has landed during settle
+  groundedMs:  number   // ms since landing
 }
 
 const petalPool: PetalState[] = []
@@ -137,28 +144,75 @@ function randomizePetal(p: PetalState) {
   p.rotSpeed    = (Math.random() - 0.5) * 4
   p.maxLifetime = PETAL_LIFE_MIN_MS + Math.random() * (PETAL_LIFE_MAX_MS - PETAL_LIFE_MIN_MS)
   p.lifetime    = p.maxLifetime
+  p.grounded    = false
+  p.groundedMs  = 0
 }
 
 function petalParticleSystem(dt: number) {
-  if (!petalActive) return
+  if (!petalActive && !petalSettling) return
+
+  const dtMs = dt * 1000
+  let allSettled = true
 
   for (const p of petalPool) {
+    const t = Transform.getMutable(p.entity)
+
+    // ── Grounded phase (settling only) ───────────────────────────
+    if (p.grounded) {
+      p.groundedMs += dtMs
+
+      if (p.groundedMs >= PETAL_REST_MS + PETAL_SHRINK_MS) {
+        // Fully gone
+        t.scale = { x: 0, y: 0, z: 0 }
+      } else if (p.groundedMs >= PETAL_REST_MS) {
+        // Shrinking — ease out so the last moment lingers
+        const progress = (p.groundedMs - PETAL_REST_MS) / PETAL_SHRINK_MS
+        const s = PETAL_SCALE * (1 - progress * progress)
+        t.scale = { x: s, y: s, z: s }
+        allSettled = false
+      } else {
+        // Resting on the ground — still visible
+        allSettled = false
+      }
+      continue
+    }
+
+    // ── In-air phase ─────────────────────────────────────────────
+    allSettled = false
     p.pos.x   += p.vel.x * dt
     p.pos.y   += p.vel.y * dt
     p.pos.z   += p.vel.z * dt
     p.rotY    += p.rotSpeed * dt
-    p.lifetime -= dt * 1000
+    p.lifetime -= dtMs
 
-    // Respawn when lifetime expires or petal hits the ground
-    if (p.lifetime <= 0 || p.pos.y < 0) {
+    if (p.pos.y < 0) {
+      if (petalActive) {
+        // Normal rain: respawn above the garden
+        randomizePetal(p)
+      } else {
+        // Settling: land on the floor and begin the rest timer
+        p.pos.y    = 0
+        p.vel      = { x: 0, y: 0, z: 0 }
+        p.rotSpeed = 0
+        p.grounded = true
+        p.groundedMs = 0
+      }
+    } else if (petalActive && p.lifetime <= 0) {
+      // Lifetime expired mid-air during normal rain — respawn
       randomizePetal(p)
     }
 
     // Apply to renderer — rotation as Y-axis quaternion
     const half = p.rotY * 0.5
-    const t = Transform.getMutable(p.entity)
     t.position = { x: p.pos.x, y: p.pos.y, z: p.pos.z }
     t.rotation = { x: 0, y: Math.sin(half), z: 0, w: Math.cos(half) }
+    t.scale    = { x: PETAL_SCALE, y: PETAL_SCALE, z: PETAL_SCALE }
+  }
+
+  // Once every petal has shrunk away, idle the system
+  if (petalSettling && allSettled) {
+    petalSettling = false
+    console.log('[Petals] all settled')
   }
 }
 
@@ -352,11 +406,10 @@ function resetAllPlants() {
     })
   }
 
-  // Stop petal rain
-  petalActive = false
-  for (const p of petalPool) {
-    Transform.getMutable(p.entity).scale = { x: 0, y: 0, z: 0 }
-  }
+  // Begin petal settle — stop spawning new petals, let in-air ones
+  // drift down, land, rest 2s, then shrink away gracefully
+  petalActive   = false
+  petalSettling = true
 
   // Clear state and build the queue for the reset system
   resetQueue = []
@@ -612,6 +665,8 @@ export function setupWateringSystem() {
         rotSpeed:    1,
         lifetime:    0,
         maxLifetime: PETAL_LIFE_MAX_MS,
+        grounded:    false,
+        groundedMs:  0,
       })
     }
     console.log(`[WateringSystem] Petal pool ready — ${PETAL_COUNT} instances from "${src}"`)
