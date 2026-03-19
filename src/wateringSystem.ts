@@ -94,7 +94,7 @@ let petalActive = false
 // Petal particle system
 // ---------------------------------------------------------------
 
-const PETAL_COUNT         = 30
+const PETAL_COUNT         = 50
 const PETAL_CENTER        = { x: 8, z: 8 }
 const PETAL_SPAWN_RADIUS  = 5
 const PETAL_HEIGHT_MAX    = 7   // max spawn height (m)
@@ -104,7 +104,7 @@ const PETAL_FALL_MAX      = 1.0 // m/s max fall speed
 const PETAL_DRIFT_MAX     = 0.3 // m/s max horizontal drift
 const PETAL_LIFE_MIN_MS   = 3_000
 const PETAL_LIFE_MAX_MS   = 7_000
-const PETAL_SCALE         = 0.25
+const PETAL_SCALE         = 0.5
 
 interface PetalState {
   entity:      Entity
