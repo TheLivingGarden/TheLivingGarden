@@ -94,6 +94,9 @@ let petalActive = false
 // True during the wind-down: petals keep falling but don't respawn,
 // land on the ground, rest, then shrink away
 let petalSettling = false
+// Music fade state
+let musicFadeState: 'in' | 'out' | 'none' = 'none'
+let musicFadeMs    = 0
 
 // ---------------------------------------------------------------
 // Petal particle system
@@ -112,6 +115,9 @@ const PETAL_LIFE_MAX_MS   = 7_000
 const PETAL_SCALE         = 0.5
 const PETAL_REST_MS       = 2_000  // time resting on ground before shrinking
 const PETAL_SHRINK_MS     = 600    // duration of scale-to-zero shrink
+
+const MUSIC_FADE_IN_MS    = 3_000  // bloom music swells in over 3s, then visuals trigger
+const MUSIC_FADE_OUT_MS   = 6_000  // bloom music fades out over 6s
 
 interface PetalState {
   entity:      Entity
@@ -216,6 +222,38 @@ function petalParticleSystem(dt: number) {
   }
 }
 
+// Music fade system — runs in the main update loop so getMutable is reliable.
+// Quadratic ease-in for the swell, quadratic ease-out for the fade.
+function musicFadeSystem(dt: number) {
+  if (musicFadeState === 'none' || !bloomSoundEntity) return
+
+  musicFadeMs += dt * 1000
+
+  if (musicFadeState === 'in') {
+    const progress = Math.min(musicFadeMs / MUSIC_FADE_IN_MS, 1)
+    // ease-in: starts barely audible, swells toward full
+    AudioSource.getMutable(bloomSoundEntity).volume = progress * progress
+    if (progress >= 1) musicFadeState = 'none'
+
+  } else if (musicFadeState === 'out') {
+    const progress = Math.min(musicFadeMs / MUSIC_FADE_OUT_MS, 1)
+    // ease-out: drops quickly then lingers softly at the end
+    const remaining = 1 - progress
+    AudioSource.getMutable(bloomSoundEntity).volume = remaining * remaining
+    if (progress >= 1) {
+      // Fully silent — stop playback cleanly
+      AudioSource.createOrReplace(bloomSoundEntity, {
+        audioClipUrl: 'assets/scene/Sounds/MagicSound.mp3',
+        playing: false,
+        loop: false,
+        volume: 0,
+        pitch: 1,
+      })
+      musicFadeState = 'none'
+    }
+  }
+}
+
 // Reset animation state machine — driven by an ECS system so Animator
 // updates run in the main update loop (same execution context as pointer
 // events) rather than nested timer callbacks which the renderer ignores.
@@ -291,6 +329,7 @@ function fetchPlantStates() {
 
           // Already mid-session — jump straight to healthy idle
           Animator.playSingleAnimation(entity, ANIM_HEALTHY_STATE)
+          disablePlantClick(entity)
           wateredCount++
 
           const msRemaining = WATERED_EXPIRY_MS - msElapsed
@@ -325,6 +364,29 @@ function sendWateredToServer(plantId: string, wateredAt: number) {
 }
 
 // ---------------------------------------------------------------
+// Plant click registry — enable/disable per-plant pointer events
+// ---------------------------------------------------------------
+
+// Stores click target and plant name for each plant entity so we can
+// re-register the pointer event after a plant reverts to droopy.
+const plantRegistry = new Map<Entity, { clickTarget: Entity; plantName: string }>()
+
+function enablePlantClick(entity: Entity) {
+  const info = plantRegistry.get(entity)
+  if (!info) return
+  pointerEventsSystem.onPointerDown(
+    { entity: info.clickTarget, opts: { button: InputAction.IA_POINTER, hoverText: 'Water' } },
+    () => waterPlant(entity, info.plantName)
+  )
+}
+
+function disablePlantClick(entity: Entity) {
+  const info = plantRegistry.get(entity)
+  if (!info) return
+  pointerEventsSystem.removeOnPointerDown(info.clickTarget)
+}
+
+// ---------------------------------------------------------------
 // Plant lifecycle
 // ---------------------------------------------------------------
 
@@ -348,6 +410,7 @@ function scheduleExpiry(entity: Entity, sessionTimestamp: number, delayMs: numbe
     timers.setTimeout(() => {
       if (!PlantData.get(entity).isWatered) {
         Animator.playSingleAnimation(entity, ANIM_DROOPY_STATE)
+        enablePlantClick(entity)
       }
     }, ANIM_TRANSITION_MS)
   }, delayMs)
@@ -361,6 +424,9 @@ function waterPlant(entity: Entity, plantId: string) {
   const now = Date.now()
   pd.isWatered = true
   pd.wateredAt = now
+
+  // Healthy plants are not clickable
+  disablePlantClick(entity)
 
   // Play transition, then settle into healthy idle.
   // Guard: only switch to HealthyState if this session is still active.
@@ -394,16 +460,10 @@ function resetAllPlants() {
   wateredCount = 0
   updateProgressText()
 
-  // Stop bloom music — createOrReplace forces the update to the renderer
-  // reliably (getMutable in a timer callback can be silently dropped)
+  // Fade bloom music out — musicFadeSystem handles the gradual volume drop
   if (bloomSoundEntity) {
-    AudioSource.createOrReplace(bloomSoundEntity, {
-      audioClipUrl: 'assets/scene/Sounds/MagicSound.mp3',
-      playing: false,
-      loop: false,
-      volume: 1,
-      pitch: 1,
-    })
+    musicFadeMs   = 0
+    musicFadeState = 'out'
   }
 
   // Begin petal settle — stop spawning new petals, let in-air ones
@@ -468,6 +528,8 @@ function resetAnimSystem(dt: number) {
     }
     if (resetQueue.length === 0) {
       resetPhase = 'done'
+      // Re-enable clicking now all plants are droopy again
+      for (const entity of plantRegistry.keys()) enablePlantClick(entity)
       console.log('[RESET] system complete — all plants in DroopyState')
     }
   }
@@ -479,10 +541,31 @@ function resetAnimSystem(dt: number) {
 
 function triggerBloomEvent() {
   bloomActive = true
-  showBloomText('The Garden is in Full Bloom!')
-  console.log('Bloom triggered!')
+  console.log('Bloom building — music fade-in starting')
 
-  // Start petal rain — stagger initial lifetimes so petals don't all spawn at once
+  // Music starts immediately, silent, and swells in over MUSIC_FADE_IN_MS.
+  // Visual bloom fires only after the fade completes so the sound leads the moment.
+  if (bloomSoundEntity) {
+    AudioSource.createOrReplace(bloomSoundEntity, {
+      audioClipUrl: 'assets/scene/Sounds/MagicSound.mp3',
+      playing: true,
+      loop: true,
+      volume: 0,
+      pitch: 1,
+    })
+    musicFadeMs    = 0
+    musicFadeState = 'in'
+  }
+
+  timers.setTimeout(launchVisualBloom, MUSIC_FADE_IN_MS)
+}
+
+/** Called once the music has fully faded in — launches all visual bloom effects. */
+function launchVisualBloom() {
+  showBloomText('The Garden is in Full Bloom!')
+  console.log('Bloom visual launched!')
+
+  // Petal rain — stagger initial lifetimes so petals don't all spawn at once
   petalActive = true
   for (const p of petalPool) {
     randomizePetal(p)
@@ -491,27 +574,16 @@ function triggerBloomEvent() {
     t.scale = { x: PETAL_SCALE, y: PETAL_SCALE, z: PETAL_SCALE }
   }
 
-  // Play bloom model animation
+  // Bloom model animation
   if (bloomModelEntity) {
     Animator.playSingleAnimation(bloomModelEntity, ANIM_BLOOM)
-  }
-
-  // Play bloom music on loop — createOrReplace is the reliable path
-  if (bloomSoundEntity) {
-    AudioSource.createOrReplace(bloomSoundEntity, {
-      audioClipUrl: 'assets/scene/Sounds/MagicSound.mp3',
-      playing: true,
-      loop: true,
-      volume: 1,
-      pitch: 1,
-    })
   }
 
   const msUntilNextBloom = getNextBloomTime() - Date.now()
   const resetDelay = TEST_MODE ? 30_000 : 60_000
 
   if (TEST_MODE) {
-    console.log(`[TEST] Bloom fires in ${msUntilNextBloom / 1000}s, reset in ${(msUntilNextBloom + resetDelay) / 1000}s`)
+    console.log(`[TEST] Visual bloom live — reset in ${(msUntilNextBloom + resetDelay) / 1000}s`)
   } else {
     console.log(`Next bloom scheduled in ${Math.round(msUntilNextBloom / 1000 / 60)} minutes`)
   }
@@ -556,13 +628,10 @@ function setupPlant(plantName: string) {
     clickTarget = entity
   }
 
-  pointerEventsSystem.onPointerDown(
-    {
-      entity: clickTarget,
-      opts: { button: InputAction.IA_POINTER, hoverText: 'Water' },
-    },
-    () => waterPlant(entity, plantName)
-  )
+  // Register so enable/disablePlantClick can find the click target later
+  plantRegistry.set(entity, { clickTarget, plantName })
+  // Plants start droopy — enable clicking immediately
+  enablePlantClick(entity)
 }
 
 // ---------------------------------------------------------------
@@ -673,6 +742,9 @@ export function setupWateringSystem() {
   } else {
     console.log('[WateringSystem] Petal entity not found — particle system disabled')
   }
+
+  // Music fade system — runs every frame, idles when musicFadeState === 'none'
+  engine.addSystem(musicFadeSystem)
 
   // Reset animation system — runs every frame, idles when resetPhase === 'done'
   engine.addSystem(resetAnimSystem)
