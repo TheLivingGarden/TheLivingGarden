@@ -8,6 +8,7 @@ import {
   Entity,
   Schemas,
   Animator,
+  AudioSource,
   GltfContainer,
   TextShape,
   Billboard,
@@ -83,6 +84,7 @@ export const PlantData = engine.defineComponent('plant-data', {
 let progressEntity: Entity
 let bloomBillboard: Entity
 let bloomModelEntity: Entity | null = null
+let bloomSoundEntity: Entity | null = null
 let wateredCount = 0
 // True between bloom trigger and the post-bloom reset — expiry timers skip
 // during this window so plants stay healthy through the full bloom moment.
@@ -338,6 +340,18 @@ function resetAllPlants() {
   wateredCount = 0
   updateProgressText()
 
+  // Stop bloom music — createOrReplace forces the update to the renderer
+  // reliably (getMutable in a timer callback can be silently dropped)
+  if (bloomSoundEntity) {
+    AudioSource.createOrReplace(bloomSoundEntity, {
+      audioClipUrl: 'assets/scene/Sounds/MagicSound.mp3',
+      playing: false,
+      loop: false,
+      volume: 1,
+      pitch: 1,
+    })
+  }
+
   // Stop petal rain
   petalActive = false
   for (const p of petalPool) {
@@ -429,8 +443,19 @@ function triggerBloomEvent() {
     Animator.playSingleAnimation(bloomModelEntity, ANIM_BLOOM)
   }
 
+  // Play bloom music on loop — createOrReplace is the reliable path
+  if (bloomSoundEntity) {
+    AudioSource.createOrReplace(bloomSoundEntity, {
+      audioClipUrl: 'assets/scene/Sounds/MagicSound.mp3',
+      playing: true,
+      loop: true,
+      volume: 1,
+      pitch: 1,
+    })
+  }
+
   const msUntilNextBloom = getNextBloomTime() - Date.now()
-  const resetDelay = TEST_MODE ? 5_000 : 60_000
+  const resetDelay = TEST_MODE ? 30_000 : 60_000
 
   if (TEST_MODE) {
     console.log(`[TEST] Bloom fires in ${msUntilNextBloom / 1000}s, reset in ${(msUntilNextBloom + resetDelay) / 1000}s`)
@@ -513,6 +538,19 @@ export function setupWateringSystem() {
     fontSize: 4,
   })
   Billboard.create(bloomBillboard, { billboardMode: BillboardMode.BM_Y })
+
+  // Bloom sound — loops MagicSound.mp3 during the bloom event.
+  // Transform at scene centre prevents DCL applying 3-D positional
+  // distance/Doppler effects that alter pitch and volume.
+  bloomSoundEntity = engine.addEntity()
+  Transform.create(bloomSoundEntity, { position: { x: 8, y: 2, z: 8 } })
+  AudioSource.create(bloomSoundEntity, {
+    audioClipUrl: 'assets/scene/Sounds/MagicSound.mp3',
+    playing: false,
+    loop: true,
+    volume: 1,
+    pitch: 1,
+  })
 
   // Bloom model — separate entity with its own Bloom animation
   const bloomEnt = engine.getEntityOrNullByName('Bloom')
