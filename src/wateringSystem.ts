@@ -21,6 +21,7 @@ import {
   executeTask,
   timers,
 } from '@dcl/sdk/ecs'
+import { getPlayer } from '@dcl/sdk/players'
 
 // ---------------------------------------------------------------
 // Configuration
@@ -60,6 +61,13 @@ const ANIM_TRANSITION_MS = 1500
 //   true  → invisible oversized clickbox parented to each plant
 const USE_CLICKBOX = false
 
+// How many plants a single player can water per day.
+const DAILY_WATER_LIMIT = 8
+
+// Set to true to bypass the daily limit entirely (useful during testing
+// or when running as an admin / stress-testing with one client).
+const OVERRIDE_DAILY_LIMIT = false
+
 // Plant entity names as placed in the scene editor.
 const PLANT_NAMES = [
   'Plant_1',  'Plant_2',  'Plant_3',  'Plant_4',
@@ -86,6 +94,10 @@ let bloomBillboard: Entity
 let bloomModelEntity: Entity | null = null
 let bloomSoundEntity: Entity | null = null
 let wateredCount = 0
+// Daily watering limit tracking
+let playerWateredToday = 0
+let dailyLimitReached  = false
+let playerId           = 'unknown'
 // True between bloom trigger and the post-bloom reset — expiry timers skip
 // during this window so plants stay healthy through the full bloom moment.
 let bloomActive = false
@@ -290,9 +302,17 @@ function getNextBloomTime(): number {
 // ---------------------------------------------------------------
 
 function updateProgressText() {
-  const suffix = TEST_MODE ? '\n[TEST MODE]' : ''
-  TextShape.getMutable(progressEntity).text =
-    `${wateredCount}/${TOTAL_PLANTS} Plants Watered${suffix}`
+  const lines: string[] = [`${wateredCount}/${TOTAL_PLANTS} Plants Watered`]
+  if (OVERRIDE_DAILY_LIMIT) {
+    lines.push('Waters: Unlimited (override)')
+  } else {
+    const remaining = Math.max(0, DAILY_WATER_LIMIT - playerWateredToday)
+    lines.push(remaining > 0
+      ? `${remaining}/${DAILY_WATER_LIMIT} Waters Remaining Today`
+      : 'Daily Limit Reached')
+  }
+  if (TEST_MODE) lines.push('[TEST MODE]')
+  TextShape.getMutable(progressEntity).text = lines.join('\n')
 }
 
 function showBloomText(text: string) {
@@ -355,10 +375,33 @@ function sendWateredToServer(plantId: string, wateredAt: number) {
       await fetch(`${SERVER_URL}/water`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ plantId, wateredAt }),
+        // playerId lets the server enforce and record the daily limit per player
+        body: JSON.stringify({ plantId, wateredAt, playerId }),
       })
     } catch (e) {
       console.log('Could not send watered state to server:', e)
+    }
+  })
+}
+
+function fetchPlayerDailyCount(pid: string) {
+  if (TEST_MODE) {
+    console.log(`[TEST] fetchPlayerDailyCount skipped — ${pid} starts at 0`)
+    return
+  }
+  const today = new Date().toISOString().slice(0, 10)  // YYYY-MM-DD
+  executeTask(async () => {
+    try {
+      const response = await fetch(`${SERVER_URL}/daily-count?playerId=${pid}&date=${today}`)
+      const data = await response.json()
+      playerWateredToday = data.count ?? 0
+      if (!OVERRIDE_DAILY_LIMIT && playerWateredToday >= DAILY_WATER_LIMIT) {
+        onDailyLimitReached()
+      }
+      updateProgressText()
+      console.log(`[WateringSystem] ${pid} has watered ${playerWateredToday} plants today`)
+    } catch (e) {
+      console.log('Could not fetch daily count:', e)
     }
   })
 }
@@ -372,6 +415,8 @@ function sendWateredToServer(plantId: string, wateredAt: number) {
 const plantRegistry = new Map<Entity, { clickTarget: Entity; plantName: string }>()
 
 function enablePlantClick(entity: Entity) {
+  // Don't re-enable if the player has used up their daily allowance
+  if (!OVERRIDE_DAILY_LIMIT && dailyLimitReached) return
   const info = plantRegistry.get(entity)
   if (!info) return
   pointerEventsSystem.onPointerDown(
@@ -384,6 +429,30 @@ function disablePlantClick(entity: Entity) {
   const info = plantRegistry.get(entity)
   if (!info) return
   pointerEventsSystem.removeOnPointerDown(info.clickTarget)
+}
+
+/** Called when the player hits their daily watering limit. */
+function onDailyLimitReached() {
+  dailyLimitReached = true
+  // Disable all droopy plants — this player can't water any more today
+  for (const [entity] of plantRegistry) {
+    if (!PlantData.get(entity).isWatered) disablePlantClick(entity)
+  }
+  updateProgressText()
+  console.log('[WateringSystem] Daily water limit reached')
+}
+
+/** TEST_MODE only — resets the in-memory daily counter so one client
+ *  can run through the full cycle multiple times. */
+function resetDailyLimit() {
+  playerWateredToday = 0
+  dailyLimitReached  = false
+  // Re-enable clicking on all currently-droopy plants
+  for (const [entity] of plantRegistry) {
+    if (!PlantData.get(entity).isWatered) enablePlantClick(entity)
+  }
+  updateProgressText()
+  console.log('[TEST] Daily limit reset to 0')
 }
 
 // ---------------------------------------------------------------
@@ -421,9 +490,18 @@ function waterPlant(entity: Entity, plantId: string) {
   const pd = PlantData.getMutable(entity)
   if (pd.isWatered) return  // already watered — ignore
 
+  // Enforce daily limit (can be bypassed with OVERRIDE_DAILY_LIMIT)
+  if (!OVERRIDE_DAILY_LIMIT && playerWateredToday >= DAILY_WATER_LIMIT) return
+
   const now = Date.now()
   pd.isWatered = true
   pd.wateredAt = now
+
+  // Track daily usage and check if limit is now reached
+  playerWateredToday++
+  if (!OVERRIDE_DAILY_LIMIT && playerWateredToday >= DAILY_WATER_LIMIT) {
+    onDailyLimitReached()
+  }
 
   // Healthy plants are not clickable
   disablePlantClick(entity)
@@ -754,6 +832,25 @@ export function setupWateringSystem() {
 
   // Pull any existing watered states from the server
   fetchPlantStates()
+
+  // Resolve player identity (synchronous in SDK7) then load their daily count.
+  playerId = getPlayer()?.userId ?? 'unknown'
+  console.log(`[WateringSystem] Player ID: ${playerId}`)
+  fetchPlayerDailyCount(playerId)
+  updateProgressText()
+
+  // TEST_MODE only — small clickable billboard to reset the daily counter
+  // so one client can run through the full cycle repeatedly.
+  if (TEST_MODE) {
+    const resetBtn = engine.addEntity()
+    Transform.create(resetBtn, { position: { x: 1, y: 1.5, z: 1 } })
+    TextShape.create(resetBtn, { text: 'Reset\nDaily Limit\n[TEST]', fontSize: 2 })
+    Billboard.create(resetBtn, { billboardMode: BillboardMode.BM_Y })
+    pointerEventsSystem.onPointerDown(
+      { entity: resetBtn, opts: { button: InputAction.IA_POINTER, hoverText: 'Reset Daily Limit' } },
+      resetDailyLimit
+    )
+  }
 }
 
 
@@ -763,8 +860,8 @@ export function setupWateringSystem() {
 
 // - in live mode check server for plant state
 // -------------------
-// Implement daily watering limit - try 8 per player
-// Implement override feature for testing or test with multiple clients
+// [DONE] Daily watering limit — 8 per player (DAILY_WATER_LIMIT constant)
+// [DONE] Override feature — OVERRIDE_DAILY_LIMIT flag + TEST_MODE reset button
 // ---------------------
 // Water droplet on top of droopy plants (wait for feedback before implementation)
 // ----------------------
