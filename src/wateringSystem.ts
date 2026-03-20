@@ -22,7 +22,7 @@ import {
   timers,
 } from '@dcl/sdk/ecs'
 import { getPlayer } from '@dcl/sdk/players'
-import { triggerSceneEmote } from '~system/RestrictedActions'
+import { movePlayerTo, triggerSceneEmote } from '~system/RestrictedActions'
 
 // ---------------------------------------------------------------
 // Configuration
@@ -480,9 +480,21 @@ function playHoverSound()    { playAtPlayer(hoverSoundEntity,    'assets/scene/S
 function playClickSound()    { playAtPlayer(clickSoundEntity,    'assets/scene/Sounds/click.mp3',    0.9) }
 function playWateringSound() { playAtPlayer(wateringSoundEntity, 'assets/scene/Sounds/watering.mp3', 1.0) }
 
-function triggerWateringEmote() {
+function triggerWateringEmote(plantEntity: Entity) {
+  // Face the player toward the plant before the emote fires.
+  // We read the plant's Transform live so this works regardless of where
+  // the plant is placed — no hardcoded positions needed.
+  const plantPos  = Transform.getOrNull(plantEntity)?.position
+  const playerPos = Transform.getOrNull(engine.PlayerEntity)?.position
+  if (plantPos && playerPos) {
+    movePlayerTo({
+      newRelativePosition: playerPos,  // stay in place
+      avatarTarget: plantPos,          // rotate to face the plant
+    })
+  }
   // triggerSceneEmote is the correct SDK7 API for custom GLB avatar emotes.
-  // A short delay (matching DCL Foundation's pattern) lets the click settle first.
+  // The 200ms delay (matching DCL Foundation's pattern) gives the facing
+  // rotation time to apply before the animation starts.
   timers.setTimeout(() => {
     triggerSceneEmote({ src: EMOTE_SRC, loop: false })
   }, 200)
@@ -553,8 +565,8 @@ function waterPlant(entity: Entity, plantId: string) {
   playClickSound()
   timers.setTimeout(playWateringSound, 300)
 
-  // Watering-can emote on the local player
-  triggerWateringEmote()
+  // Watering-can emote on the local player — face toward this specific plant
+  triggerWateringEmote(entity)
 
   // Sync to server
   sendWateredToServer(plantId, now)
