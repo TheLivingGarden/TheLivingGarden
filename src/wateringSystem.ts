@@ -22,6 +22,7 @@ import {
   timers,
 } from '@dcl/sdk/ecs'
 import { getPlayer } from '@dcl/sdk/players'
+import { triggerSceneEmote } from '~system/RestrictedActions'
 
 // ---------------------------------------------------------------
 // Configuration
@@ -92,7 +93,10 @@ export const PlantData = engine.defineComponent('plant-data', {
 let progressEntity: Entity
 let bloomBillboard: Entity
 let bloomModelEntity: Entity | null = null
-let bloomSoundEntity: Entity | null = null
+let bloomSoundEntity:    Entity | null = null
+let hoverSoundEntity:    Entity
+let clickSoundEntity:    Entity
+let wateringSoundEntity: Entity
 let wateredCount = 0
 // Daily watering limit tracking
 let playerWateredToday = 0
@@ -423,12 +427,14 @@ function enablePlantClick(entity: Entity) {
     { entity: info.clickTarget, opts: { button: InputAction.IA_POINTER, hoverText: 'Water' } },
     () => waterPlant(entity, info.plantName)
   )
+  pointerEventsSystem.onPointerHoverEnter({ entity: info.clickTarget }, playHoverSound)
 }
 
 function disablePlantClick(entity: Entity) {
   const info = plantRegistry.get(entity)
   if (!info) return
   pointerEventsSystem.removeOnPointerDown(info.clickTarget)
+  pointerEventsSystem.removeOnPointerHoverEnter(info.clickTarget)
 }
 
 /** Called when the player hits their daily watering limit. */
@@ -453,6 +459,33 @@ function resetDailyLimit() {
   }
   updateProgressText()
   console.log('[TEST] Daily limit reset to 0')
+}
+
+// ---------------------------------------------------------------
+// Interaction sounds & emote
+// ---------------------------------------------------------------
+
+const EMOTE_SRC = 'assets/scene/Models/Emotes/WateringCan_emote.glb'
+
+/** Move a sound entity to the player's current world position then fire it.
+ *  Keeps all interaction sounds at full apparent volume regardless of
+ *  where in the scene the player is standing. */
+function playAtPlayer(soundEntity: Entity, audioClipUrl: string, volume: number) {
+  const pos = Transform.getOrNull(engine.PlayerEntity)?.position ?? { x: 8, y: 1, z: 8 }
+  Transform.getMutable(soundEntity).position = pos
+  AudioSource.createOrReplace(soundEntity, { audioClipUrl, playing: true, loop: false, volume, pitch: 1 })
+}
+
+function playHoverSound()    { playAtPlayer(hoverSoundEntity,    'assets/scene/Sounds/hover.mp3',    0.7) }
+function playClickSound()    { playAtPlayer(clickSoundEntity,    'assets/scene/Sounds/click.mp3',    0.9) }
+function playWateringSound() { playAtPlayer(wateringSoundEntity, 'assets/scene/Sounds/watering.mp3', 1.0) }
+
+function triggerWateringEmote() {
+  // triggerSceneEmote is the correct SDK7 API for custom GLB avatar emotes.
+  // A short delay (matching DCL Foundation's pattern) lets the click settle first.
+  timers.setTimeout(() => {
+    triggerSceneEmote({ src: EMOTE_SRC, loop: false })
+  }, 200)
 }
 
 // ---------------------------------------------------------------
@@ -516,7 +549,12 @@ function waterPlant(entity: Entity, plantId: string) {
     }
   }, ANIM_TRANSITION_MS)
 
-  // TODO: AudioSource.getMutable(entity).playing = true  (re-enable when audio is ready)
+  // Sounds: click immediately, watering a beat later while the emote plays
+  playClickSound()
+  timers.setTimeout(playWateringSound, 300)
+
+  // Watering-can emote on the local player
+  triggerWateringEmote()
 
   // Sync to server
   sendWateredToServer(plantId, now)
@@ -763,6 +801,27 @@ export function setupWateringSystem() {
     console.log('[WateringSystem] Bloom.glb entity not found')
   }
 
+  // Interaction sound entities — placed at scene centre, audible everywhere
+  const SND_POS = { x: 8, y: 1, z: 8 }
+  hoverSoundEntity = engine.addEntity()
+  Transform.create(hoverSoundEntity, { position: SND_POS })
+  AudioSource.create(hoverSoundEntity, { audioClipUrl: 'assets/scene/Sounds/hover.mp3',    playing: false, loop: false, volume: 0.7, pitch: 1 })
+
+  clickSoundEntity = engine.addEntity()
+  Transform.create(clickSoundEntity, { position: SND_POS })
+  AudioSource.create(clickSoundEntity, { audioClipUrl: 'assets/scene/Sounds/click.mp3',    playing: false, loop: false, volume: 0.9, pitch: 1 })
+
+  wateringSoundEntity = engine.addEntity()
+  Transform.create(wateringSoundEntity, { position: SND_POS })
+  AudioSource.create(wateringSoundEntity, { audioClipUrl: 'assets/scene/Sounds/watering.mp3', playing: false, loop: false, volume: 1,   pitch: 1 })
+
+  // Preload the watering-can emote GLB so the renderer has the animation data
+  // ready before AvatarEmoteCommand.addValue() is ever called.
+  // Without this hidden entity the emote silently fails to play.
+  const emotePreload = engine.addEntity()
+  Transform.create(emotePreload, { position: { x: 8, y: -10, z: 8 }, scale: { x: 0, y: 0, z: 0 } })
+  GltfContainer.create(emotePreload, { src: EMOTE_SRC })
+
   // Wire up each plant (pointer events, state component, audio)
   for (const name of PLANT_NAMES) {
     setupPlant(name)
@@ -869,7 +928,7 @@ export function setupWateringSystem() {
 // -----------------------
 // Find and add audio files (watering, click covered by foundation defaults) 
 // -----------------------
-// Petal particle system for bloom
+// [DONE] Petal particle system for bloom
 // -----------------------
 // Lights sway and flicker for bloom
 // -----------------------
