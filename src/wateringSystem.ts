@@ -57,6 +57,11 @@ const ANIM_BLOOM          = 'Bloom'          // bloom model animation
 // TODO: set this to match the actual DroopyToHealthy / HealthToDroopy clip length.
 const ANIM_TRANSITION_MS = 1500
 
+// How long the WateringCan emote plays before the plant responds.
+// Tune this to match the actual GLB clip length so the plant blooms
+// right as the watering-can tips forward at the end of the animation.
+const EMOTE_DURATION_MS = 3000
+
 // Toggle click method for UX prototyping:
 //   false → click directly on the plant model (default)
 //   true  → invisible oversized clickbox parented to each plant
@@ -97,6 +102,7 @@ let bloomSoundEntity:    Entity | null = null
 let hoverSoundEntity:    Entity
 let clickSoundEntity:    Entity
 let wateringSoundEntity: Entity
+let magicFXSoundEntity:  Entity
 let wateredCount = 0
 // Daily watering limit tracking
 let playerWateredToday = 0
@@ -479,17 +485,32 @@ function playAtPlayer(soundEntity: Entity, audioClipUrl: string, volume: number)
 function playHoverSound()    { playAtPlayer(hoverSoundEntity,    'assets/scene/Sounds/hover.mp3',    0.7) }
 function playClickSound()    { playAtPlayer(clickSoundEntity,    'assets/scene/Sounds/click.mp3',    0.9) }
 function playWateringSound() { playAtPlayer(wateringSoundEntity, 'assets/scene/Sounds/watering.mp3', 1.0) }
+function playMagicFXSound()  { playAtPlayer(magicFXSoundEntity,  'assets/scene/Sounds/MagicFX.mp3',  1.0) }
+
+// How far in front of the plant the player is placed to perform the emote.
+// Tweak this value to taste — 1.2 m feels natural for a watering-can reach.
+const WATER_DISTANCE = 2
 
 function triggerWateringEmote(plantEntity: Entity) {
-  // Face the player toward the plant before the emote fires.
-  // We read the plant's Transform live so this works regardless of where
-  // the plant is placed — no hardcoded positions needed.
   const plantPos  = Transform.getOrNull(plantEntity)?.position
   const playerPos = Transform.getOrNull(engine.PlayerEntity)?.position
   if (plantPos && playerPos) {
+    // Project the player-to-plant vector onto the horizontal plane, normalise
+    // it, then step back WATER_DISTANCE from the plant along that direction.
+    // This always puts the player squarely in front of the plant they clicked,
+    // no matter where in the scene the plant is placed.
+    const dx  = playerPos.x - plantPos.x
+    const dz  = playerPos.z - plantPos.z
+    const len = Math.sqrt(dx * dx + dz * dz)
+    const nx  = len > 0.001 ? dx / len : 0
+    const nz  = len > 0.001 ? dz / len : 1
     movePlayerTo({
-      newRelativePosition: playerPos,  // stay in place
-      avatarTarget: plantPos,          // rotate to face the plant
+      newRelativePosition: {
+        x: plantPos.x + nx * WATER_DISTANCE,
+        y: playerPos.y,   // keep the player's current height
+        z: plantPos.z + nz * WATER_DISTANCE,
+      },
+      avatarTarget: plantPos,  // face toward the plant
     })
   }
   // triggerSceneEmote is the correct SDK7 API for custom GLB avatar emotes.
@@ -551,22 +572,33 @@ function waterPlant(entity: Entity, plantId: string) {
   // Healthy plants are not clickable
   disablePlantClick(entity)
 
-  // Play transition, then settle into healthy idle.
-  // Guard: only switch to HealthyState if this session is still active.
-  Animator.playSingleAnimation(entity, ANIM_TO_HEALTHY)
+  // ── Event sequence ──────────────────────────────────────────────────────
+  // t = 0ms     : click sound + player moves/faces plant + emote queued
+  // t = 200ms   : emote fires + watering sound starts
+  // t = EMOTE_DURATION_MS : plant plays DroopyToHealthy
+  // t = EMOTE_DURATION_MS + ANIM_TRANSITION_MS : plant settles to HealthyState
+  // ────────────────────────────────────────────────────────────────────────
+
+  // 1. Click feedback — immediate
+  playClickSound()
+  triggerWateringEmote(entity)  // movePlayerTo now + triggerSceneEmote at 200ms
+
+  // 2. Watering sound synced to when the emote actually starts
+  timers.setTimeout(playWateringSound, 200)
+
+  // 3. Plant responds after the emote has played through
   timers.setTimeout(() => {
     const current = PlantData.get(entity)
-    if (current.isWatered && current.wateredAt === now) {
-      Animator.playSingleAnimation(entity, ANIM_HEALTHY_STATE)
-    }
-  }, ANIM_TRANSITION_MS)
-
-  // Sounds: click immediately, watering a beat later while the emote plays
-  playClickSound()
-  timers.setTimeout(playWateringSound, 300)
-
-  // Watering-can emote on the local player — face toward this specific plant
-  triggerWateringEmote(entity)
+    if (!current.isWatered || current.wateredAt !== now) return  // guard: re-watered or expired mid-emote
+    Animator.playSingleAnimation(entity, ANIM_TO_HEALTHY)
+    playMagicFXSound()  // one-shot — plays through naturally, never looped or cut short
+    timers.setTimeout(() => {
+      const latest = PlantData.get(entity)
+      if (latest.isWatered && latest.wateredAt === now) {
+        Animator.playSingleAnimation(entity, ANIM_HEALTHY_STATE)
+      }
+    }, ANIM_TRANSITION_MS)
+  }, EMOTE_DURATION_MS)
 
   // Sync to server
   sendWateredToServer(plantId, now)
@@ -826,6 +858,10 @@ export function setupWateringSystem() {
   wateringSoundEntity = engine.addEntity()
   Transform.create(wateringSoundEntity, { position: SND_POS })
   AudioSource.create(wateringSoundEntity, { audioClipUrl: 'assets/scene/Sounds/watering.mp3', playing: false, loop: false, volume: 1,   pitch: 1 })
+
+  magicFXSoundEntity = engine.addEntity()
+  Transform.create(magicFXSoundEntity, { position: SND_POS })
+  AudioSource.create(magicFXSoundEntity, { audioClipUrl: 'assets/scene/Sounds/MagicFX.mp3',  playing: false, loop: false, volume: 1,   pitch: 1 })
 
   // Preload the watering-can emote GLB so the renderer has the animation data
   // ready before AvatarEmoteCommand.addValue() is ever called.
