@@ -34,6 +34,9 @@ import { movePlayerTo, triggerSceneEmote } from '~system/RestrictedActions'
 //   - Post-bloom reset: +60s → +5s
 //   - Server calls    : skipped (console logged instead)
 const TEST_MODE = true
+// Set to true to bypass the daily limit entirely (useful during testing
+// or when running as an admin / stress-testing with one client).
+const OVERRIDE_DAILY_LIMIT = true
 
 // TODO: replace with your real server base URL
 const SERVER_URL = 'https://YOUR_SERVER_URL/api'
@@ -70,9 +73,7 @@ const USE_CLICKBOX = false
 // How many plants a single player can water per day.
 const DAILY_WATER_LIMIT = 8
 
-// Set to true to bypass the daily limit entirely (useful during testing
-// or when running as an admin / stress-testing with one client).
-const OVERRIDE_DAILY_LIMIT = false
+
 
 // Plant entity names as placed in the scene editor.
 const PLANT_NAMES = [
@@ -99,6 +100,7 @@ let progressEntity: Entity
 let bloomBillboard: Entity
 let bloomModelEntity: Entity | null = null
 let bloomSoundEntity:    Entity | null = null
+let ambientSoundEntity:  Entity | null = null
 let hoverSoundEntity:    Entity
 let clickSoundEntity:    Entity
 let wateringSoundEntity: Entity
@@ -140,6 +142,7 @@ const PETAL_SHRINK_MS     = 600    // duration of scale-to-zero shrink
 
 const MUSIC_FADE_IN_MS    = 3_000  // bloom music swells in over 3s, then visuals trigger
 const MUSIC_FADE_OUT_MS   = 6_000  // bloom music fades out over 6s
+const AMBIENT_MAX_VOLUME  = 0.7    // background level for the ambient track
 
 interface PetalState {
   entity:      Entity
@@ -253,24 +256,34 @@ function musicFadeSystem(dt: number) {
 
   if (musicFadeState === 'in') {
     const progress = Math.min(musicFadeMs / MUSIC_FADE_IN_MS, 1)
-    // ease-in: starts barely audible, swells toward full
+    // Bloom track: ease-in — starts barely audible, swells toward full
     AudioSource.getMutable(bloomSoundEntity).volume = progress * progress
+    // Ambient track: inverse — fades out as bloom swells in
+    if (ambientSoundEntity) {
+      const remaining = 1 - progress
+      AudioSource.getMutable(ambientSoundEntity).volume = AMBIENT_MAX_VOLUME * (remaining * remaining)
+    }
     if (progress >= 1) musicFadeState = 'none'
 
   } else if (musicFadeState === 'out') {
     const progress = Math.min(musicFadeMs / MUSIC_FADE_OUT_MS, 1)
-    // ease-out: drops quickly then lingers softly at the end
+    // Bloom track: ease-out — drops quickly then lingers softly
     const remaining = 1 - progress
     AudioSource.getMutable(bloomSoundEntity).volume = remaining * remaining
+    // Ambient track: inverse — fades back in as bloom fades out
+    if (ambientSoundEntity) {
+      AudioSource.getMutable(ambientSoundEntity).volume = AMBIENT_MAX_VOLUME * (progress * progress)
+    }
     if (progress >= 1) {
-      // Fully silent — stop playback cleanly
+      // Bloom fully silent — stop playback cleanly
       AudioSource.createOrReplace(bloomSoundEntity, {
         audioClipUrl: 'assets/scene/Sounds/MagicSound.mp3',
-        playing: false,
-        loop: false,
-        volume: 0,
-        pitch: 1,
+        playing: false, loop: false, volume: 0, pitch: 1,
       })
+      // Ambient back to full volume
+      if (ambientSoundEntity) {
+        AudioSource.getMutable(ambientSoundEntity).volume = AMBIENT_MAX_VOLUME
+      }
       musicFadeState = 'none'
     }
   }
@@ -513,6 +526,7 @@ function triggerWateringEmote(plantEntity: Entity) {
       avatarTarget: plantPos,  // face toward the plant
     })
   }
+
   // triggerSceneEmote is the correct SDK7 API for custom GLB avatar emotes.
   // The 200ms delay (matching DCL Foundation's pattern) gives the facing
   // rotation time to apply before the animation starts.
@@ -824,6 +838,14 @@ export function setupWateringSystem() {
   // Bloom sound — loops MagicSound.mp3 during the bloom event.
   // Transform at scene centre prevents DCL applying 3-D positional
   // distance/Doppler effects that alter pitch and volume.
+  // Ambient track — plays on loop from scene load, fades out during bloom
+  ambientSoundEntity = engine.addEntity()
+  Transform.create(ambientSoundEntity, { position: { x: 8, y: 2, z: 8 } })
+  AudioSource.create(ambientSoundEntity, {
+    audioClipUrl: 'assets/scene/Sounds/AmbientSound.mp3',
+    playing: true, loop: true, volume: AMBIENT_MAX_VOLUME, pitch: 1,
+  })
+
   bloomSoundEntity = engine.addEntity()
   Transform.create(bloomSoundEntity, { position: { x: 8, y: 2, z: 8 } })
   AudioSource.create(bloomSoundEntity, {
@@ -862,13 +884,6 @@ export function setupWateringSystem() {
   magicFXSoundEntity = engine.addEntity()
   Transform.create(magicFXSoundEntity, { position: SND_POS })
   AudioSource.create(magicFXSoundEntity, { audioClipUrl: 'assets/scene/Sounds/MagicFX.mp3',  playing: false, loop: false, volume: 1,   pitch: 1 })
-
-  // Preload the watering-can emote GLB so the renderer has the animation data
-  // ready before AvatarEmoteCommand.addValue() is ever called.
-  // Without this hidden entity the emote silently fails to play.
-  const emotePreload = engine.addEntity()
-  Transform.create(emotePreload, { position: { x: 8, y: -10, z: 8 }, scale: { x: 0, y: 0, z: 0 } })
-  GltfContainer.create(emotePreload, { src: EMOTE_SRC })
 
   // Wire up each plant (pointer events, state component, audio)
   for (const name of PLANT_NAMES) {
