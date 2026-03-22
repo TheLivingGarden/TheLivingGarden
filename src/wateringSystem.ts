@@ -533,6 +533,14 @@ function triggerWateringEmote(plantEntity: Entity) {
   timers.setTimeout(() => {
     triggerSceneEmote({ src: EMOTE_SRC, loop: false })
   }, 200)
+
+  // DCL's loop:false leaves the avatar frozen in the final keyframe instead of
+  // returning to idle. Calling movePlayerTo in place after the emote duration
+  // resets the avatar animation state without moving the player visibly.
+  timers.setTimeout(() => {
+    const pos = Transform.getOrNull(engine.PlayerEntity)?.position
+    if (pos) movePlayerTo({ newRelativePosition: pos, avatarTarget: pos })
+  }, 200 + EMOTE_DURATION_MS)
 }
 
 // ---------------------------------------------------------------
@@ -954,6 +962,14 @@ export function setupWateringSystem() {
 
   // Pull any existing watered states from the server
   fetchPlantStates()
+
+  // Reset any avatar emote state that may have persisted across hot-reloads
+  // in the DCL preview. movePlayerTo in place kicks the avatar back to idle
+  // without visibly moving the player.
+  timers.setTimeout(() => {
+    const pos = Transform.getOrNull(engine.PlayerEntity)?.position
+    if (pos) movePlayerTo({ newRelativePosition: pos, avatarTarget: pos })
+  }, 500)
 
   // Resolve player identity (synchronous in SDK7) then load their daily count.
   playerId = getPlayer()?.userId ?? 'unknown'
