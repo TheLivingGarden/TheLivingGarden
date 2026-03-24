@@ -22,7 +22,8 @@ import {
   timers,
 } from '@dcl/sdk/ecs'
 import { getPlayer } from '@dcl/sdk/players'
-import { setupPetalSystem, startPetalRain, startPetalSettle, petalParticleSystem } from './petalSystem'
+import { setupPetalSystem, petalParticleSystem } from './petalSystem'
+import { setupBloomSystem, triggerBloomEvent, endBloom, isBloomActive, musicFadeSystem } from './bloomSystem'
 import { movePlayerTo, triggerSceneEmote } from '~system/RestrictedActions'
 
 // ---------------------------------------------------------------
@@ -56,7 +57,6 @@ const ANIM_DROOPY_STATE   = 'DroopyState'    // looping droopy idle
 const ANIM_TO_HEALTHY     = 'DroopyToHealthy' // one-shot transition
 const ANIM_HEALTHY_STATE  = 'HealthyState'   // looping healthy idle
 const ANIM_TO_DROOPY      = 'HealthToDroopy' // one-shot transition
-const ANIM_BLOOM          = 'Bloom'          // bloom model animation
 
 // How long the transition clips play before switching to the looping idle.
 // TODO: set this to match the actual DroopyToHealthy / HealthToDroopy clip length.
@@ -105,10 +105,6 @@ export const PlantData = engine.defineComponent('plant-data', {
 // ---------------------------------------------------------------
 
 let progressEntity: Entity
-let bloomBillboard: Entity
-let bloomModelEntity: Entity | null = null
-let bloomSoundEntity:    Entity | null = null
-let ambientSoundEntity:  Entity | null = null
 let hoverSoundEntity:    Entity
 let clickSoundEntity:    Entity
 let wateringSoundEntity: Entity
@@ -118,9 +114,6 @@ let wateredCount = 0
 let playerWateredToday = 0
 let dailyLimitReached  = false
 let playerId           = 'unknown'
-// True between bloom trigger and the post-bloom reset — expiry timers skip
-// during this window so plants stay healthy through the full bloom moment.
-let bloomActive = false
 // True while the watering emote is in flight — prevents a second click from
 // interrupting the avatar animation via a new movePlayerTo / triggerSceneEmote.
 let emoteActive = false
@@ -149,55 +142,6 @@ function dropFadeSystem(dt: number) {
   }
 }
 
-// Music fade state
-let musicFadeState: 'in' | 'out' | 'none' = 'none'
-let musicFadeMs    = 0
-
-const MUSIC_FADE_IN_MS    = 3_000  // bloom music swells in over 3s, then visuals trigger
-const MUSIC_FADE_OUT_MS   = 6_000  // bloom music fades out over 6s
-const AMBIENT_MAX_VOLUME  = 0.7    // background level for the ambient track
-
-// Music fade system — runs in the main update loop so getMutable is reliable.
-// Quadratic ease-in for the swell, quadratic ease-out for the fade.
-function musicFadeSystem(dt: number) {
-  if (musicFadeState === 'none' || !bloomSoundEntity) return
-
-  musicFadeMs += dt * 1000
-
-  if (musicFadeState === 'in') {
-    const progress = Math.min(musicFadeMs / MUSIC_FADE_IN_MS, 1)
-    // Bloom track: ease-in — starts barely audible, swells toward full
-    AudioSource.getMutable(bloomSoundEntity).volume = progress * progress
-    // Ambient track: inverse — fades out as bloom swells in
-    if (ambientSoundEntity) {
-      const remaining = 1 - progress
-      AudioSource.getMutable(ambientSoundEntity).volume = AMBIENT_MAX_VOLUME * (remaining * remaining)
-    }
-    if (progress >= 1) musicFadeState = 'none'
-
-  } else if (musicFadeState === 'out') {
-    const progress = Math.min(musicFadeMs / MUSIC_FADE_OUT_MS, 1)
-    // Bloom track: ease-out — drops quickly then lingers softly
-    const remaining = 1 - progress
-    AudioSource.getMutable(bloomSoundEntity).volume = remaining * remaining
-    // Ambient track: inverse — fades back in as bloom fades out
-    if (ambientSoundEntity) {
-      AudioSource.getMutable(ambientSoundEntity).volume = AMBIENT_MAX_VOLUME * (progress * progress)
-    }
-    if (progress >= 1) {
-      // Bloom fully silent — stop playback cleanly
-      AudioSource.createOrReplace(bloomSoundEntity, {
-        audioClipUrl: 'assets/scene/Sounds/MagicSound.mp3',
-        playing: false, loop: false, volume: 0, pitch: 1,
-      })
-      // Ambient back to full volume
-      if (ambientSoundEntity) {
-        AudioSource.getMutable(ambientSoundEntity).volume = AMBIENT_MAX_VOLUME
-      }
-      musicFadeState = 'none'
-    }
-  }
-}
 
 // Reset animation state machine — driven by an ECS system so Animator
 // updates run in the main update loop (same execution context as pointer
@@ -205,30 +149,6 @@ function musicFadeSystem(dt: number) {
 let resetQueue:  Entity[] = []
 let resetPhase:  'to_droopy' | 'wait' | 'to_droopy_state' | 'done' = 'done'
 let resetTimerMs = 0
-
-// ---------------------------------------------------------------
-// Helper: work out the next 6am or 6pm UTC bloom time
-// ---------------------------------------------------------------
-
-function getNextBloomTime(): number {
-  if (TEST_MODE) return Date.now() + 10_000  // bloom fires in 10s
-
-  const now = new Date()
-
-  const at6am = new Date(now)
-  at6am.setUTCHours(6, 0, 0, 0)
-
-  const at6pm = new Date(now)
-  at6pm.setUTCHours(18, 0, 0, 0)
-
-  if (now < at6am) return at6am.getTime()
-  if (now < at6pm) return at6pm.getTime()
-
-  // Past 6pm — next is 6am tomorrow
-  const tomorrow6am = new Date(at6am)
-  tomorrow6am.setUTCDate(tomorrow6am.getUTCDate() + 1)
-  return tomorrow6am.getTime()
-}
 
 // ---------------------------------------------------------------
 // UI helpers
@@ -246,10 +166,6 @@ function updateProgressText() {
   }
   if (TEST_MODE) lines.push('[TEST MODE]')
   TextShape.getMutable(progressEntity).text = lines.join('\n')
-}
-
-function showBloomText(text: string) {
-  TextShape.getMutable(bloomBillboard).text = text
 }
 
 // ---------------------------------------------------------------
@@ -465,7 +381,7 @@ function triggerWateringEmote(plantEntity: Entity) {
 function scheduleExpiry(entity: Entity, sessionTimestamp: number, delayMs: number) {
   timers.setTimeout(() => {
     // During bloom the reset will handle all plants — skip individual expiry
-    if (bloomActive) return
+    if (isBloomActive()) return
     const pd = PlantData.getMutable(entity)
     // Guard: only revert if this is still the same watered session
     if (!pd.isWatered || pd.wateredAt !== sessionTimestamp) return
@@ -490,7 +406,7 @@ function scheduleExpiry(entity: Entity, sessionTimestamp: number, delayMs: numbe
 
 /** Water a single plant: animation, sound, state update, server sync. */
 function waterPlant(entity: Entity, plantId: string) {
-  if (bloomActive) return   // garden is blooming — no new watering until reset
+  if (isBloomActive()) return   // garden is blooming — no new watering until reset
   if (emoteActive) return   // emote in flight — don't interrupt it
   const pd = PlantData.getMutable(entity)
   if (pd.isWatered) return  // already watered — ignore
@@ -558,18 +474,11 @@ function waterPlant(entity: Entity, plantId: string) {
 
 /** Reset every plant back to droopy (called after bloom). */
 function resetAllPlants() {
-  bloomActive = false
+  // Tear down bloom — fades music, settles petals, clears text, stops model anim
+  endBloom()
+
   wateredCount = 0
   updateProgressText()
-
-  // Fade bloom music out — musicFadeSystem handles the gradual volume drop
-  if (bloomSoundEntity) {
-    musicFadeMs   = 0
-    musicFadeState = 'out'
-  }
-
-  // Begin petal settle — stop spawning new petals, let in-air ones fall and fade
-  startPetalSettle()
 
   // Clear state and build the queue for the reset system
   resetQueue = []
@@ -579,14 +488,9 @@ function resetAllPlants() {
     pd.wateredAt = 0
     resetQueue.push(entity)
   }
-  resetPhase  = 'to_droopy'
+  resetPhase   = 'to_droopy'
   resetTimerMs = 0
   console.log(`[RESET] resetAllPlants — ${resetQueue.length} plants queued`)
-
-  // Stop the bloom model animation
-  if (bloomModelEntity) {
-    Animator.getMutable(bloomModelEntity).states[0].playing = false
-  }
 }
 
 // ECS system that drives the reset animation one plant per frame.
@@ -634,60 +538,6 @@ function resetAnimSystem(dt: number) {
       console.log('[RESET] system complete — all plants in DroopyState')
     }
   }
-}
-
-// ---------------------------------------------------------------
-// Bloom event
-// ---------------------------------------------------------------
-
-function triggerBloomEvent() {
-  if (bloomActive) return   // already blooming — ignore duplicate trigger
-  bloomActive = true
-  console.log('Bloom building — music fade-in starting')
-
-  // Music starts immediately, silent, and swells in over MUSIC_FADE_IN_MS.
-  // Visual bloom fires only after the fade completes so the sound leads the moment.
-  if (bloomSoundEntity) {
-    AudioSource.createOrReplace(bloomSoundEntity, {
-      audioClipUrl: 'assets/scene/Sounds/MagicSound.mp3',
-      playing: true,
-      loop: true,
-      volume: 0,
-      pitch: 1,
-    })
-    musicFadeMs    = 0
-    musicFadeState = 'in'
-  }
-
-  timers.setTimeout(launchVisualBloom, MUSIC_FADE_IN_MS)
-}
-
-/** Called once the music has fully faded in — launches all visual bloom effects. */
-function launchVisualBloom() {
-  showBloomText('The Garden is in Full Bloom!')
-  console.log('Bloom visual launched!')
-
-  // Petal rain — stagger initial lifetimes so petals don't all spawn at once
-  startPetalRain()
-
-  // Bloom model animation
-  if (bloomModelEntity) {
-    Animator.playSingleAnimation(bloomModelEntity, ANIM_BLOOM)
-  }
-
-  const msUntilNextBloom = getNextBloomTime() - Date.now()
-  const resetDelay = TEST_MODE ? 30_000 : 60_000
-
-  if (TEST_MODE) {
-    console.log(`[TEST] Visual bloom live — reset in ${(msUntilNextBloom + resetDelay) / 1000}s`)
-  } else {
-    console.log(`Next bloom scheduled in ${Math.round(msUntilNextBloom / 1000 / 60)} minutes`)
-  }
-
-  timers.setTimeout(() => {
-    resetAllPlants()
-    showBloomText('')
-  }, msUntilNextBloom + resetDelay)
 }
 
 // ---------------------------------------------------------------
@@ -757,48 +607,8 @@ export function setupWateringSystem() {
   })
   Billboard.create(progressEntity, { billboardMode: BillboardMode.BM_Y })
 
-  // Bloom billboard — shown when all plants are watered
-  bloomBillboard = engine.addEntity()
-  Transform.create(bloomBillboard, {
-    position: { x: 8, y: 5, z: 8 },
-  })
-  TextShape.create(bloomBillboard, {
-    text: '',
-    fontSize: 4,
-  })
-  Billboard.create(bloomBillboard, { billboardMode: BillboardMode.BM_Y })
-
-  // Bloom sound — loops MagicSound.mp3 during the bloom event.
-  // Transform at scene centre prevents DCL applying 3-D positional
-  // distance/Doppler effects that alter pitch and volume.
-  // Ambient track — plays on loop from scene load, fades out during bloom
-  ambientSoundEntity = engine.addEntity()
-  Transform.create(ambientSoundEntity, { position: { x: 8, y: 2, z: 8 } })
-  AudioSource.create(ambientSoundEntity, {
-    audioClipUrl: 'assets/scene/Sounds/AmbientSound.mp3',
-    playing: true, loop: true, volume: AMBIENT_MAX_VOLUME, pitch: 1,
-  })
-
-  bloomSoundEntity = engine.addEntity()
-  Transform.create(bloomSoundEntity, { position: { x: 8, y: 2, z: 8 } })
-  AudioSource.create(bloomSoundEntity, {
-    audioClipUrl: 'assets/scene/Sounds/MagicSound.mp3',
-    playing: false,
-    loop: true,
-    volume: 1,
-    pitch: 1,
-  })
-
-  // Bloom model — separate entity with its own Bloom animation
-  const bloomEnt = engine.getEntityOrNullByName('Bloom')
-  if (bloomEnt) {
-    bloomModelEntity = bloomEnt
-    Animator.createOrReplace(bloomEnt, {
-      states: [{ clip: ANIM_BLOOM, playing: false, loop: true }],
-    })
-  } else {
-    console.log('[WateringSystem] Bloom.glb entity not found')
-  }
+  // Bloom system — billboard, audio, model, music fade
+  setupBloomSystem({ testMode: TEST_MODE, onReset: resetAllPlants })
 
   // Interaction sound entities — placed at scene centre, audible everywhere
   const SND_POS = { x: 8, y: 1, z: 8 }
