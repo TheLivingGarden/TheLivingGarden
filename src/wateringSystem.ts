@@ -25,6 +25,7 @@ import { getPlayer } from '@dcl/sdk/players'
 import { setupPetalSystem, petalParticleSystem } from './petalSystem'
 import { setupBloomSystem, triggerBloomEvent, endBloom, isBloomActive, musicFadeSystem } from './bloomSystem'
 import { setupSparkleSystem, triggerSparkle, sparkleSystem, triggerBloomSparkles, endBloomSparkles, bloomSparkleSystem } from './sparkleSystem'
+import { showToast, showPersistent, hidePersistent } from './ui'
 import { movePlayerTo, triggerSceneEmote } from '~system/RestrictedActions'
 
 // ---------------------------------------------------------------
@@ -39,7 +40,7 @@ import { movePlayerTo, triggerSceneEmote } from '~system/RestrictedActions'
 const TEST_MODE = true
 // Set to true to bypass the daily limit entirely (useful during testing
 // or when running as an admin / stress-testing with one client).
-const OVERRIDE_DAILY_LIMIT = true
+const OVERRIDE_DAILY_LIMIT = false
 
 // TODO: replace with your real server base URL
 const SERVER_URL = 'https://YOUR_SERVER_URL/api'
@@ -79,7 +80,7 @@ const DROP_FADE_MS   = 800   // how long the fade in/out takes
 const USE_CLICKBOX = false
 
 // How many plants a single player can water per day.
-const DAILY_WATER_LIMIT = 8
+const DAILY_WATER_LIMIT = 3
 
 
 
@@ -149,6 +150,36 @@ function dropFadeSystem(dt: number) {
 let resetQueue:  Entity[] = []
 let resetPhase:  'to_droopy' | 'wait' | 'to_droopy_state' | 'done' = 'done'
 let resetTimerMs = 0
+
+// ---------------------------------------------------------------
+// Notification helpers
+// ---------------------------------------------------------------
+
+/** "Xh Ymin" until next 6am or 6pm UTC — used for the bloom countdown. */
+function formatBloomCountdown(): string {
+  if (TEST_MODE) return 'All plants watered!\nBloom starting soon...'
+  const now   = new Date()
+  const at6am = new Date(now); at6am.setUTCHours(6,  0, 0, 0)
+  const at6pm = new Date(now); at6pm.setUTCHours(18, 0, 0, 0)
+  let next: Date
+  if      (now < at6am) next = at6am
+  else if (now < at6pm) next = at6pm
+  else { next = new Date(at6am); next.setUTCDate(next.getUTCDate() + 1) }
+  const ms = next.getTime() - Date.now()
+  const h  = Math.floor(ms / 3_600_000)
+  const m  = Math.floor((ms % 3_600_000) / 60_000)
+  return `All plants watered!\nBloom in ${h}h ${m}min`
+}
+
+/** Time remaining until midnight UTC — used for the daily-limit message. */
+function formatDailyLimitMessage(): string {
+  if (TEST_MODE) return "You've reached your daily watering limit\n[TEST MODE — resets on new session]"
+  const midnight = new Date(); midnight.setUTCHours(24, 0, 0, 0)
+  const ms = midnight.getTime() - Date.now()
+  const h  = Math.floor(ms / 3_600_000)
+  const m  = Math.floor((ms % 3_600_000) / 60_000)
+  return `You've reached your daily watering limit,\nplease try again in ${h}h ${m}min`
+}
 
 // ---------------------------------------------------------------
 // UI helpers
@@ -291,6 +322,7 @@ function onDailyLimitReached() {
   for (const [entity] of plantRegistry) {
     if (!PlantData.get(entity).isWatered) disablePlantClick(entity)
   }
+  showToast(formatDailyLimitMessage(), 7_000)
   updateProgressText()
   console.log('[WateringSystem] Daily water limit reached')
 }
@@ -379,12 +411,7 @@ function triggerWateringEmote(plantEntity: Entity) {
     triggerSceneEmote({ src: EMOTE_SRC, loop: false })
   }, 200)
 
-  // DCL's loop:false leaves the avatar frozen in the final keyframe instead of
-  // returning to idle. Calling movePlayerTo in place after the emote duration
-  // resets the avatar animation state without moving the player visibly.
   timers.setTimeout(() => {
-    const pos = Transform.getOrNull(engine.PlayerEntity)?.position
-    if (pos) movePlayerTo({ newRelativePosition: pos, avatarTarget: pos })
     emoteActive = false
   }, 200 + EMOTE_DURATION_MS)
 }
@@ -483,12 +510,16 @@ function waterPlant(entity: Entity, plantId: string) {
   // Update progress display
   wateredCount++
   updateProgressText()
+  showToast('Plant Watered! ✨', 2_500, true)
 
   // Schedule expiry
   scheduleExpiry(entity, now, WATERED_EXPIRY_MS)
 
   // Check for full-garden bloom
-  if (wateredCount >= TOTAL_PLANTS) triggerBloomEvent()
+  if (wateredCount >= TOTAL_PLANTS) {
+    triggerBloomEvent()
+    showPersistent(formatBloomCountdown())
+  }
 }
 
 /** Reset every plant back to droopy (called after bloom). */
@@ -632,6 +663,7 @@ export function setupWateringSystem() {
     testMode:      TEST_MODE,
     onReset:       resetAllPlants,
     onVisualBloom: () => {
+      hidePersistent()   // bloom is live — clear "Bloom in X" pill
       const positions: Array<{ x: number; y: number; z: number }> = []
       for (const [entity] of plantRegistry) {
         const pos = Transform.getOrNull(entity)?.position
@@ -723,8 +755,7 @@ export function setupWateringSystem() {
   fetchPlayerDailyCount(playerId)
   updateProgressText()
 
-  // TEST_MODE only — small clickable billboard to reset the daily counter
-  // so one client can run through the full cycle repeatedly.
+  // TEST_MODE only — small clickable billboards for manual testing
   if (TEST_MODE) {
     const resetBtn = engine.addEntity()
     Transform.create(resetBtn, { position: { x: 1, y: 1.5, z: 1 } })
@@ -733,6 +764,16 @@ export function setupWateringSystem() {
     pointerEventsSystem.onPointerDown(
       { entity: resetBtn, opts: { button: InputAction.IA_POINTER, hoverText: 'Reset Daily Limit' } },
       resetDailyLimit
+    )
+
+    // Preview the daily limit toast without actually triggering the limit
+    const limitToastBtn = engine.addEntity()
+    Transform.create(limitToastBtn, { position: { x: 1, y: 1.5, z: 3 } })
+    TextShape.create(limitToastBtn, { text: 'Test Limit\nToast\n[TEST]', fontSize: 2 })
+    Billboard.create(limitToastBtn, { billboardMode: BillboardMode.BM_Y })
+    pointerEventsSystem.onPointerDown(
+      { entity: limitToastBtn, opts: { button: InputAction.IA_POINTER, hoverText: 'Preview Limit Toast' } },
+      () => showToast(formatDailyLimitMessage(), 7_000)
     )
   }
 }
