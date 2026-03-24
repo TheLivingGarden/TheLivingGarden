@@ -205,7 +205,7 @@ export function triggerBloomEvent(): void {
   timers.setTimeout(launchVisualBloom, MUSIC_FADE_IN_MS)
 }
 
-/** Tear down the bloom — fades music, settles petals, stops model animation.
+/** Tear down the bloom — fades music, settles petals, lets model animation finish.
  *  Call from wateringSystem.resetAllPlants at the start of the reset sequence. */
 export function endBloom(): void {
   bloomActive = false
@@ -219,7 +219,9 @@ export function endBloom(): void {
   startPetalSettle()
 
   if (bloomModelEntity) {
-    Animator.getMutable(bloomModelEntity).states[0].playing = false
+    // Turn off looping — the current cycle plays through to the end and
+    // the model settles on its final frame rather than snapping to a stop.
+    Animator.getMutable(bloomModelEntity).states[0].loop = false
   }
 }
 
