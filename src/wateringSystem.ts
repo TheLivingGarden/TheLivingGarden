@@ -22,6 +22,7 @@ import {
   timers,
 } from '@dcl/sdk/ecs'
 import { getPlayer } from '@dcl/sdk/players'
+import { setupPetalSystem, startPetalRain, startPetalSettle, petalParticleSystem } from './petalSystem'
 import { movePlayerTo, triggerSceneEmote } from '~system/RestrictedActions'
 
 // ---------------------------------------------------------------
@@ -41,8 +42,9 @@ const OVERRIDE_DAILY_LIMIT = true
 // TODO: replace with your real server base URL
 const SERVER_URL = 'https://YOUR_SERVER_URL/api'
 
-const TOTAL_PLANTS = 16
-
+const TOTAL_PLANTS = 6
+// How close to a plant to see the Click prompt
+const MAX_CLICK_DISTANCE = 5
 // How long a "watered" state lasts before expiring (ms).
 // Switching between 6h and 12h is easy here.
 const WATERED_EXPIRY_MS = TEST_MODE
@@ -65,6 +67,11 @@ const ANIM_TRANSITION_MS = 1500
 // right as the watering-can tips forward at the end of the animation.
 const EMOTE_DURATION_MS = 3000
 
+// Water drop indicator shown above droopy plants.
+const WATER_DROP_SRC = 'assets/scene/Models/waterDrop/waterDrop.glb'
+const WATER_DROP_Y   = 0.8   // metres above the plant base — tune to taste
+const DROP_FADE_MS   = 800   // how long the fade in/out takes
+
 // Toggle click method for UX prototyping:
 //   false → click directly on the plant model (default)
 //   true  → invisible oversized clickbox parented to each plant
@@ -78,9 +85,10 @@ const DAILY_WATER_LIMIT = 8
 // Plant entity names as placed in the scene editor.
 const PLANT_NAMES = [
   'Plant_1',  'Plant_2',  'Plant_3',  'Plant_4',
-  'Plant_5',  'Plant_6',  'Plant_7',  'Plant_8',
-  'Plant_9',  'Plant_10', 'Plant_11', 'Plant_12',
-  'Plant_13', 'Plant_14', 'Plant_15', 'Plant_16',
+  'Plant_5',  'Plant_6', 
+  // 'Plant_7',  'Plant_8',
+  //'Plant_9',  'Plant_10', 'Plant_11', 'Plant_12',
+  //'Plant_13', 'Plant_14', 'Plant_15', 'Plant_16',
 ]
 
 // ---------------------------------------------------------------
@@ -113,139 +121,41 @@ let playerId           = 'unknown'
 // True between bloom trigger and the post-bloom reset — expiry timers skip
 // during this window so plants stay healthy through the full bloom moment.
 let bloomActive = false
-// True while petals are raining down
-let petalActive = false
-// True during the wind-down: petals keep falling but don't respawn,
-// land on the ground, rest, then shrink away
-let petalSettling = false
+// True while the watering emote is in flight — prevents a second click from
+// interrupting the avatar animation via a new movePlayerTo / triggerSceneEmote.
+let emoteActive = false
+// Water drop fade state per plant
+type DropFade = 'in' | 'out' | 'visible' | 'hidden'
+interface DropState { entity: Entity; fade: DropFade; fadeMs: number }
+const dropMap = new Map<Entity, DropState>()  // plant entity → drop state
+
+function setDropFade(plantEntity: Entity, direction: 'in' | 'out') {
+  const s = dropMap.get(plantEntity)
+  if (!s) return
+  s.fade   = direction
+  s.fadeMs = 0
+}
+
+function dropFadeSystem(dt: number) {
+  for (const [, s] of dropMap) {
+    if (s.fade !== 'in' && s.fade !== 'out') continue
+    s.fadeMs += dt * 1000
+    const t  = Math.min(s.fadeMs / DROP_FADE_MS, 1)
+    const te = t * t * (3 - 2 * t)           // smooth-step ease
+    const sc = s.fade === 'in' ? te : 1 - te
+    const v  = Math.max(sc, 0.001)            // never exact 0 — GltfContainer safe
+    Transform.getMutable(s.entity).scale = { x: v, y: v, z: v }
+    if (t >= 1) s.fade = s.fade === 'in' ? 'visible' : 'hidden'
+  }
+}
+
 // Music fade state
 let musicFadeState: 'in' | 'out' | 'none' = 'none'
 let musicFadeMs    = 0
 
-// ---------------------------------------------------------------
-// Petal particle system
-// ---------------------------------------------------------------
-
-const PETAL_COUNT         = 50
-const PETAL_CENTER        = { x: 8, z: 8 }
-const PETAL_SPAWN_RADIUS  = 5
-const PETAL_HEIGHT_MAX    = 7   // max spawn height (m)
-const PETAL_HEIGHT_MIN    = 1   // min spawn height (m)
-const PETAL_FALL_MIN      = 0.4 // m/s min fall speed
-const PETAL_FALL_MAX      = 1.0 // m/s max fall speed
-const PETAL_DRIFT_MAX     = 0.3 // m/s max horizontal drift
-const PETAL_LIFE_MIN_MS   = 3_000
-const PETAL_LIFE_MAX_MS   = 7_000
-const PETAL_SCALE         = 0.5
-const PETAL_REST_MS       = 2_000  // time resting on ground before shrinking
-const PETAL_SHRINK_MS     = 600    // duration of scale-to-zero shrink
-
 const MUSIC_FADE_IN_MS    = 3_000  // bloom music swells in over 3s, then visuals trigger
 const MUSIC_FADE_OUT_MS   = 6_000  // bloom music fades out over 6s
 const AMBIENT_MAX_VOLUME  = 0.7    // background level for the ambient track
-
-interface PetalState {
-  entity:      Entity
-  pos:         { x: number; y: number; z: number }
-  vel:         { x: number; y: number; z: number }
-  rotY:        number
-  rotSpeed:    number
-  lifetime:    number   // ms remaining
-  maxLifetime: number   // ms total
-  grounded:    boolean  // true once petal has landed during settle
-  groundedMs:  number   // ms since landing
-}
-
-const petalPool: PetalState[] = []
-
-function randomizePetal(p: PetalState) {
-  const angle  = Math.random() * Math.PI * 2
-  const radius = Math.random() * PETAL_SPAWN_RADIUS
-  p.pos = {
-    x: PETAL_CENTER.x + Math.cos(angle) * radius,
-    y: PETAL_HEIGHT_MIN + Math.random() * (PETAL_HEIGHT_MAX - PETAL_HEIGHT_MIN),
-    z: PETAL_CENTER.z + Math.sin(angle) * radius,
-  }
-  p.vel = {
-    x: (Math.random() - 0.5) * PETAL_DRIFT_MAX * 2,
-    y: -(PETAL_FALL_MIN + Math.random() * (PETAL_FALL_MAX - PETAL_FALL_MIN)),
-    z: (Math.random() - 0.5) * PETAL_DRIFT_MAX * 2,
-  }
-  p.rotY        = Math.random() * Math.PI * 2
-  p.rotSpeed    = (Math.random() - 0.5) * 4
-  p.maxLifetime = PETAL_LIFE_MIN_MS + Math.random() * (PETAL_LIFE_MAX_MS - PETAL_LIFE_MIN_MS)
-  p.lifetime    = p.maxLifetime
-  p.grounded    = false
-  p.groundedMs  = 0
-}
-
-function petalParticleSystem(dt: number) {
-  if (!petalActive && !petalSettling) return
-
-  const dtMs = dt * 1000
-  let allSettled = true
-
-  for (const p of petalPool) {
-    const t = Transform.getMutable(p.entity)
-
-    // ── Grounded phase (settling only) ───────────────────────────
-    if (p.grounded) {
-      p.groundedMs += dtMs
-
-      if (p.groundedMs >= PETAL_REST_MS + PETAL_SHRINK_MS) {
-        // Fully gone
-        t.scale = { x: 0, y: 0, z: 0 }
-      } else if (p.groundedMs >= PETAL_REST_MS) {
-        // Shrinking — ease out so the last moment lingers
-        const progress = (p.groundedMs - PETAL_REST_MS) / PETAL_SHRINK_MS
-        const s = PETAL_SCALE * (1 - progress * progress)
-        t.scale = { x: s, y: s, z: s }
-        allSettled = false
-      } else {
-        // Resting on the ground — still visible
-        allSettled = false
-      }
-      continue
-    }
-
-    // ── In-air phase ─────────────────────────────────────────────
-    allSettled = false
-    p.pos.x   += p.vel.x * dt
-    p.pos.y   += p.vel.y * dt
-    p.pos.z   += p.vel.z * dt
-    p.rotY    += p.rotSpeed * dt
-    p.lifetime -= dtMs
-
-    if (p.pos.y < 0) {
-      if (petalActive) {
-        // Normal rain: respawn above the garden
-        randomizePetal(p)
-      } else {
-        // Settling: land on the floor and begin the rest timer
-        p.pos.y    = 0
-        p.vel      = { x: 0, y: 0, z: 0 }
-        p.rotSpeed = 0
-        p.grounded = true
-        p.groundedMs = 0
-      }
-    } else if (petalActive && p.lifetime <= 0) {
-      // Lifetime expired mid-air during normal rain — respawn
-      randomizePetal(p)
-    }
-
-    // Apply to renderer — rotation as Y-axis quaternion
-    const half = p.rotY * 0.5
-    t.position = { x: p.pos.x, y: p.pos.y, z: p.pos.z }
-    t.rotation = { x: 0, y: Math.sin(half), z: 0, w: Math.cos(half) }
-    t.scale    = { x: PETAL_SCALE, y: PETAL_SCALE, z: PETAL_SCALE }
-  }
-
-  // Once every petal has shrunk away, idle the system
-  if (petalSettling && allSettled) {
-    petalSettling = false
-    console.log('[Petals] all settled')
-  }
-}
 
 // Music fade system — runs in the main update loop so getMutable is reliable.
 // Quadratic ease-in for the swell, quadratic ease-out for the fade.
@@ -443,10 +353,12 @@ function enablePlantClick(entity: Entity) {
   const info = plantRegistry.get(entity)
   if (!info) return
   pointerEventsSystem.onPointerDown(
-    { entity: info.clickTarget, opts: { button: InputAction.IA_POINTER, hoverText: 'Water' } },
+    { entity: info.clickTarget, opts: { button: InputAction.IA_POINTER, hoverText: 'Water', maxDistance: MAX_CLICK_DISTANCE } },
     () => waterPlant(entity, info.plantName)
   )
-  pointerEventsSystem.onPointerHoverEnter({ entity: info.clickTarget }, playHoverSound)
+  pointerEventsSystem.onPointerHoverEnter({ entity: info.clickTarget }, () => {
+    if (!PlantData.get(entity).isWatered) playHoverSound()
+  })
 }
 
 function disablePlantClick(entity: Entity) {
@@ -530,6 +442,7 @@ function triggerWateringEmote(plantEntity: Entity) {
   // triggerSceneEmote is the correct SDK7 API for custom GLB avatar emotes.
   // The 200ms delay (matching DCL Foundation's pattern) gives the facing
   // rotation time to apply before the animation starts.
+  emoteActive = true
   timers.setTimeout(() => {
     triggerSceneEmote({ src: EMOTE_SRC, loop: false })
   }, 200)
@@ -540,6 +453,7 @@ function triggerWateringEmote(plantEntity: Entity) {
   timers.setTimeout(() => {
     const pos = Transform.getOrNull(engine.PlayerEntity)?.position
     if (pos) movePlayerTo({ newRelativePosition: pos, avatarTarget: pos })
+    emoteActive = false
   }, 200 + EMOTE_DURATION_MS)
 }
 
@@ -568,6 +482,7 @@ function scheduleExpiry(entity: Entity, sessionTimestamp: number, delayMs: numbe
       if (!PlantData.get(entity).isWatered) {
         Animator.playSingleAnimation(entity, ANIM_DROOPY_STATE)
         enablePlantClick(entity)
+        setDropFade(entity, 'in')
       }
     }, ANIM_TRANSITION_MS)
   }, delayMs)
@@ -575,6 +490,8 @@ function scheduleExpiry(entity: Entity, sessionTimestamp: number, delayMs: numbe
 
 /** Water a single plant: animation, sound, state update, server sync. */
 function waterPlant(entity: Entity, plantId: string) {
+  if (bloomActive) return   // garden is blooming — no new watering until reset
+  if (emoteActive) return   // emote in flight — don't interrupt it
   const pd = PlantData.getMutable(entity)
   if (pd.isWatered) return  // already watered — ignore
 
@@ -593,6 +510,9 @@ function waterPlant(entity: Entity, plantId: string) {
 
   // Healthy plants are not clickable
   disablePlantClick(entity)
+
+  // Water drop fades out as the plant is being watered
+  setDropFade(entity, 'out')
 
   // ── Event sequence ──────────────────────────────────────────────────────
   // t = 0ms     : click sound + player moves/faces plant + emote queued
@@ -648,10 +568,8 @@ function resetAllPlants() {
     musicFadeState = 'out'
   }
 
-  // Begin petal settle — stop spawning new petals, let in-air ones
-  // drift down, land, rest 2s, then shrink away gracefully
-  petalActive   = false
-  petalSettling = true
+  // Begin petal settle — stop spawning new petals, let in-air ones fall and fade
+  startPetalSettle()
 
   // Clear state and build the queue for the reset system
   resetQueue = []
@@ -706,6 +624,7 @@ function resetAnimSystem(dt: number) {
     if (entity && !PlantData.get(entity).isWatered) {
       Animator.stopAllAnimations(entity, true)
       Animator.playSingleAnimation(entity, ANIM_DROOPY_STATE, true)
+      setDropFade(entity, 'in')
       console.log(`[RESET-SYS] to_droopy_state fired on entity ${entity}`)
     }
     if (resetQueue.length === 0) {
@@ -722,6 +641,7 @@ function resetAnimSystem(dt: number) {
 // ---------------------------------------------------------------
 
 function triggerBloomEvent() {
+  if (bloomActive) return   // already blooming — ignore duplicate trigger
   bloomActive = true
   console.log('Bloom building — music fade-in starting')
 
@@ -748,13 +668,7 @@ function launchVisualBloom() {
   console.log('Bloom visual launched!')
 
   // Petal rain — stagger initial lifetimes so petals don't all spawn at once
-  petalActive = true
-  for (const p of petalPool) {
-    randomizePetal(p)
-    p.lifetime = Math.random() * p.maxLifetime  // stagger entry
-    const t = Transform.getMutable(p.entity)
-    t.scale = { x: PETAL_SCALE, y: PETAL_SCALE, z: PETAL_SCALE }
-  }
+  startPetalRain()
 
   // Bloom model animation
   if (bloomModelEntity) {
@@ -814,6 +728,17 @@ function setupPlant(plantName: string) {
   plantRegistry.set(entity, { clickTarget, plantName })
   // Plants start droopy — enable clicking immediately
   enablePlantClick(entity)
+
+  // Water drop indicator — visible on droopy plants, fades out when watered
+  const drop = engine.addEntity()
+  Transform.create(drop, {
+    position: { x: 0, y: WATER_DROP_Y, z: 0 },
+    scale:    { x: 1, y: 1, z: 1 },
+    parent:   entity,
+  })
+  GltfContainer.create(drop, { src: WATER_DROP_SRC })
+  Billboard.create(drop, { billboardMode: BillboardMode.BM_Y })
+  dropMap.set(entity, { entity: drop, fade: 'visible', fadeMs: 0 })
 }
 
 // ---------------------------------------------------------------
@@ -879,11 +804,11 @@ export function setupWateringSystem() {
   const SND_POS = { x: 8, y: 1, z: 8 }
   hoverSoundEntity = engine.addEntity()
   Transform.create(hoverSoundEntity, { position: SND_POS })
-  AudioSource.create(hoverSoundEntity, { audioClipUrl: 'assets/scene/Sounds/hover.mp3',    playing: false, loop: false, volume: 0.7, pitch: 1 })
+  AudioSource.create(hoverSoundEntity, { audioClipUrl: 'assets/scene/Sounds/hover.mp3',    playing: false, loop: false, volume: 1, pitch: 1 })
 
   clickSoundEntity = engine.addEntity()
   Transform.create(clickSoundEntity, { position: SND_POS })
-  AudioSource.create(clickSoundEntity, { audioClipUrl: 'assets/scene/Sounds/click.mp3',    playing: false, loop: false, volume: 0.9, pitch: 1 })
+  AudioSource.create(clickSoundEntity, { audioClipUrl: 'assets/scene/Sounds/click.mp3',    playing: false, loop: false, volume: 1, pitch: 1 })
 
   wateringSoundEntity = engine.addEntity()
   Transform.create(wateringSoundEntity, { position: SND_POS })
@@ -920,44 +845,17 @@ export function setupWateringSystem() {
   }, 1000)
 
   // Petal particle system — hide source entity, create pooled instances
-  const petalSource = engine.getEntityOrNullByName('Petal')
-  if (petalSource) {
-    const gltf = GltfContainer.getOrNull(petalSource)
-    const src  = gltf?.src ?? ''
-    // Hide the original scene entity
-    Transform.getMutable(petalSource).scale = { x: 0, y: 0, z: 0 }
-
-    for (let i = 0; i < PETAL_COUNT; i++) {
-      const ent = engine.addEntity()
-      GltfContainer.create(ent, { src })
-      Transform.create(ent, {
-        position: { x: 0, y: -10, z: 0 },
-        scale:    { x: 0, y: 0, z: 0 },     // hidden until bloom
-      })
-      petalPool.push({
-        entity:      ent,
-        pos:         { x: 0, y: -10, z: 0 },
-        vel:         { x: 0, y: -1, z: 0 },
-        rotY:        0,
-        rotSpeed:    1,
-        lifetime:    0,
-        maxLifetime: PETAL_LIFE_MAX_MS,
-        grounded:    false,
-        groundedMs:  0,
-      })
-    }
-    console.log(`[WateringSystem] Petal pool ready — ${PETAL_COUNT} instances from "${src}"`)
-  } else {
-    console.log('[WateringSystem] Petal entity not found — particle system disabled')
-  }
+  // Petal particle system — hide source entity, create pooled instances
+  setupPetalSystem()
 
   // Music fade system — runs every frame, idles when musicFadeState === 'none'
   engine.addSystem(musicFadeSystem)
 
   // Reset animation system — runs every frame, idles when resetPhase === 'done'
   engine.addSystem(resetAnimSystem)
+  engine.addSystem(dropFadeSystem)
 
-  // Petal particle system — runs every frame, idles when petalActive === false
+  // Petal particle system (petalSystem.ts) — idles when no bloom active
   engine.addSystem(petalParticleSystem)
 
   // Pull any existing watered states from the server
@@ -1001,15 +899,15 @@ export function setupWateringSystem() {
 // [DONE] Daily watering limit — 8 per player (DAILY_WATER_LIMIT constant)
 // [DONE] Override feature — OVERRIDE_DAILY_LIMIT flag + TEST_MODE reset button
 // ---------------------
-// Water droplet on top of droopy plants (wait for feedback before implementation)
+// [DONE] Water droplet on top of droopy plants (wait for feedback before implementation)
 // ----------------------
 // Tighten bloom moment build up and pacing
 // -----------------------
-// Find and add audio files (watering, click covered by foundation defaults) 
+// [DONE] Find and add audio files (watering, click covered by foundation defaults) 
 // -----------------------
 // [DONE] Petal particle system for bloom
 // -----------------------
 // Lights sway and flicker for bloom
 // -----------------------
-// Sounds for plant animations + bloom moment 
+// [DONE] Sounds for plant animations + bloom moment 
 // */

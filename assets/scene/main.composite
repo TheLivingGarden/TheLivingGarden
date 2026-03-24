@@ -240,20 +240,20 @@
         "535": {
           "json": {
             "position": {
-              "x": 3,
+              "x": 6.75,
               "y": 0,
               "z": 7.5
-            },
-            "scale": {
-              "x": 1,
-              "y": 1,
-              "z": 1
             },
             "rotation": {
               "x": 0,
               "y": 0,
               "z": 0,
               "w": 1
+            },
+            "scale": {
+              "x": 1,
+              "y": 1,
+              "z": 1
             },
             "parent": 533
           }
@@ -261,20 +261,20 @@
         "536": {
           "json": {
             "position": {
-              "x": 3,
+              "x": 6.75,
               "y": 0,
               "z": 9.75
-            },
-            "scale": {
-              "x": 1,
-              "y": 1,
-              "z": 1
             },
             "rotation": {
               "x": 0,
               "y": 0,
               "z": 0,
               "w": 1
+            },
+            "scale": {
+              "x": 1,
+              "y": 1,
+              "z": 1
             },
             "parent": 533
           }
@@ -282,20 +282,20 @@
         "537": {
           "json": {
             "position": {
-              "x": 3,
+              "x": 9.324594497680664,
               "y": 0,
               "z": 14.75
-            },
-            "scale": {
-              "x": 1,
-              "y": 1,
-              "z": 1
             },
             "rotation": {
               "x": 0,
               "y": 0,
               "z": 0,
               "w": 1
+            },
+            "scale": {
+              "x": 1,
+              "y": 1,
+              "z": 1
             },
             "parent": 533
           }
@@ -303,20 +303,20 @@
         "538": {
           "json": {
             "position": {
-              "x": 3,
+              "x": 9.324594497680664,
               "y": 0,
               "z": 12.5
-            },
-            "scale": {
-              "x": 1,
-              "y": 1,
-              "z": 1
             },
             "rotation": {
               "x": 0,
               "y": 0,
               "z": 0,
               "w": 1
+            },
+            "scale": {
+              "x": 1,
+              "y": 1,
+              "z": 1
             },
             "parent": 533
           }
@@ -348,216 +348,6 @@
               "x": 4.75,
               "y": 0,
               "z": 12.5
-            },
-            "scale": {
-              "x": 1,
-              "y": 1,
-              "z": 1
-            },
-            "rotation": {
-              "x": 0,
-              "y": 0,
-              "z": 0,
-              "w": 1
-            },
-            "parent": 533
-          }
-        },
-        "541": {
-          "json": {
-            "position": {
-              "x": 4.75,
-              "y": 0,
-              "z": 9.75
-            },
-            "scale": {
-              "x": 1,
-              "y": 1,
-              "z": 1
-            },
-            "rotation": {
-              "x": 0,
-              "y": 0,
-              "z": 0,
-              "w": 1
-            },
-            "parent": 533
-          }
-        },
-        "542": {
-          "json": {
-            "position": {
-              "x": 4.75,
-              "y": 0,
-              "z": 7.5
-            },
-            "scale": {
-              "x": 1,
-              "y": 1,
-              "z": 1
-            },
-            "rotation": {
-              "x": 0,
-              "y": 0,
-              "z": 0,
-              "w": 1
-            },
-            "parent": 533
-          }
-        },
-        "543": {
-          "json": {
-            "position": {
-              "x": 6.5,
-              "y": 0,
-              "z": 14.75
-            },
-            "scale": {
-              "x": 1,
-              "y": 1,
-              "z": 1
-            },
-            "rotation": {
-              "x": 0,
-              "y": 0,
-              "z": 0,
-              "w": 1
-            },
-            "parent": 533
-          }
-        },
-        "544": {
-          "json": {
-            "position": {
-              "x": 6.5,
-              "y": 0,
-              "z": 12.5
-            },
-            "scale": {
-              "x": 1,
-              "y": 1,
-              "z": 1
-            },
-            "rotation": {
-              "x": 0,
-              "y": 0,
-              "z": 0,
-              "w": 1
-            },
-            "parent": 533
-          }
-        },
-        "545": {
-          "json": {
-            "position": {
-              "x": 6.5,
-              "y": 0,
-              "z": 9.75
-            },
-            "scale": {
-              "x": 1,
-              "y": 1,
-              "z": 1
-            },
-            "rotation": {
-              "x": 0,
-              "y": 0,
-              "z": 0,
-              "w": 1
-            },
-            "parent": 533
-          }
-        },
-        "546": {
-          "json": {
-            "position": {
-              "x": 6.5,
-              "y": 0,
-              "z": 7.5
-            },
-            "scale": {
-              "x": 1,
-              "y": 1,
-              "z": 1
-            },
-            "rotation": {
-              "x": 0,
-              "y": 0,
-              "z": 0,
-              "w": 1
-            },
-            "parent": 533
-          }
-        },
-        "547": {
-          "json": {
-            "position": {
-              "x": 8.5,
-              "y": 0,
-              "z": 14.75
-            },
-            "scale": {
-              "x": 1,
-              "y": 1,
-              "z": 1
-            },
-            "rotation": {
-              "x": 0,
-              "y": 0,
-              "z": 0,
-              "w": 1
-            },
-            "parent": 533
-          }
-        },
-        "548": {
-          "json": {
-            "position": {
-              "x": 8.5,
-              "y": 0,
-              "z": 12.5
-            },
-            "scale": {
-              "x": 1,
-              "y": 1,
-              "z": 1
-            },
-            "rotation": {
-              "x": 0,
-              "y": 0,
-              "z": 0,
-              "w": 1
-            },
-            "parent": 533
-          }
-        },
-        "549": {
-          "json": {
-            "position": {
-              "x": 8.5,
-              "y": 0,
-              "z": 9.75
-            },
-            "scale": {
-              "x": 1,
-              "y": 1,
-              "z": 1
-            },
-            "rotation": {
-              "x": 0,
-              "y": 0,
-              "z": 0,
-              "w": 1
-            },
-            "parent": 533
-          }
-        },
-        "550": {
-          "json": {
-            "position": {
-              "x": 8.5,
-              "y": 0,
-              "z": 7.5
             },
             "scale": {
               "x": 1,
@@ -602,6 +392,22 @@
           "json": {
             "states": [
               {
+                "clip": "HealthyState",
+                "playing": false,
+                "weight": 1,
+                "speed": 1,
+                "loop": false,
+                "shouldReset": false
+              },
+              {
+                "clip": "DroopyState",
+                "playing": false,
+                "weight": 1,
+                "speed": 1,
+                "loop": false,
+                "shouldReset": false
+              },
+              {
                 "clip": "DroopyToHealthy",
                 "playing": false,
                 "weight": 1,
@@ -623,6 +429,22 @@
         "536": {
           "json": {
             "states": [
+              {
+                "clip": "HealthyState",
+                "playing": false,
+                "weight": 1,
+                "speed": 1,
+                "loop": false,
+                "shouldReset": false
+              },
+              {
+                "clip": "DroopyState",
+                "playing": false,
+                "weight": 1,
+                "speed": 1,
+                "loop": false,
+                "shouldReset": false
+              },
               {
                 "clip": "DroopyToHealthy",
                 "playing": false,
@@ -646,6 +468,22 @@
           "json": {
             "states": [
               {
+                "clip": "HealthyState",
+                "playing": false,
+                "weight": 1,
+                "speed": 1,
+                "loop": false,
+                "shouldReset": false
+              },
+              {
+                "clip": "DroopyState",
+                "playing": false,
+                "weight": 1,
+                "speed": 1,
+                "loop": false,
+                "shouldReset": false
+              },
+              {
                 "clip": "DroopyToHealthy",
                 "playing": false,
                 "weight": 1,
@@ -667,6 +505,22 @@
         "538": {
           "json": {
             "states": [
+              {
+                "clip": "HealthyState",
+                "playing": false,
+                "weight": 1,
+                "speed": 1,
+                "loop": false,
+                "shouldReset": false
+              },
+              {
+                "clip": "DroopyState",
+                "playing": false,
+                "weight": 1,
+                "speed": 1,
+                "loop": false,
+                "shouldReset": false
+              },
               {
                 "clip": "DroopyToHealthy",
                 "playing": false,
@@ -709,226 +563,6 @@
           }
         },
         "540": {
-          "json": {
-            "states": [
-              {
-                "clip": "DroopyToHealthy",
-                "playing": false,
-                "weight": 1,
-                "speed": 1,
-                "loop": false,
-                "shouldReset": false
-              },
-              {
-                "clip": "HealthyToDroopy",
-                "playing": false,
-                "weight": 1,
-                "speed": 1,
-                "loop": false,
-                "shouldReset": false
-              }
-            ]
-          }
-        },
-        "541": {
-          "json": {
-            "states": [
-              {
-                "clip": "DroopyToHealthy",
-                "playing": false,
-                "weight": 1,
-                "speed": 1,
-                "loop": false,
-                "shouldReset": false
-              },
-              {
-                "clip": "HealthyToDroopy",
-                "playing": false,
-                "weight": 1,
-                "speed": 1,
-                "loop": false,
-                "shouldReset": false
-              }
-            ]
-          }
-        },
-        "542": {
-          "json": {
-            "states": [
-              {
-                "clip": "DroopyToHealthy",
-                "playing": false,
-                "weight": 1,
-                "speed": 1,
-                "loop": false,
-                "shouldReset": false
-              },
-              {
-                "clip": "HealthyToDroopy",
-                "playing": false,
-                "weight": 1,
-                "speed": 1,
-                "loop": false,
-                "shouldReset": false
-              }
-            ]
-          }
-        },
-        "543": {
-          "json": {
-            "states": [
-              {
-                "clip": "DroopyToHealthy",
-                "playing": false,
-                "weight": 1,
-                "speed": 1,
-                "loop": false,
-                "shouldReset": false
-              },
-              {
-                "clip": "HealthyToDroopy",
-                "playing": false,
-                "weight": 1,
-                "speed": 1,
-                "loop": false,
-                "shouldReset": false
-              }
-            ]
-          }
-        },
-        "544": {
-          "json": {
-            "states": [
-              {
-                "clip": "DroopyToHealthy",
-                "playing": false,
-                "weight": 1,
-                "speed": 1,
-                "loop": false,
-                "shouldReset": false
-              },
-              {
-                "clip": "HealthyToDroopy",
-                "playing": false,
-                "weight": 1,
-                "speed": 1,
-                "loop": false,
-                "shouldReset": false
-              }
-            ]
-          }
-        },
-        "545": {
-          "json": {
-            "states": [
-              {
-                "clip": "DroopyToHealthy",
-                "playing": false,
-                "weight": 1,
-                "speed": 1,
-                "loop": false,
-                "shouldReset": false
-              },
-              {
-                "clip": "HealthyToDroopy",
-                "playing": false,
-                "weight": 1,
-                "speed": 1,
-                "loop": false,
-                "shouldReset": false
-              }
-            ]
-          }
-        },
-        "546": {
-          "json": {
-            "states": [
-              {
-                "clip": "DroopyToHealthy",
-                "playing": false,
-                "weight": 1,
-                "speed": 1,
-                "loop": false,
-                "shouldReset": false
-              },
-              {
-                "clip": "HealthyToDroopy",
-                "playing": false,
-                "weight": 1,
-                "speed": 1,
-                "loop": false,
-                "shouldReset": false
-              }
-            ]
-          }
-        },
-        "547": {
-          "json": {
-            "states": [
-              {
-                "clip": "DroopyToHealthy",
-                "playing": false,
-                "weight": 1,
-                "speed": 1,
-                "loop": false,
-                "shouldReset": false
-              },
-              {
-                "clip": "HealthyToDroopy",
-                "playing": false,
-                "weight": 1,
-                "speed": 1,
-                "loop": false,
-                "shouldReset": false
-              }
-            ]
-          }
-        },
-        "548": {
-          "json": {
-            "states": [
-              {
-                "clip": "DroopyToHealthy",
-                "playing": false,
-                "weight": 1,
-                "speed": 1,
-                "loop": false,
-                "shouldReset": false
-              },
-              {
-                "clip": "HealthyToDroopy",
-                "playing": false,
-                "weight": 1,
-                "speed": 1,
-                "loop": false,
-                "shouldReset": false
-              }
-            ]
-          }
-        },
-        "549": {
-          "json": {
-            "states": [
-              {
-                "clip": "DroopyToHealthy",
-                "playing": false,
-                "weight": 1,
-                "speed": 1,
-                "loop": false,
-                "shouldReset": false
-              },
-              {
-                "clip": "HealthyToDroopy",
-                "playing": false,
-                "weight": 1,
-                "speed": 1,
-                "loop": false,
-                "shouldReset": false
-              }
-            ]
-          }
-        },
-        "550": {
           "json": {
             "states": [
               {
@@ -1037,76 +671,6 @@
             "visibleMeshesCollisionMask": 0,
             "invisibleMeshesCollisionMask": 1
           }
-        },
-        "541": {
-          "json": {
-            "src": "assets/scene/Models/demoPlant/demoPlant.glb",
-            "visibleMeshesCollisionMask": 0,
-            "invisibleMeshesCollisionMask": 1
-          }
-        },
-        "542": {
-          "json": {
-            "src": "assets/scene/Models/demoPlant/demoPlant.glb",
-            "visibleMeshesCollisionMask": 0,
-            "invisibleMeshesCollisionMask": 1
-          }
-        },
-        "543": {
-          "json": {
-            "src": "assets/scene/Models/demoPlant/demoPlant.glb",
-            "visibleMeshesCollisionMask": 0,
-            "invisibleMeshesCollisionMask": 1
-          }
-        },
-        "544": {
-          "json": {
-            "src": "assets/scene/Models/demoPlant/demoPlant.glb",
-            "visibleMeshesCollisionMask": 0,
-            "invisibleMeshesCollisionMask": 1
-          }
-        },
-        "545": {
-          "json": {
-            "src": "assets/scene/Models/demoPlant/demoPlant.glb",
-            "visibleMeshesCollisionMask": 0,
-            "invisibleMeshesCollisionMask": 1
-          }
-        },
-        "546": {
-          "json": {
-            "src": "assets/scene/Models/demoPlant/demoPlant.glb",
-            "visibleMeshesCollisionMask": 0,
-            "invisibleMeshesCollisionMask": 1
-          }
-        },
-        "547": {
-          "json": {
-            "src": "assets/scene/Models/demoPlant/demoPlant.glb",
-            "visibleMeshesCollisionMask": 0,
-            "invisibleMeshesCollisionMask": 1
-          }
-        },
-        "548": {
-          "json": {
-            "src": "assets/scene/Models/demoPlant/demoPlant.glb",
-            "visibleMeshesCollisionMask": 1,
-            "invisibleMeshesCollisionMask": 3
-          }
-        },
-        "549": {
-          "json": {
-            "src": "assets/scene/Models/demoPlant/demoPlant.glb",
-            "visibleMeshesCollisionMask": 1,
-            "invisibleMeshesCollisionMask": 3
-          }
-        },
-        "550": {
-          "json": {
-            "src": "assets/scene/Models/demoPlant/demoPlant.glb",
-            "visibleMeshesCollisionMask": 1,
-            "invisibleMeshesCollisionMask": 3
-          }
         }
       }
     },
@@ -1187,56 +751,6 @@
           "json": {
             "value": "Plant_6"
           }
-        },
-        "541": {
-          "json": {
-            "value": "Plant_7"
-          }
-        },
-        "542": {
-          "json": {
-            "value": "Plant_8"
-          }
-        },
-        "543": {
-          "json": {
-            "value": "Plant_9"
-          }
-        },
-        "544": {
-          "json": {
-            "value": "Plant_10"
-          }
-        },
-        "545": {
-          "json": {
-            "value": "Plant_11"
-          }
-        },
-        "546": {
-          "json": {
-            "value": "Plant_12"
-          }
-        },
-        "547": {
-          "json": {
-            "value": "Plant_13"
-          }
-        },
-        "548": {
-          "json": {
-            "value": "Plant_14"
-          }
-        },
-        "549": {
-          "json": {
-            "value": "Plant_15"
-          }
-        },
-        "550": {
-          "json": {
-            "value": "Plant_16"
-          }
         }
       }
     },
@@ -1282,9 +796,14 @@
         "serializationType": "map"
       },
       "data": {
-        "0": {
+        "535": {
           "json": {
-            "gizmo": 0
+            "gizmo": 1
+          }
+        },
+        "536": {
+          "json": {
+            "gizmo": 1
           }
         }
       }
@@ -1374,21 +893,11 @@
                 "open": true,
                 "children": [
                   535,
-                  548,
                   536,
                   537,
                   538,
                   539,
-                  540,
-                  541,
-                  542,
-                  543,
-                  544,
-                  545,
-                  546,
-                  547,
-                  550,
-                  549
+                  540
                 ]
               },
               {
@@ -1417,47 +926,6 @@
               },
               {
                 "entity": 540,
-                "children": []
-              },
-              {
-                "entity": 541,
-                "children": []
-              },
-              {
-                "entity": 542,
-                "open": true,
-                "children": []
-              },
-              {
-                "entity": 543,
-                "children": []
-              },
-              {
-                "entity": 544,
-                "children": []
-              },
-              {
-                "entity": 545,
-                "children": []
-              },
-              {
-                "entity": 546,
-                "children": []
-              },
-              {
-                "entity": 547,
-                "children": []
-              },
-              {
-                "entity": 548,
-                "children": []
-              },
-              {
-                "entity": 549,
-                "children": []
-              },
-              {
-                "entity": 550,
                 "children": []
               },
               {
@@ -1511,36 +979,6 @@
           "json": {}
         },
         "540": {
-          "json": {}
-        },
-        "541": {
-          "json": {}
-        },
-        "542": {
-          "json": {}
-        },
-        "543": {
-          "json": {}
-        },
-        "544": {
-          "json": {}
-        },
-        "545": {
-          "json": {}
-        },
-        "546": {
-          "json": {}
-        },
-        "547": {
-          "json": {}
-        },
-        "548": {
-          "json": {}
-        },
-        "549": {
-          "json": {}
-        },
-        "550": {
           "json": {}
         }
       }
