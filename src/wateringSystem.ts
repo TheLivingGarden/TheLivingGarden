@@ -24,6 +24,7 @@ import {
 import { getPlayer } from '@dcl/sdk/players'
 import { setupPetalSystem, petalParticleSystem } from './petalSystem'
 import { setupBloomSystem, triggerBloomEvent, endBloom, isBloomActive, musicFadeSystem } from './bloomSystem'
+import { setupSparkleSystem, triggerSparkle, sparkleSystem } from './sparkleSystem'
 import { movePlayerTo, triggerSceneEmote } from '~system/RestrictedActions'
 
 // ---------------------------------------------------------------
@@ -454,6 +455,9 @@ function waterPlant(entity: Entity, plantId: string) {
       const latest = PlantData.get(entity)
       if (latest.isWatered && latest.wateredAt === now) {
         Animator.playSingleAnimation(entity, ANIM_HEALTHY_STATE)
+        // Sparkle burst fires exactly as the healthy idle begins
+        const plantPos = Transform.getOrNull(entity)?.position
+        if (plantPos) triggerSparkle(plantPos)
       }
     }, ANIM_TRANSITION_MS)
   }, EMOTE_DURATION_MS)
@@ -658,6 +662,9 @@ export function setupWateringSystem() {
   // Petal particle system — hide source entity, create pooled instances
   setupPetalSystem()
 
+  // Sparkle burst system — pooled billboard sprites for per-plant watering effect
+  setupSparkleSystem()
+
   // Music fade system — runs every frame, idles when musicFadeState === 'none'
   engine.addSystem(musicFadeSystem)
 
@@ -667,6 +674,9 @@ export function setupWateringSystem() {
 
   // Petal particle system (petalSystem.ts) — idles when no bloom active
   engine.addSystem(petalParticleSystem)
+
+  // Sparkle burst system — idles when no active sparkles in pool
+  engine.addSystem(sparkleSystem)
 
   // Pull any existing watered states from the server
   fetchPlantStates()
