@@ -15,8 +15,8 @@ import { timers } from '@dcl/sdk/ecs'
 
 let toastVisible  = false
 let toastText     = ''
-let toastLarge    = false   // larger font for key positive moments
-let toastGen      = 0       // generation counter prevents stale timers hiding newer toasts
+let toastLarge    = false
+let toastGen      = 0
 
 let persistVisible = false
 let persistText    = ''
@@ -48,19 +48,18 @@ export function hidePersistent(): void {
 }
 
 // ---------------------------------------------------------------
-// Styling
+// Layout constants (virtual canvas: 1920 × 1080)
 // ---------------------------------------------------------------
 
 const PILL_COLOR = { r: 0.13, g: 0.13, b: 0.13, a: 0.88 }
 const WHITE      = Color4.White()
-const PILL_W     = 580   // px in 1920-wide virtual canvas
+const PILL_W     = 580
 const PILL_H_LG  = 72    // single-line large toast
 const PILL_H_SM  = 92    // two-line / regular
+const PILL_LEFT  = (1920 - PILL_W) / 2   // 670 — centres pill in 1920-wide canvas
 
-// Bottom edge of the persistent pill (px from screen bottom)
-const PERSIST_BOTTOM     = 90
-// When both pills are visible, toast sits above persistent with a gap
-const TOAST_BOTH_BOTTOM  = PERSIST_BOTTOM + PILL_H_SM + 12
+const PERSIST_BOTTOM    = 90
+const TOAST_BOTH_BOTTOM = PERSIST_BOTTOM + PILL_H_SM + 12
 
 // ---------------------------------------------------------------
 // Setup
@@ -71,7 +70,8 @@ export function setupUi(): void {
 }
 
 // ---------------------------------------------------------------
-// Render
+// Render — pills are direct children of the root, absolutely
+// positioned from the viewport so no intermediate sizing issues.
 // ---------------------------------------------------------------
 
 function uiComponent() {
@@ -79,42 +79,29 @@ function uiComponent() {
   const toastH      = toastLarge ? PILL_H_LG : PILL_H_SM
 
   return (
-    <UiEntity
-      uiTransform={{
-        positionType: 'absolute',
-        position:     { top: 0, left: 0, right: 0, bottom: 0 },
-      }}
-    >
+    <UiEntity>
 
       {/* ── Toast ─────────────────────────────────────────────── */}
       <UiEntity
         uiTransform={{
           display:        toastVisible ? 'flex' : 'none',
           positionType:   'absolute',
-          position:       { bottom: toastBottom, left: 0, right: 0 },
+          position:       { bottom: toastBottom, left: PILL_LEFT },
+          width:          PILL_W,
           height:         toastH,
           alignItems:     'center',
           justifyContent: 'center',
+          padding:        { left: 36, right: 36 },
         }}
+        uiBackground={{ color: PILL_COLOR }}
       >
-        <UiEntity
-          uiTransform={{
-            width:          PILL_W,
-            height:         '100%',
-            alignItems:     'center',
-            justifyContent: 'center',
-            padding:        { left: 36, right: 36 },
-          }}
-          uiBackground={{ color: PILL_COLOR }}
-        >
-          <Label
-            value={toastText}
-            fontSize={toastLarge ? 24 : 18}
-            color={WHITE}
-            textAlign="middle-center"
-            uiTransform={{ width: '100%', height: '100%' }}
-          />
-        </UiEntity>
+        <Label
+          value={toastText}
+          fontSize={toastLarge ? 24 : 18}
+          color={WHITE}
+          textAlign="middle-center"
+          uiTransform={{ width: '100%', height: '100%' }}
+        />
       </UiEntity>
 
       {/* ── Persistent ────────────────────────────────────────── */}
@@ -122,30 +109,22 @@ function uiComponent() {
         uiTransform={{
           display:        persistVisible ? 'flex' : 'none',
           positionType:   'absolute',
-          position:       { bottom: PERSIST_BOTTOM, left: 0, right: 0 },
+          position:       { bottom: PERSIST_BOTTOM, left: PILL_LEFT },
+          width:          PILL_W,
           height:         PILL_H_SM,
           alignItems:     'center',
           justifyContent: 'center',
+          padding:        { left: 36, right: 36 },
         }}
+        uiBackground={{ color: PILL_COLOR }}
       >
-        <UiEntity
-          uiTransform={{
-            width:          PILL_W,
-            height:         '100%',
-            alignItems:     'center',
-            justifyContent: 'center',
-            padding:        { left: 36, right: 36 },
-          }}
-          uiBackground={{ color: PILL_COLOR }}
-        >
-          <Label
-            value={persistText}
-            fontSize={18}
-            color={WHITE}
-            textAlign="middle-center"
-            uiTransform={{ width: '100%', height: '100%' }}
-          />
-        </UiEntity>
+        <Label
+          value={persistText}
+          fontSize={18}
+          color={WHITE}
+          textAlign="middle-center"
+          uiTransform={{ width: '100%', height: '100%' }}
+        />
       </UiEntity>
 
     </UiEntity>

@@ -322,7 +322,6 @@ function onDailyLimitReached() {
   for (const [entity] of plantRegistry) {
     if (!PlantData.get(entity).isWatered) disablePlantClick(entity)
   }
-  showToast(formatDailyLimitMessage(), 7_000)
   updateProgressText()
   console.log('[WateringSystem] Daily water limit reached')
 }
@@ -463,9 +462,8 @@ function waterPlant(entity: Entity, plantId: string) {
 
   // Track daily usage and check if limit is now reached
   playerWateredToday++
-  if (!OVERRIDE_DAILY_LIMIT && playerWateredToday >= DAILY_WATER_LIMIT) {
-    onDailyLimitReached()
-  }
+  const justHitLimit = !OVERRIDE_DAILY_LIMIT && playerWateredToday >= DAILY_WATER_LIMIT
+  if (justHitLimit) onDailyLimitReached()
 
   // Healthy plants are not clickable
   disablePlantClick(entity)
@@ -511,6 +509,8 @@ function waterPlant(entity: Entity, plantId: string) {
   wateredCount++
   updateProgressText()
   showToast('Plant Watered! ✨', 2_500, true)
+  // If this water just hit the daily limit, show that toast after "Plant Watered!" clears
+  if (justHitLimit) timers.setTimeout(() => showToast(formatDailyLimitMessage(), 7_000), 3_000)
 
   // Schedule expiry
   scheduleExpiry(entity, now, WATERED_EXPIRY_MS)
@@ -755,27 +755,6 @@ export function setupWateringSystem() {
   fetchPlayerDailyCount(playerId)
   updateProgressText()
 
-  // TEST_MODE only — small clickable billboards for manual testing
-  if (TEST_MODE) {
-    const resetBtn = engine.addEntity()
-    Transform.create(resetBtn, { position: { x: 1, y: 1.5, z: 1 } })
-    TextShape.create(resetBtn, { text: 'Reset\nDaily Limit\n[TEST]', fontSize: 2 })
-    Billboard.create(resetBtn, { billboardMode: BillboardMode.BM_Y })
-    pointerEventsSystem.onPointerDown(
-      { entity: resetBtn, opts: { button: InputAction.IA_POINTER, hoverText: 'Reset Daily Limit' } },
-      resetDailyLimit
-    )
-
-    // Preview the daily limit toast without actually triggering the limit
-    const limitToastBtn = engine.addEntity()
-    Transform.create(limitToastBtn, { position: { x: 1, y: 1.5, z: 3 } })
-    TextShape.create(limitToastBtn, { text: 'Test Limit\nToast\n[TEST]', fontSize: 2 })
-    Billboard.create(limitToastBtn, { billboardMode: BillboardMode.BM_Y })
-    pointerEventsSystem.onPointerDown(
-      { entity: limitToastBtn, opts: { button: InputAction.IA_POINTER, hoverText: 'Preview Limit Toast' } },
-      () => showToast(formatDailyLimitMessage(), 7_000)
-    )
-  }
 }
 
 
