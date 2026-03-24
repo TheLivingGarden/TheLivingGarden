@@ -24,7 +24,7 @@ import {
 import { getPlayer } from '@dcl/sdk/players'
 import { setupPetalSystem, petalParticleSystem } from './petalSystem'
 import { setupBloomSystem, triggerBloomEvent, endBloom, isBloomActive, musicFadeSystem } from './bloomSystem'
-import { setupSparkleSystem, triggerSparkle, sparkleSystem } from './sparkleSystem'
+import { setupSparkleSystem, triggerSparkle, sparkleSystem, triggerBloomSparkles, endBloomSparkles, bloomSparkleSystem } from './sparkleSystem'
 import { movePlayerTo, triggerSceneEmote } from '~system/RestrictedActions'
 
 // ---------------------------------------------------------------
@@ -109,7 +109,6 @@ let progressEntity: Entity
 let hoverSoundEntity:    Entity
 let clickSoundEntity:    Entity
 let wateringSoundEntity: Entity
-let magicFXSoundEntity:  Entity
 let wateredCount = 0
 // Daily watering limit tracking
 let playerWateredToday = 0
@@ -317,17 +316,33 @@ const EMOTE_SRC = 'assets/scene/Models/Emotes/WateringCan_emote.glb'
 
 /** Move a sound entity to the player's current world position then fire it.
  *  Keeps all interaction sounds at full apparent volume regardless of
- *  where in the scene the player is standing. */
+ *  where in the scene the player is standing.
+ *
+ *  Two-tick pattern: reset playing→false this tick, then true next tick.
+ *  After a one-shot sound finishes, DCL SDK7 leaves the component at
+ *  playing:true — a subsequent createOrReplace with playing:true looks
+ *  like no state change and the renderer silently skips the retrigger. */
 function playAtPlayer(soundEntity: Entity, audioClipUrl: string, volume: number) {
   const pos = Transform.getOrNull(engine.PlayerEntity)?.position ?? { x: 8, y: 1, z: 8 }
   Transform.getMutable(soundEntity).position = pos
-  AudioSource.createOrReplace(soundEntity, { audioClipUrl, playing: true, loop: false, volume, pitch: 1 })
+  AudioSource.createOrReplace(soundEntity, { audioClipUrl, playing: false, loop: false, volume, pitch: 1 })
+  timers.setTimeout(() => {
+    AudioSource.getMutable(soundEntity).playing = true
+  }, 0)
 }
 
 function playHoverSound()    { playAtPlayer(hoverSoundEntity,    'assets/scene/Sounds/hover.mp3',    0.7) }
 function playClickSound()    { playAtPlayer(clickSoundEntity,    'assets/scene/Sounds/click.mp3',    0.9) }
 function playWateringSound() { playAtPlayer(wateringSoundEntity, 'assets/scene/Sounds/watering.mp3', 1.0) }
-function playMagicFXSound()  { playAtPlayer(magicFXSoundEntity,  'assets/scene/Sounds/MagicFX.mp3',  1.0) }
+/** Spawns a fresh entity each call — guarantees no stale AudioSource state
+ *  regardless of how DCL SDK7 leaves the component after a one-shot ends. */
+function playMagicFXSound() {
+  const pos = Transform.getOrNull(engine.PlayerEntity)?.position ?? { x: 8, y: 1, z: 8 }
+  const ent = engine.addEntity()
+  Transform.create(ent, { position: pos })
+  AudioSource.create(ent, { audioClipUrl: 'assets/scene/Sounds/MagicFX.mp3', playing: true, loop: false, volume: 1.0, pitch: 1 })
+  timers.setTimeout(() => engine.removeEntity(ent), 8_000)
+}
 
 // How far in front of the plant the player is placed to perform the emote.
 // Tweak this value to taste — 1.2 m feels natural for a watering-can reach.
@@ -480,6 +495,7 @@ function waterPlant(entity: Entity, plantId: string) {
 function resetAllPlants() {
   // Tear down bloom — fades music, settles petals, clears text, stops model anim
   endBloom()
+  endBloomSparkles()  // transition orbiting sparkles to rise-and-dissolve
 
   wateredCount = 0
   updateProgressText()
@@ -612,7 +628,18 @@ export function setupWateringSystem() {
   Billboard.create(progressEntity, { billboardMode: BillboardMode.BM_Y })
 
   // Bloom system — billboard, audio, model, music fade
-  setupBloomSystem({ testMode: TEST_MODE, onReset: resetAllPlants })
+  setupBloomSystem({
+    testMode:      TEST_MODE,
+    onReset:       resetAllPlants,
+    onVisualBloom: () => {
+      const positions: Array<{ x: number; y: number; z: number }> = []
+      for (const [entity] of plantRegistry) {
+        const pos = Transform.getOrNull(entity)?.position
+        if (pos) positions.push(pos)
+      }
+      triggerBloomSparkles(positions)
+    },
+  })
 
   // Interaction sound entities — placed at scene centre, audible everywhere
   const SND_POS = { x: 8, y: 1, z: 8 }
@@ -628,9 +655,7 @@ export function setupWateringSystem() {
   Transform.create(wateringSoundEntity, { position: SND_POS })
   AudioSource.create(wateringSoundEntity, { audioClipUrl: 'assets/scene/Sounds/watering.mp3', playing: false, loop: false, volume: 1,   pitch: 1 })
 
-  magicFXSoundEntity = engine.addEntity()
-  Transform.create(magicFXSoundEntity, { position: SND_POS })
-  AudioSource.create(magicFXSoundEntity, { audioClipUrl: 'assets/scene/Sounds/MagicFX.mp3',  playing: false, loop: false, volume: 1,   pitch: 1 })
+  // MagicFX uses a fresh entity per play — no setup entity needed
 
   // Wire up each plant (pointer events, state component, audio)
   for (const name of PLANT_NAMES) {
@@ -677,6 +702,9 @@ export function setupWateringSystem() {
 
   // Sparkle burst system — idles when no active sparkles in pool
   engine.addSystem(sparkleSystem)
+
+  // Bloom orbit sparkle system — idles when all bloom sparkles are idle
+  engine.addSystem(bloomSparkleSystem)
 
   // Pull any existing watered states from the server
   fetchPlantStates()

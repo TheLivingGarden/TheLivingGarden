@@ -36,7 +36,8 @@ let bloomBillboard:     Entity
 let musicFadeState: 'in' | 'out' | 'none' = 'none'
 let musicFadeMs = 0
 let testMode    = false
-let onResetCallback: () => void = () => {}
+let onResetCallback:       () => void = () => {}
+let onVisualBloomCallback: () => void = () => {}
 
 // ---------------------------------------------------------------
 // Private helpers
@@ -70,7 +71,9 @@ function launchVisualBloom() {
   showBloomText('The Garden is in Full Bloom!')
   console.log('Bloom visual launched!')
 
-  startPetalRain()
+  onVisualBloomCallback()
+  // Sparkles travel ~2.2s to reach orbit — petals start 1.5s after they settle
+  timers.setTimeout(startPetalRain, 3_700)
 
   if (bloomModelEntity) {
     Animator.playSingleAnimation(bloomModelEntity, ANIM_BLOOM)
@@ -138,9 +141,14 @@ export function musicFadeSystem(dt: number): void {
 // ---------------------------------------------------------------
 
 /** Call once at scene startup — creates all bloom-related entities and registers state. */
-export function setupBloomSystem(opts: { testMode: boolean; onReset: () => void }): void {
-  testMode        = opts.testMode
-  onResetCallback = opts.onReset
+export function setupBloomSystem(opts: {
+  testMode:       boolean
+  onReset:        () => void
+  onVisualBloom?: () => void
+}): void {
+  testMode               = opts.testMode
+  onResetCallback        = opts.onReset
+  onVisualBloomCallback  = opts.onVisualBloom ?? (() => {})
 
   // Bloom text billboard — shown when all plants are watered
   bloomBillboard = engine.addEntity()

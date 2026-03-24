@@ -240,20 +240,20 @@
         "534": {
           "json": {
             "position": {
-              "x": 7,
+              "x": 8,
               "y": 0,
-              "z": 29.5
-            },
-            "scale": {
-              "x": 1,
-              "y": 1,
-              "z": 1
+              "z": 24
             },
             "rotation": {
               "x": 0,
               "y": 0,
               "z": 0,
               "w": 1
+            },
+            "scale": {
+              "x": 1,
+              "y": 1,
+              "z": 1
             },
             "parent": 0
           }
@@ -713,7 +713,7 @@
                   "tex": {
                     "$case": "texture",
                     "texture": {
-                      "src": "assets/scene/image-logo.png",
+                      "src": "assets/scene/Images/sparkle.png",
                       "wrapMode": 0,
                       "filterMode": 0
                     }
@@ -947,7 +947,7 @@
         "serializationType": "map"
       },
       "data": {
-        "517": {
+        "534": {
           "json": {
             "gizmo": 1
           }

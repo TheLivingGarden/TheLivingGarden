@@ -9,9 +9,9 @@ import { engine, Entity, GltfContainer, Transform } from '@dcl/sdk/ecs'
 // ---------------------------------------------------------------
 
 const PETAL_COUNT        = 50
-const PETAL_CENTER       = { x: 8, z: 8 }
+const PETAL_CENTER       = { x: 8, z: 24 }
 const PETAL_SPAWN_RADIUS = 5
-const PETAL_HEIGHT_MAX   = 7      // max spawn height (m)
+const PETAL_HEIGHT_MAX   = 9      // max spawn height (m)
 const PETAL_HEIGHT_MIN   = 1      // min spawn height (m)
 const PETAL_FALL_MIN     = 0.4    // m/s min fall speed
 const PETAL_FALL_MAX     = 1.0    // m/s max fall speed
