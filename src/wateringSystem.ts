@@ -26,6 +26,7 @@ import { getPlayer } from '@dcl/sdk/players'
 import { setupPetalSystem, petalParticleSystem } from './petalSystem'
 import { setupBloomSystem, triggerBloomEvent, endBloom, isBloomActive, musicFadeSystem } from './bloomSystem'
 import { setupSparkleSystem, triggerSparkle, sparkleSystem, triggerBloomSparkles, endBloomSparkles, bloomSparkleSystem } from './sparkleSystem'
+import { setupAmbientFX, triggerBloomShockwave, triggerGroundRipple, ambientFXSystem } from './ambientFX'
 import { showToast, showPersistent, hidePersistent, formatBloomCountdown, formatDailyLimitMessage } from './notifications'
 import { movePlayerTo, triggerSceneEmote } from '~system/RestrictedActions'
 
@@ -41,7 +42,7 @@ import { movePlayerTo, triggerSceneEmote } from '~system/RestrictedActions'
 const TEST_MODE = true
 // Set to true to bypass the daily limit entirely (useful during testing
 // or when running as an admin / stress-testing with one client).
-const OVERRIDE_DAILY_LIMIT = false
+const OVERRIDE_DAILY_LIMIT = true
 
 // TODO: replace with your real server base URL
 const SERVER_URL = 'https://YOUR_SERVER_URL/api'
@@ -454,8 +455,12 @@ function waterPlant(entity: Entity, plantId: string) {
   playClickSound()
   triggerWateringEmote(entity)  // movePlayerTo now + triggerSceneEmote at 200ms
 
-  // 2. Watering sound synced to when the emote actually starts
+  // 2. Watering sound + ground ripple synced to when the emote actually starts
   timers.setTimeout(playWateringSound, 200)
+  timers.setTimeout(() => {
+    const pos = Transform.getOrNull(entity)?.position
+    if (pos) triggerGroundRipple(pos)
+  }, 200)
 
   // 3. Plant responds after the emote has played through
   timers.setTimeout(() => {
@@ -636,6 +641,7 @@ export function setupWateringSystem() {
     onReset:       resetAllPlants,
     onVisualBloom: () => {
       hidePersistent()   // bloom is live — clear "Bloom in X" pill
+      triggerBloomShockwave()
       const positions: Array<{ x: number; y: number; z: number }> = []
       for (const [entity] of plantRegistry) {
         const pos = Transform.getOrNull(entity)?.position
@@ -694,6 +700,9 @@ export function setupWateringSystem() {
   // Sparkle burst system — pooled billboard sprites for per-plant watering effect
   setupSparkleSystem()
 
+  // Ambient FX — dust motes, bloom shockwave rings, fireflies
+  setupAmbientFX()
+
   // Music fade system — runs every frame, idles when musicFadeState === 'none'
   engine.addSystem(musicFadeSystem)
 
@@ -709,6 +718,9 @@ export function setupWateringSystem() {
 
   // Bloom orbit sparkle system — idles when all bloom sparkles are idle
   engine.addSystem(bloomSparkleSystem)
+
+  // Ambient FX system — dust motes + fireflies every frame, shockwave when active
+  engine.addSystem(ambientFXSystem)
 
   // Pull any existing watered states from the server
   fetchPlantStates()
