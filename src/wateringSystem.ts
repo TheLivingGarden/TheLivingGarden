@@ -16,6 +16,7 @@ import {
   MeshCollider,
   ColliderLayer,
   pointerEventsSystem,
+  PointerEvents,
   InputAction,
   Transform,
   executeTask,
@@ -313,6 +314,7 @@ function disablePlantClick(entity: Entity) {
   if (!info) return
   pointerEventsSystem.removeOnPointerDown(info.clickTarget)
   pointerEventsSystem.removeOnPointerHoverEnter(info.clickTarget)
+  PointerEvents.deleteFrom(info.clickTarget)
 }
 
 /** Called when the player hits their daily watering limit. */
