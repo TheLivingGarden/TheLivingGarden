@@ -26,7 +26,7 @@ import { getPlayer } from '@dcl/sdk/players'
 import { setupPetalSystem, petalParticleSystem } from './petalSystem'
 import { setupBloomSystem, triggerBloomEvent, endBloom, isBloomActive, musicFadeSystem } from './bloomSystem'
 import { setupSparkleSystem, triggerSparkle, sparkleSystem, triggerBloomSparkles, endBloomSparkles, bloomSparkleSystem } from './sparkleSystem'
-import { showToast, showPersistent, hidePersistent } from './ui'
+import { showToast, showPersistent, hidePersistent, formatBloomCountdown, formatDailyLimitMessage } from './notifications'
 import { movePlayerTo, triggerSceneEmote } from '~system/RestrictedActions'
 
 // ---------------------------------------------------------------
@@ -151,36 +151,6 @@ function dropFadeSystem(dt: number) {
 let resetQueue:  Entity[] = []
 let resetPhase:  'to_droopy' | 'wait' | 'to_droopy_state' | 'done' = 'done'
 let resetTimerMs = 0
-
-// ---------------------------------------------------------------
-// Notification helpers
-// ---------------------------------------------------------------
-
-/** "Xh Ymin" until next 6am or 6pm UTC — used for the bloom countdown. */
-function formatBloomCountdown(): string {
-  if (TEST_MODE) return 'All plants watered!\nBloom starting soon...'
-  const now   = new Date()
-  const at6am = new Date(now); at6am.setUTCHours(6,  0, 0, 0)
-  const at6pm = new Date(now); at6pm.setUTCHours(18, 0, 0, 0)
-  let next: Date
-  if      (now < at6am) next = at6am
-  else if (now < at6pm) next = at6pm
-  else { next = new Date(at6am); next.setUTCDate(next.getUTCDate() + 1) }
-  const ms = next.getTime() - Date.now()
-  const h  = Math.floor(ms / 3_600_000)
-  const m  = Math.floor((ms % 3_600_000) / 60_000)
-  return `All plants watered!\nBloom in ${h}h ${m}min`
-}
-
-/** Time remaining until midnight UTC — used for the daily-limit message. */
-function formatDailyLimitMessage(): string {
-  if (TEST_MODE) return "You've reached your daily watering limit\n[TEST MODE — resets on new session]"
-  const midnight = new Date(); midnight.setUTCHours(24, 0, 0, 0)
-  const ms = midnight.getTime() - Date.now()
-  const h  = Math.floor(ms / 3_600_000)
-  const m  = Math.floor((ms % 3_600_000) / 60_000)
-  return `You've reached your daily watering limit,\nplease try again in ${h}h ${m}min`
-}
 
 // ---------------------------------------------------------------
 // UI helpers
@@ -512,7 +482,7 @@ function waterPlant(entity: Entity, plantId: string) {
   updateProgressText()
   showToast('Plant Watered! ✨', 2_500, true)
   // If this water just hit the daily limit, show that toast after "Plant Watered!" clears
-  if (justHitLimit) timers.setTimeout(() => showToast(formatDailyLimitMessage(), 7_000), 3_000)
+  if (justHitLimit) timers.setTimeout(() => showToast(formatDailyLimitMessage(TEST_MODE), 7_000), 3_000)
 
   // Schedule expiry
   scheduleExpiry(entity, now, WATERED_EXPIRY_MS)
@@ -520,7 +490,7 @@ function waterPlant(entity: Entity, plantId: string) {
   // Check for full-garden bloom
   if (wateredCount >= TOTAL_PLANTS) {
     triggerBloomEvent()
-    showPersistent(formatBloomCountdown())
+    showPersistent(formatBloomCountdown(TEST_MODE))
   }
 }
 
