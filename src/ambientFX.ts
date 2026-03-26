@@ -107,6 +107,20 @@ function setupShockwaves() {
   }
 }
 
+export function startFireflies(): void {
+  firefliesActive = true
+  for (const f of fireflies) {
+    Transform.getMutable(f.entity).position = { x: f.bx, y: f.by, z: f.bz }
+  }
+}
+
+export function stopFireflies(): void {
+  firefliesActive = false
+  for (const f of fireflies) {
+    Transform.getMutable(f.entity).position = { x: f.bx, y: -100, z: f.bz }
+  }
+}
+
 export function triggerBloomShockwave(): void {
   for (const ring of shockRings) {
     ring.active  = true
@@ -132,13 +146,14 @@ interface Firefly {
 }
 
 const fireflies: Firefly[] = []
+let firefliesActive = false
 
 function setupFireflies() {
   for (let i = 0; i < FF_COUNT; i++) {
     const ent  = engine.addEntity()
     const warm = rnd(0, 1)
     Transform.create(ent, {
-      position: { x: rnd(3, 14), y: rnd(0.8, 2.5), z: rnd(3, 22) },
+      position: { x: rnd(3, 14), y: -100, z: rnd(3, 22) },  // hidden until bloom
       scale:    { x: FF_SCALE, y: FF_SCALE, z: FF_SCALE },
     })
     MeshRenderer.setSphere(ent)
@@ -160,71 +175,54 @@ function setupFireflies() {
 
 // =============================================================
 // SECTION 4 — Ground ripple on watering
-// Small expanding disc at the plant base when watered.
-// Pool of 6 so concurrent waterings never clash.
+// Fresh entity per trigger — avoids stale component state on reuse.
+// Entity is removed once the animation completes.
 // =============================================================
 
-const RIPPLE_POOL_SIZE = 6
-const RIPPLE_DUR_MS    = 700
-const RIPPLE_R_MAX     = 4.5   // world-unit radius
+const RIPPLE_DUR_MS = 700
+const RIPPLE_R_MAX  = 4.5   // world-unit radius
 
-interface RippleRing {
-  entity:  Entity
-  active:  boolean
-  elapsed: number
-}
+interface ActiveRipple { entity: Entity; elapsed: number }
+const activeRipples: ActiveRipple[] = []
 
-const ripplePool: RippleRing[] = []
-
-function setupRipples() {
-  for (let i = 0; i < RIPPLE_POOL_SIZE; i++) {
-    const ent = engine.addEntity()
-    Transform.create(ent, {
-      position: { x: 0, y: -100, z: 0 },
-      rotation: Quaternion.fromEulerDegrees(90, 0, 0),
-      scale:    { x: 0.001, y: 0.001, z: 0.001 },
-    })
-    MeshRenderer.setPlane(ent)
-    Material.setPbrMaterial(ent, {
-      texture:           Material.Texture.Common({ src: SPARKLE_SRC }),
-      alphaTexture:      Material.Texture.Common({ src: SPARKLE_SRC }),
-      transparencyMode:  MaterialTransparencyMode.MTM_ALPHA_BLEND,
-      albedoColor:       Color4.create(0.6, 0.9, 1.0, 0),
-      emissiveColor:     { r: 0.4, g: 0.8, b: 1.0 },
-      emissiveIntensity: 2.0,
-    })
-    ripplePool.push({ entity: ent, active: false, elapsed: 0 })
-  }
-}
+// No pool setup needed — entities are created on demand.
+function setupRipples() {}
 
 export function triggerGroundRipple(pos: { x: number; y: number; z: number }): void {
-  const ring = ripplePool.find(r => !r.active)
-  if (!ring) return
-  ring.active  = true
-  ring.elapsed = 0
-  const t = Transform.getMutable(ring.entity)
-  t.position = { x: pos.x, y: 0.08, z: pos.z }
-  t.scale    = { x: 0.001, y: 0.001, z: 0.001 }
+  const ent = engine.addEntity()
+  Transform.create(ent, {
+    position: { x: pos.x, y: 0.08, z: pos.z },
+    rotation: Quaternion.fromEulerDegrees(90, 0, 0),
+    scale:    { x: 0.001, y: 0.001, z: 0.001 },
+  })
+  MeshRenderer.setPlane(ent)
+  Material.setPbrMaterial(ent, {
+    texture:           Material.Texture.Common({ src: SPARKLE_SRC }),
+    alphaTexture:      Material.Texture.Common({ src: SPARKLE_SRC }),
+    transparencyMode:  MaterialTransparencyMode.MTM_ALPHA_BLEND,
+    albedoColor:       Color4.create(0.6, 0.9, 1.0, 0.75),
+    emissiveColor:     { r: 0.4, g: 0.8, b: 1.0 },
+    emissiveIntensity: 2.0,
+  })
+  activeRipples.push({ entity: ent, elapsed: 0 })
 }
 
 function tickRipples(dt: number) {
-  for (const ring of ripplePool) {
-    if (!ring.active) continue
-    ring.elapsed += dt * 1000
+  for (let i = activeRipples.length - 1; i >= 0; i--) {
+    const r = activeRipples[i]
+    r.elapsed += dt * 1000
 
-    const t = Math.min(ring.elapsed / RIPPLE_DUR_MS, 1)
+    const t = Math.min(r.elapsed / RIPPLE_DUR_MS, 1)
     if (t >= 1) {
-      ring.active = false
-      Transform.getMutable(ring.entity).position = { x: 0, y: -100, z: 0 }
+      engine.removeEntity(r.entity)
+      activeRipples.splice(i, 1)
       continue
     }
 
-    const expand = 1 - (1 - t) * (1 - t)   // ease-out
-    const sc     = expand * RIPPLE_R_MAX
-    Transform.getMutable(ring.entity).scale = { x: sc, y: sc, z: sc }
-
+    const sc    = (1 - (1 - t) * (1 - t)) * RIPPLE_R_MAX
     const alpha = (1 - t) * (1 - t) * 0.75
-    Material.setPbrMaterial(ring.entity, {
+    Transform.getMutable(r.entity).scale = { x: sc, y: sc, z: sc }
+    Material.setPbrMaterial(r.entity, {
       texture:           Material.Texture.Common({ src: SPARKLE_SRC }),
       alphaTexture:      Material.Texture.Common({ src: SPARKLE_SRC }),
       transparencyMode:  MaterialTransparencyMode.MTM_ALPHA_BLEND,
@@ -283,13 +281,15 @@ export function ambientFXSystem(dt: number): void {
     })
   }
 
-  // ── Fireflies ───────────────────────────────────────────────
-  for (const f of fireflies) {
-    f.t += dt
-    Transform.getMutable(f.entity).position = {
-      x: f.bx + Math.sin(f.t * f.fx + f.px) * f.ax,
-      y: f.by + Math.sin(f.t * f.fy + f.py) * f.ay,
-      z: f.bz + Math.sin(f.t * f.fz + f.pz) * f.az,
+  // ── Fireflies — bloom only ───────────────────────────────────
+  if (firefliesActive) {
+    for (const f of fireflies) {
+      f.t += dt
+      Transform.getMutable(f.entity).position = {
+        x: f.bx + Math.sin(f.t * f.fx + f.px) * f.ax,
+        y: f.by + Math.sin(f.t * f.fy + f.py) * f.ay,
+        z: f.bz + Math.sin(f.t * f.fz + f.pz) * f.az,
+      }
     }
   }
 

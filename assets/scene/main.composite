@@ -216,6 +216,258 @@
             "parent": 0
           }
         },
+        "521": {
+          "json": {
+            "position": {
+              "x": 8,
+              "y": 0.10000000149011612,
+              "z": 24
+            },
+            "rotation": {
+              "x": 0,
+              "y": 0,
+              "z": 0,
+              "w": 1
+            },
+            "scale": {
+              "x": 1,
+              "y": 1,
+              "z": 1
+            },
+            "parent": 0
+          }
+        },
+        "522": {
+          "json": {
+            "position": {
+              "x": 2.75,
+              "y": 1.25,
+              "z": 8.226837158203125
+            },
+            "rotation": {
+              "x": 0,
+              "y": 0,
+              "z": 0,
+              "w": 1
+            },
+            "scale": {
+              "x": 1,
+              "y": 1,
+              "z": 1
+            },
+            "parent": 533
+          }
+        },
+        "523": {
+          "json": {
+            "position": {
+              "x": 2.75,
+              "y": 1.25,
+              "z": 10.099796295166016
+            },
+            "rotation": {
+              "x": 0,
+              "y": 0,
+              "z": 0,
+              "w": 1
+            },
+            "scale": {
+              "x": 1,
+              "y": 1,
+              "z": 1
+            },
+            "parent": 533
+          }
+        },
+        "524": {
+          "json": {
+            "position": {
+              "x": 12.25,
+              "y": 0,
+              "z": 17
+            },
+            "scale": {
+              "x": 1,
+              "y": 1,
+              "z": 1
+            },
+            "rotation": {
+              "x": 0,
+              "y": 0,
+              "z": 0,
+              "w": 1
+            },
+            "parent": 0
+          }
+        },
+        "525": {
+          "json": {
+            "position": {
+              "x": 9.554306030273438,
+              "y": 1.25,
+              "z": 10.099796295166016
+            },
+            "rotation": {
+              "x": 0,
+              "y": 0,
+              "z": 0,
+              "w": 1
+            },
+            "scale": {
+              "x": 1,
+              "y": 1,
+              "z": 1
+            },
+            "parent": 533
+          }
+        },
+        "526": {
+          "json": {
+            "position": {
+              "x": 9.554306030273438,
+              "y": 1.25,
+              "z": 8.226837158203125
+            },
+            "rotation": {
+              "x": 0,
+              "y": 0,
+              "z": 0,
+              "w": 1
+            },
+            "scale": {
+              "x": 1,
+              "y": 1,
+              "z": 1
+            },
+            "parent": 533
+          }
+        },
+        "527": {
+          "json": {
+            "position": {
+              "x": 9.554306030273438,
+              "y": 1.25,
+              "z": 6.4838995933532715
+            },
+            "rotation": {
+              "x": 0,
+              "y": 0,
+              "z": 0,
+              "w": 1
+            },
+            "scale": {
+              "x": 1,
+              "y": 1,
+              "z": 1
+            },
+            "parent": 533
+          }
+        },
+        "528": {
+          "json": {
+            "position": {
+              "x": 9.554306030273438,
+              "y": 1.25,
+              "z": 41.435768127441406
+            },
+            "rotation": {
+              "x": 0,
+              "y": 0,
+              "z": 0,
+              "w": 1
+            },
+            "scale": {
+              "x": 1,
+              "y": 1,
+              "z": 1
+            },
+            "parent": 533
+          }
+        },
+        "529": {
+          "json": {
+            "position": {
+              "x": 9.554306030273438,
+              "y": 1.25,
+              "z": 39.562808990478516
+            },
+            "rotation": {
+              "x": 0,
+              "y": 0,
+              "z": 0,
+              "w": 1
+            },
+            "scale": {
+              "x": 1,
+              "y": 1,
+              "z": 1
+            },
+            "parent": 533
+          }
+        },
+        "530": {
+          "json": {
+            "position": {
+              "x": 9.554306030273438,
+              "y": 1.25,
+              "z": 37.81986999511719
+            },
+            "rotation": {
+              "x": 0,
+              "y": 0,
+              "z": 0,
+              "w": 1
+            },
+            "scale": {
+              "x": 1,
+              "y": 1,
+              "z": 1
+            },
+            "parent": 533
+          }
+        },
+        "531": {
+          "json": {
+            "position": {
+              "x": 2.75,
+              "y": 1.25,
+              "z": 37.81986999511719
+            },
+            "rotation": {
+              "x": 0,
+              "y": 0,
+              "z": 0,
+              "w": 1
+            },
+            "scale": {
+              "x": 1,
+              "y": 1,
+              "z": 1
+            },
+            "parent": 533
+          }
+        },
+        "532": {
+          "json": {
+            "position": {
+              "x": 2.75,
+              "y": 1.25,
+              "z": 39.562808990478516
+            },
+            "rotation": {
+              "x": 0,
+              "y": 0,
+              "z": 0,
+              "w": 1
+            },
+            "scale": {
+              "x": 1,
+              "y": 1,
+              "z": 1
+            },
+            "parent": 533
+          }
+        },
         "533": {
           "json": {
             "position": {
@@ -261,20 +513,20 @@
         "535": {
           "json": {
             "position": {
-              "x": 6.75,
-              "y": 0,
-              "z": 7.5
-            },
-            "scale": {
-              "x": 1,
-              "y": 1,
-              "z": 1
+              "x": 2.75,
+              "y": 1.25,
+              "z": 6.483899116516113
             },
             "rotation": {
               "x": 0,
               "y": 0,
               "z": 0,
               "w": 1
+            },
+            "scale": {
+              "x": 1,
+              "y": 1,
+              "z": 1
             },
             "parent": 533
           }
@@ -303,20 +555,20 @@
         "537": {
           "json": {
             "position": {
-              "x": 9.324594497680664,
-              "y": 0,
-              "z": 14.75
-            },
-            "scale": {
-              "x": 1,
-              "y": 1,
-              "z": 1
+              "x": 11.735212326049805,
+              "y": 0.7688755989074707,
+              "z": 21.25
             },
             "rotation": {
               "x": 0,
               "y": 0,
               "z": 0,
               "w": 1
+            },
+            "scale": {
+              "x": 1,
+              "y": 1,
+              "z": 1
             },
             "parent": 533
           }
@@ -383,6 +635,69 @@
             },
             "parent": 533
           }
+        },
+        "541": {
+          "json": {
+            "position": {
+              "x": 2.75,
+              "y": 1.25,
+              "z": 41.435768127441406
+            },
+            "rotation": {
+              "x": 0,
+              "y": 0,
+              "z": 0,
+              "w": 1
+            },
+            "scale": {
+              "x": 1,
+              "y": 1,
+              "z": 1
+            },
+            "parent": 533
+          }
+        },
+        "542": {
+          "json": {
+            "position": {
+              "x": 11.735212326049805,
+              "y": 0.7688755989074707,
+              "z": 26.7572021484375
+            },
+            "rotation": {
+              "x": 0,
+              "y": 0,
+              "z": 0,
+              "w": 1
+            },
+            "scale": {
+              "x": 1,
+              "y": 1,
+              "z": 1
+            },
+            "parent": 533
+          }
+        },
+        "543": {
+          "json": {
+            "position": {
+              "x": 13.727145195007324,
+              "y": 2.7033557891845703,
+              "z": 32.65627670288086
+            },
+            "rotation": {
+              "x": 0,
+              "y": 0,
+              "z": 0,
+              "w": 1
+            },
+            "scale": {
+              "x": 1,
+              "y": 1,
+              "z": 1
+            },
+            "parent": 533
+          }
         }
       }
     },
@@ -395,6 +710,386 @@
         "protocolBuffer": "PBAnimator"
       },
       "data": {
+        "522": {
+          "json": {
+            "states": [
+              {
+                "clip": "HealthyState",
+                "playing": false,
+                "weight": 1,
+                "speed": 1,
+                "loop": false,
+                "shouldReset": false
+              },
+              {
+                "clip": "DroopyState",
+                "playing": false,
+                "weight": 1,
+                "speed": 1,
+                "loop": false,
+                "shouldReset": false
+              },
+              {
+                "clip": "DroopyToHealthy",
+                "playing": false,
+                "weight": 1,
+                "speed": 1,
+                "loop": false,
+                "shouldReset": false
+              },
+              {
+                "clip": "HealthyToDroopy",
+                "playing": false,
+                "weight": 1,
+                "speed": 1,
+                "loop": false,
+                "shouldReset": false
+              }
+            ]
+          }
+        },
+        "523": {
+          "json": {
+            "states": [
+              {
+                "clip": "HealthyState",
+                "playing": false,
+                "weight": 1,
+                "speed": 1,
+                "loop": false,
+                "shouldReset": false
+              },
+              {
+                "clip": "DroopyState",
+                "playing": false,
+                "weight": 1,
+                "speed": 1,
+                "loop": false,
+                "shouldReset": false
+              },
+              {
+                "clip": "DroopyToHealthy",
+                "playing": false,
+                "weight": 1,
+                "speed": 1,
+                "loop": false,
+                "shouldReset": false
+              },
+              {
+                "clip": "HealthyToDroopy",
+                "playing": false,
+                "weight": 1,
+                "speed": 1,
+                "loop": false,
+                "shouldReset": false
+              }
+            ]
+          }
+        },
+        "525": {
+          "json": {
+            "states": [
+              {
+                "clip": "HealthyState",
+                "playing": false,
+                "weight": 1,
+                "speed": 1,
+                "loop": false,
+                "shouldReset": false
+              },
+              {
+                "clip": "DroopyState",
+                "playing": false,
+                "weight": 1,
+                "speed": 1,
+                "loop": false,
+                "shouldReset": false
+              },
+              {
+                "clip": "DroopyToHealthy",
+                "playing": false,
+                "weight": 1,
+                "speed": 1,
+                "loop": false,
+                "shouldReset": false
+              },
+              {
+                "clip": "HealthyToDroopy",
+                "playing": false,
+                "weight": 1,
+                "speed": 1,
+                "loop": false,
+                "shouldReset": false
+              }
+            ]
+          }
+        },
+        "526": {
+          "json": {
+            "states": [
+              {
+                "clip": "HealthyState",
+                "playing": false,
+                "weight": 1,
+                "speed": 1,
+                "loop": false,
+                "shouldReset": false
+              },
+              {
+                "clip": "DroopyState",
+                "playing": false,
+                "weight": 1,
+                "speed": 1,
+                "loop": false,
+                "shouldReset": false
+              },
+              {
+                "clip": "DroopyToHealthy",
+                "playing": false,
+                "weight": 1,
+                "speed": 1,
+                "loop": false,
+                "shouldReset": false
+              },
+              {
+                "clip": "HealthyToDroopy",
+                "playing": false,
+                "weight": 1,
+                "speed": 1,
+                "loop": false,
+                "shouldReset": false
+              }
+            ]
+          }
+        },
+        "527": {
+          "json": {
+            "states": [
+              {
+                "clip": "HealthyState",
+                "playing": false,
+                "weight": 1,
+                "speed": 1,
+                "loop": false,
+                "shouldReset": false
+              },
+              {
+                "clip": "DroopyState",
+                "playing": false,
+                "weight": 1,
+                "speed": 1,
+                "loop": false,
+                "shouldReset": false
+              },
+              {
+                "clip": "DroopyToHealthy",
+                "playing": false,
+                "weight": 1,
+                "speed": 1,
+                "loop": false,
+                "shouldReset": false
+              },
+              {
+                "clip": "HealthyToDroopy",
+                "playing": false,
+                "weight": 1,
+                "speed": 1,
+                "loop": false,
+                "shouldReset": false
+              }
+            ]
+          }
+        },
+        "528": {
+          "json": {
+            "states": [
+              {
+                "clip": "HealthyState",
+                "playing": false,
+                "weight": 1,
+                "speed": 1,
+                "loop": false,
+                "shouldReset": false
+              },
+              {
+                "clip": "DroopyState",
+                "playing": false,
+                "weight": 1,
+                "speed": 1,
+                "loop": false,
+                "shouldReset": false
+              },
+              {
+                "clip": "DroopyToHealthy",
+                "playing": false,
+                "weight": 1,
+                "speed": 1,
+                "loop": false,
+                "shouldReset": false
+              },
+              {
+                "clip": "HealthyToDroopy",
+                "playing": false,
+                "weight": 1,
+                "speed": 1,
+                "loop": false,
+                "shouldReset": false
+              }
+            ]
+          }
+        },
+        "529": {
+          "json": {
+            "states": [
+              {
+                "clip": "HealthyState",
+                "playing": false,
+                "weight": 1,
+                "speed": 1,
+                "loop": false,
+                "shouldReset": false
+              },
+              {
+                "clip": "DroopyState",
+                "playing": false,
+                "weight": 1,
+                "speed": 1,
+                "loop": false,
+                "shouldReset": false
+              },
+              {
+                "clip": "DroopyToHealthy",
+                "playing": false,
+                "weight": 1,
+                "speed": 1,
+                "loop": false,
+                "shouldReset": false
+              },
+              {
+                "clip": "HealthyToDroopy",
+                "playing": false,
+                "weight": 1,
+                "speed": 1,
+                "loop": false,
+                "shouldReset": false
+              }
+            ]
+          }
+        },
+        "530": {
+          "json": {
+            "states": [
+              {
+                "clip": "HealthyState",
+                "playing": false,
+                "weight": 1,
+                "speed": 1,
+                "loop": false,
+                "shouldReset": false
+              },
+              {
+                "clip": "DroopyState",
+                "playing": false,
+                "weight": 1,
+                "speed": 1,
+                "loop": false,
+                "shouldReset": false
+              },
+              {
+                "clip": "DroopyToHealthy",
+                "playing": false,
+                "weight": 1,
+                "speed": 1,
+                "loop": false,
+                "shouldReset": false
+              },
+              {
+                "clip": "HealthyToDroopy",
+                "playing": false,
+                "weight": 1,
+                "speed": 1,
+                "loop": false,
+                "shouldReset": false
+              }
+            ]
+          }
+        },
+        "531": {
+          "json": {
+            "states": [
+              {
+                "clip": "HealthyState",
+                "playing": false,
+                "weight": 1,
+                "speed": 1,
+                "loop": false,
+                "shouldReset": false
+              },
+              {
+                "clip": "DroopyState",
+                "playing": false,
+                "weight": 1,
+                "speed": 1,
+                "loop": false,
+                "shouldReset": false
+              },
+              {
+                "clip": "DroopyToHealthy",
+                "playing": false,
+                "weight": 1,
+                "speed": 1,
+                "loop": false,
+                "shouldReset": false
+              },
+              {
+                "clip": "HealthyToDroopy",
+                "playing": false,
+                "weight": 1,
+                "speed": 1,
+                "loop": false,
+                "shouldReset": false
+              }
+            ]
+          }
+        },
+        "532": {
+          "json": {
+            "states": [
+              {
+                "clip": "HealthyState",
+                "playing": false,
+                "weight": 1,
+                "speed": 1,
+                "loop": false,
+                "shouldReset": false
+              },
+              {
+                "clip": "DroopyState",
+                "playing": false,
+                "weight": 1,
+                "speed": 1,
+                "loop": false,
+                "shouldReset": false
+              },
+              {
+                "clip": "DroopyToHealthy",
+                "playing": false,
+                "weight": 1,
+                "speed": 1,
+                "loop": false,
+                "shouldReset": false
+              },
+              {
+                "clip": "HealthyToDroopy",
+                "playing": false,
+                "weight": 1,
+                "speed": 1,
+                "loop": false,
+                "shouldReset": false
+              }
+            ]
+          }
+        },
         "534": {
           "json": {
             "states": [
@@ -604,6 +1299,120 @@
               }
             ]
           }
+        },
+        "541": {
+          "json": {
+            "states": [
+              {
+                "clip": "HealthyState",
+                "playing": false,
+                "weight": 1,
+                "speed": 1,
+                "loop": false,
+                "shouldReset": false
+              },
+              {
+                "clip": "DroopyState",
+                "playing": false,
+                "weight": 1,
+                "speed": 1,
+                "loop": false,
+                "shouldReset": false
+              },
+              {
+                "clip": "DroopyToHealthy",
+                "playing": false,
+                "weight": 1,
+                "speed": 1,
+                "loop": false,
+                "shouldReset": false
+              },
+              {
+                "clip": "HealthyToDroopy",
+                "playing": false,
+                "weight": 1,
+                "speed": 1,
+                "loop": false,
+                "shouldReset": false
+              }
+            ]
+          }
+        },
+        "542": {
+          "json": {
+            "states": [
+              {
+                "clip": "HealthyState",
+                "playing": false,
+                "weight": 1,
+                "speed": 1,
+                "loop": false,
+                "shouldReset": false
+              },
+              {
+                "clip": "DroopyState",
+                "playing": false,
+                "weight": 1,
+                "speed": 1,
+                "loop": false,
+                "shouldReset": false
+              },
+              {
+                "clip": "DroopyToHealthy",
+                "playing": false,
+                "weight": 1,
+                "speed": 1,
+                "loop": false,
+                "shouldReset": false
+              },
+              {
+                "clip": "HealthyToDroopy",
+                "playing": false,
+                "weight": 1,
+                "speed": 1,
+                "loop": false,
+                "shouldReset": false
+              }
+            ]
+          }
+        },
+        "543": {
+          "json": {
+            "states": [
+              {
+                "clip": "HealthyState",
+                "playing": false,
+                "weight": 1,
+                "speed": 1,
+                "loop": false,
+                "shouldReset": false
+              },
+              {
+                "clip": "DroopyState",
+                "playing": false,
+                "weight": 1,
+                "speed": 1,
+                "loop": false,
+                "shouldReset": false
+              },
+              {
+                "clip": "DroopyToHealthy",
+                "playing": false,
+                "weight": 1,
+                "speed": 1,
+                "loop": false,
+                "shouldReset": false
+              },
+              {
+                "clip": "HealthyToDroopy",
+                "playing": false,
+                "weight": 1,
+                "speed": 1,
+                "loop": false,
+                "shouldReset": false
+              }
+            ]
+          }
         }
       }
     },
@@ -642,6 +1451,90 @@
             "src": "assets/scene/Models/petal/petal.glb",
             "visibleMeshesCollisionMask": 0,
             "invisibleMeshesCollisionMask": 3
+          }
+        },
+        "521": {
+          "json": {
+            "src": "assets/scene/Models/TheLivingGarden_DemoScene/TheLivingGarden_DemoScene.glb",
+            "visibleMeshesCollisionMask": 2,
+            "invisibleMeshesCollisionMask": 0
+          }
+        },
+        "522": {
+          "json": {
+            "src": "assets/scene/Models/demoPlant/demoPlant.glb",
+            "visibleMeshesCollisionMask": 0,
+            "invisibleMeshesCollisionMask": 1
+          }
+        },
+        "523": {
+          "json": {
+            "src": "assets/scene/Models/demoPlant/demoPlant.glb",
+            "visibleMeshesCollisionMask": 0,
+            "invisibleMeshesCollisionMask": 1
+          }
+        },
+        "524": {
+          "json": {
+            "src": "assets/asset-packs/traditional_round_gauze_lantern/ChineseLantern_04/ChineseLantern_04.glb",
+            "visibleMeshesCollisionMask": 0,
+            "invisibleMeshesCollisionMask": 3
+          }
+        },
+        "525": {
+          "json": {
+            "src": "assets/scene/Models/demoPlant/demoPlant.glb",
+            "visibleMeshesCollisionMask": 0,
+            "invisibleMeshesCollisionMask": 1
+          }
+        },
+        "526": {
+          "json": {
+            "src": "assets/scene/Models/demoPlant/demoPlant.glb",
+            "visibleMeshesCollisionMask": 0,
+            "invisibleMeshesCollisionMask": 1
+          }
+        },
+        "527": {
+          "json": {
+            "src": "assets/scene/Models/demoPlant/demoPlant.glb",
+            "visibleMeshesCollisionMask": 0,
+            "invisibleMeshesCollisionMask": 1
+          }
+        },
+        "528": {
+          "json": {
+            "src": "assets/scene/Models/demoPlant/demoPlant.glb",
+            "visibleMeshesCollisionMask": 0,
+            "invisibleMeshesCollisionMask": 1
+          }
+        },
+        "529": {
+          "json": {
+            "src": "assets/scene/Models/demoPlant/demoPlant.glb",
+            "visibleMeshesCollisionMask": 0,
+            "invisibleMeshesCollisionMask": 1
+          }
+        },
+        "530": {
+          "json": {
+            "src": "assets/scene/Models/demoPlant/demoPlant.glb",
+            "visibleMeshesCollisionMask": 0,
+            "invisibleMeshesCollisionMask": 1
+          }
+        },
+        "531": {
+          "json": {
+            "src": "assets/scene/Models/demoPlant/demoPlant.glb",
+            "visibleMeshesCollisionMask": 0,
+            "invisibleMeshesCollisionMask": 1
+          }
+        },
+        "532": {
+          "json": {
+            "src": "assets/scene/Models/demoPlant/demoPlant.glb",
+            "visibleMeshesCollisionMask": 0,
+            "invisibleMeshesCollisionMask": 1
           }
         },
         "534": {
@@ -687,6 +1580,27 @@
           }
         },
         "540": {
+          "json": {
+            "src": "assets/scene/Models/demoPlant/demoPlant.glb",
+            "visibleMeshesCollisionMask": 0,
+            "invisibleMeshesCollisionMask": 1
+          }
+        },
+        "541": {
+          "json": {
+            "src": "assets/scene/Models/demoPlant/demoPlant.glb",
+            "visibleMeshesCollisionMask": 0,
+            "invisibleMeshesCollisionMask": 1
+          }
+        },
+        "542": {
+          "json": {
+            "src": "assets/scene/Models/demoPlant/demoPlant.glb",
+            "visibleMeshesCollisionMask": 0,
+            "invisibleMeshesCollisionMask": 1
+          }
+        },
+        "543": {
           "json": {
             "src": "assets/scene/Models/demoPlant/demoPlant.glb",
             "visibleMeshesCollisionMask": 0,
@@ -863,6 +1777,66 @@
             "value": "Image"
           }
         },
+        "521": {
+          "json": {
+            "value": "TheLivingGarden_DemoScene.glb"
+          }
+        },
+        "522": {
+          "json": {
+            "value": "Plant_7"
+          }
+        },
+        "523": {
+          "json": {
+            "value": "Plant_8"
+          }
+        },
+        "524": {
+          "json": {
+            "value": "Traditional Round Gauze Lantern"
+          }
+        },
+        "525": {
+          "json": {
+            "value": "Plant_9"
+          }
+        },
+        "526": {
+          "json": {
+            "value": "Plant_10"
+          }
+        },
+        "527": {
+          "json": {
+            "value": "Plant_11"
+          }
+        },
+        "528": {
+          "json": {
+            "value": "Plant_12"
+          }
+        },
+        "529": {
+          "json": {
+            "value": "Plant_13"
+          }
+        },
+        "530": {
+          "json": {
+            "value": "Plant_14"
+          }
+        },
+        "531": {
+          "json": {
+            "value": "Plant_15"
+          }
+        },
+        "532": {
+          "json": {
+            "value": "Plant_16"
+          }
+        },
         "533": {
           "json": {
             "value": "InteractivePlants"
@@ -901,6 +1875,21 @@
         "540": {
           "json": {
             "value": "Plant_6"
+          }
+        },
+        "541": {
+          "json": {
+            "value": "Plant_17"
+          }
+        },
+        "542": {
+          "json": {
+            "value": "Plant_18"
+          }
+        },
+        "543": {
+          "json": {
+            "value": "Plant_19"
           }
         }
       }
@@ -947,9 +1936,9 @@
         "serializationType": "map"
       },
       "data": {
-        "0": {
+        "543": {
           "json": {
-            "gizmo": 0
+            "gizmo": 1
           }
         }
       }
@@ -1004,7 +1993,9 @@
                   533,
                   534,
                   516,
-                  517
+                  517,
+                  524,
+                  521
                 ]
               },
               {
@@ -1044,7 +2035,20 @@
                   537,
                   538,
                   539,
-                  540
+                  540,
+                  522,
+                  523,
+                  525,
+                  526,
+                  527,
+                  528,
+                  529,
+                  530,
+                  531,
+                  532,
+                  541,
+                  542,
+                  543
                 ]
               },
               {
@@ -1082,6 +2086,66 @@
               {
                 "entity": 517,
                 "children": []
+              },
+              {
+                "entity": 524,
+                "children": []
+              },
+              {
+                "entity": 521,
+                "children": []
+              },
+              {
+                "entity": 522,
+                "children": []
+              },
+              {
+                "entity": 523,
+                "children": []
+              },
+              {
+                "entity": 525,
+                "children": []
+              },
+              {
+                "entity": 526,
+                "children": []
+              },
+              {
+                "entity": 527,
+                "children": []
+              },
+              {
+                "entity": 528,
+                "children": []
+              },
+              {
+                "entity": 529,
+                "children": []
+              },
+              {
+                "entity": 530,
+                "children": []
+              },
+              {
+                "entity": 531,
+                "children": []
+              },
+              {
+                "entity": 532,
+                "children": []
+              },
+              {
+                "entity": 541,
+                "children": []
+              },
+              {
+                "entity": 542,
+                "children": []
+              },
+              {
+                "entity": 543,
+                "children": []
               }
             ]
           }
@@ -1111,6 +2175,42 @@
         "517": {
           "json": {}
         },
+        "521": {
+          "json": {}
+        },
+        "522": {
+          "json": {}
+        },
+        "523": {
+          "json": {}
+        },
+        "524": {
+          "json": {}
+        },
+        "525": {
+          "json": {}
+        },
+        "526": {
+          "json": {}
+        },
+        "527": {
+          "json": {}
+        },
+        "528": {
+          "json": {}
+        },
+        "529": {
+          "json": {}
+        },
+        "530": {
+          "json": {}
+        },
+        "531": {
+          "json": {}
+        },
+        "532": {
+          "json": {}
+        },
         "533": {
           "json": {}
         },
@@ -1133,6 +2233,15 @@
           "json": {}
         },
         "540": {
+          "json": {}
+        },
+        "541": {
+          "json": {}
+        },
+        "542": {
+          "json": {}
+        },
+        "543": {
           "json": {}
         }
       }
@@ -1993,9 +3102,12 @@
             "thumbnail": "assets/images/autogenerated-thumbnail.png",
             "categories": [],
             "author": "SDK",
-            "email": "",
             "tags": [],
             "layout": {
+              "base": {
+                "x": 0,
+                "y": 0
+              },
               "parcels": [
                 {
                   "x": 0,
@@ -2009,14 +3121,8 @@
                   "x": 0,
                   "y": 0
                 }
-              ],
-              "base": {
-                "x": 0,
-                "y": 0
-              }
+              ]
             },
-            "silenceVoiceChat": false,
-            "disablePortableExperiences": false,
             "spawnPoints": [
               {
                 "name": "SpawnArea1",
@@ -2025,34 +3131,30 @@
                   "x": {
                     "$case": "range",
                     "value": [
-                      0,
-                      3
+                      12.949999809265137,
+                      15.949999809265137
                     ]
                   },
                   "y": {
-                    "$case": "range",
-                    "value": [
-                      0,
-                      0
-                    ]
+                    "$case": "single",
+                    "value": 0
                   },
                   "z": {
                     "$case": "range",
                     "value": [
-                      0,
-                      3
+                      22.5,
+                      25.5
                     ]
                   }
                 },
                 "cameraTarget": {
                   "x": 8,
-                  "y": 1,
-                  "z": 8
+                  "y": 3,
+                  "z": 24
                 }
               }
             ],
-            "skyboxConfig": {},
-            "creator": ""
+            "skyboxConfig": {}
           }
         }
       }

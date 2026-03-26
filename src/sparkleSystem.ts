@@ -41,16 +41,16 @@ function makeSparkleEntity(emissiveIntensity: number): Entity {
   Billboard.create(ent, { billboardMode: BillboardMode.BM_ALL })
   Transform.create(ent, {
     position: { x: 0, y: -100, z: 0 },
-    scale:    { x: 0,  y: 0,   z: 0 },
+    scale:    { x: 0.001, y: 0.001, z: 0.001 },
   })
   return ent
 }
 
 // =============================================================
 // SECTION 1 — Per-plant burst
+// Fresh entity per sparkle — no pool reuse, no stale component state.
 // =============================================================
 
-const POOL_SIZE    = 80    // max active sparkles across all plants
 const BURST_COUNT  = 14    // sparkles per plant per watering
 const SPARKLE_SIZE = 0.22  // world-space diameter at peak (m)
 const SPEED_MIN    = 1.8   // m/s
@@ -65,30 +65,16 @@ const HOLD_END = 0.55
 
 interface SparkleState {
   entity:    Entity
-  active:    boolean
   pos:       { x: number; y: number; z: number }
   vel:       { x: number; y: number; z: number }
   lifeMs:    number
   maxLifeMs: number
 }
 
-const pool: SparkleState[] = []
+const activeSparkles: SparkleState[] = []
 
-/** Call once at scene startup — builds both pools. */
+/** Call once at scene startup — builds bloom pool only. */
 export function setupSparkleSystem(): void {
-  // Per-plant burst pool
-  for (let i = 0; i < POOL_SIZE; i++) {
-    const ent = makeSparkleEntity(1.5)
-    pool.push({
-      entity:    ent,
-      active:    false,
-      pos:       { x: 0, y: -100, z: 0 },
-      vel:       { x: 0, y: 0,    z: 0 },
-      lifeMs:    0,
-      maxLifeMs: LIFE_BASE_MS,
-    })
-  }
-
   // Bloom orbit pool
   for (let i = 0; i < BLOOM_POOL_SIZE; i++) {
     const ent = makeSparkleEntity(2.0)
@@ -111,49 +97,52 @@ export function setupSparkleSystem(): void {
       riseDurMs:    RISE_DUR_MS,
       riseStartPos: { x: 0, y: 0, z: 0 },
       pos:          { x: 0, y: -100, z: 0 },
-      scale:        0,
+      scale:        0.001,
     })
   }
 
-  console.log(`[Sparkles] Per-plant pool: ${POOL_SIZE}, Bloom pool: ${BLOOM_POOL_SIZE}`)
+  console.log(`[Sparkles] Bloom pool: ${BLOOM_POOL_SIZE}`)
 }
 
 /** Emit a burst of sparkles centred on `pos` (world position of the plant). */
 export function triggerSparkle(pos: { x: number; y: number; z: number }): void {
-  let burst = 0
-  for (const s of pool) {
-    if (s.active) continue
-    if (burst >= BURST_COUNT) break
-
+  for (let i = 0; i < BURST_COUNT; i++) {
+    const ent       = makeSparkleEntity(1.5)
     const azimuth   = Math.random() * Math.PI * 2
     const elevation = (20 + Math.random() * 70) * (Math.PI / 180)
     const speed     = SPEED_MIN + Math.random() * (SPEED_MAX - SPEED_MIN)
-
-    s.pos       = { x: pos.x, y: pos.y + SPAWN_Y, z: pos.z }
-    s.vel       = {
-      x: Math.cos(azimuth) * Math.cos(elevation) * speed,
-      y: Math.sin(elevation) * speed,
-      z: Math.sin(azimuth)  * Math.cos(elevation) * speed,
-    }
-    s.lifeMs    = 0
-    s.maxLifeMs = LIFE_BASE_MS + Math.random() * LIFE_VARY_MS
-    s.active    = true
-    burst++
+    const spawnPos  = { x: pos.x, y: pos.y + SPAWN_Y, z: pos.z }
+    Transform.getMutable(ent).position = spawnPos
+    activeSparkles.push({
+      entity:    ent,
+      pos:       { ...spawnPos },
+      vel:       {
+        x: Math.cos(azimuth) * Math.cos(elevation) * speed,
+        y: Math.sin(elevation) * speed,
+        z: Math.sin(azimuth)  * Math.cos(elevation) * speed,
+      },
+      lifeMs:    0,
+      maxLifeMs: LIFE_BASE_MS + Math.random() * LIFE_VARY_MS,
+    })
   }
 }
 
 /** ECS system for per-plant bursts — register once with engine.addSystem. */
 export function sparkleSystem(dt: number): void {
-  for (const s of pool) {
-    if (!s.active) continue
-
-    const dtMs = dt * 1000
-    s.lifeMs  += dtMs
+  for (let i = activeSparkles.length - 1; i >= 0; i--) {
+    const s    = activeSparkles[i]
+    s.lifeMs  += dt * 1000
 
     s.vel.y -= GRAVITY * dt
     s.pos.x += s.vel.x * dt
     s.pos.y += s.vel.y * dt
     s.pos.z += s.vel.z * dt
+
+    if (s.lifeMs >= s.maxLifeMs) {
+      engine.removeEntity(s.entity)
+      activeSparkles.splice(i, 1)
+      continue
+    }
 
     const t = Math.min(s.lifeMs / s.maxLifeMs, 1)
     let sc: number
@@ -169,11 +158,6 @@ export function sparkleSystem(dt: number): void {
     const tf = Transform.getMutable(s.entity)
     tf.position = { x: s.pos.x, y: s.pos.y, z: s.pos.z }
     tf.scale    = { x: sc, y: sc, z: sc }
-
-    if (s.lifeMs >= s.maxLifeMs) {
-      s.active = false
-      tf.scale = { x: 0, y: 0, z: 0 }
-    }
   }
 }
 
@@ -303,7 +287,7 @@ export function triggerBloomSparkles(
       s.phase       = 'travel'
 
       // Park off-screen until travel delay expires
-      Transform.getMutable(s.entity).scale = { x: 0, y: 0, z: 0 }
+      Transform.getMutable(s.entity).scale = { x: 0.001, y: 0.001, z: 0.001 }
     }
   }
 
@@ -341,7 +325,7 @@ export function bloomSparkleSystem(dt: number): void {
 
       if (s.travelMs < 0) {
         // Pre-travel delay — keep hidden
-        tf.scale = { x: 0, y: 0, z: 0 }
+        tf.scale = { x: 0.001, y: 0.001, z: 0.001 }
         continue
       }
 
@@ -399,8 +383,9 @@ export function bloomSparkleSystem(dt: number): void {
       tf.scale    = { x: s.scale, y: s.scale, z: s.scale }
 
       if (riseT >= 1) {
-        s.phase  = 'idle'
-        tf.scale = { x: 0, y: 0, z: 0 }
+        s.phase     = 'idle'
+        tf.position = { x: 0, y: -100, z: 0 }
+        tf.scale    = { x: 0.001, y: 0.001, z: 0.001 }
       }
     }
   }

@@ -26,7 +26,7 @@ import { getPlayer } from '@dcl/sdk/players'
 import { setupPetalSystem, petalParticleSystem } from './petalSystem'
 import { setupBloomSystem, triggerBloomEvent, endBloom, isBloomActive, musicFadeSystem } from './bloomSystem'
 import { setupSparkleSystem, triggerSparkle, sparkleSystem, triggerBloomSparkles, endBloomSparkles, bloomSparkleSystem } from './sparkleSystem'
-import { setupAmbientFX, triggerBloomShockwave, triggerGroundRipple, ambientFXSystem } from './ambientFX'
+import { setupAmbientFX, triggerBloomShockwave, triggerGroundRipple, startFireflies, stopFireflies, ambientFXSystem } from './ambientFX'
 import { showToast, showPersistent, hidePersistent, formatBloomCountdown, formatDailyLimitMessage } from './notifications'
 import { movePlayerTo, triggerSceneEmote } from '~system/RestrictedActions'
 
@@ -42,7 +42,7 @@ import { movePlayerTo, triggerSceneEmote } from '~system/RestrictedActions'
 const TEST_MODE = true
 // Set to true to bypass the daily limit entirely (useful during testing
 // or when running as an admin / stress-testing with one client).
-const OVERRIDE_DAILY_LIMIT = true
+const OVERRIDE_DAILY_LIMIT = false
 
 // TODO: replace with your real server base URL
 const SERVER_URL = 'https://YOUR_SERVER_URL/api'
@@ -120,6 +120,9 @@ let playerId           = 'unknown'
 // True while the watering emote is in flight — prevents a second click from
 // interrupting the avatar animation via a new movePlayerTo / triggerSceneEmote.
 let emoteActive = false
+// Generation counter — ensures the end-of-emote cleanup only fires for the
+// emote it was scheduled with, not a newer one.
+let emoteGen = 0
 // Water drop fade state per plant
 type DropFade = 'in' | 'out' | 'visible' | 'hidden'
 interface DropState { entity: Entity; fade: DropFade; fadeMs: number }
@@ -348,18 +351,16 @@ function playMagicFXSound() {
   timers.setTimeout(() => engine.removeEntity(ent), 8_000)
 }
 
-// How far in front of the plant the player is placed to perform the emote.
-// Tweak this value to taste — 1.2 m feels natural for a watering-can reach.
-const WATER_DISTANCE = 2
+// How far in front of the plant the player is placed before the emote.
+const WATER_DISTANCE = 1.5
 
 function triggerWateringEmote(plantEntity: Entity) {
+  // Teleport the player to a fixed spot in front of the plant (no avatarTarget
+  // so no competing turn animation). This stops any in-progress walking so DCL
+  // doesn't cancel the emote the moment it fires.
   const plantPos  = Transform.getOrNull(plantEntity)?.position
   const playerPos = Transform.getOrNull(engine.PlayerEntity)?.position
   if (plantPos && playerPos) {
-    // Project the player-to-plant vector onto the horizontal plane, normalise
-    // it, then step back WATER_DISTANCE from the plant along that direction.
-    // This always puts the player squarely in front of the plant they clicked,
-    // no matter where in the scene the plant is placed.
     const dx  = playerPos.x - plantPos.x
     const dz  = playerPos.z - plantPos.z
     const len = Math.sqrt(dx * dx + dz * dz)
@@ -368,24 +369,25 @@ function triggerWateringEmote(plantEntity: Entity) {
     movePlayerTo({
       newRelativePosition: {
         x: plantPos.x + nx * WATER_DISTANCE,
-        y: playerPos.y,   // keep the player's current height
+        y: playerPos.y,
         z: plantPos.z + nz * WATER_DISTANCE,
       },
-      avatarTarget: plantPos,  // face toward the plant
+      avatarTarget: plantPos,
     })
   }
 
-  // triggerSceneEmote is the correct SDK7 API for custom GLB avatar emotes.
-  // The 200ms delay (matching DCL Foundation's pattern) gives the facing
-  // rotation time to apply before the animation starts.
   emoteActive = true
+  const gen = ++emoteGen
+  // 400ms delay — gives the teleport time to register and player movement
+  // to fully stop before the emote fires.
   timers.setTimeout(() => {
     triggerSceneEmote({ src: EMOTE_SRC, loop: false })
-  }, 200)
+  }, 400)
 
   timers.setTimeout(() => {
+    if (emoteGen !== gen) return
     emoteActive = false
-  }, 200 + EMOTE_DURATION_MS)
+  }, 400 + EMOTE_DURATION_MS)
 }
 
 // ---------------------------------------------------------------
@@ -453,14 +455,14 @@ function waterPlant(entity: Entity, plantId: string) {
 
   // 1. Click feedback — immediate
   playClickSound()
-  triggerWateringEmote(entity)  // movePlayerTo now + triggerSceneEmote at 200ms
+  triggerWateringEmote(entity)
 
   // 2. Watering sound + ground ripple synced to when the emote actually starts
-  timers.setTimeout(playWateringSound, 200)
+  timers.setTimeout(playWateringSound, 400)
   timers.setTimeout(() => {
     const pos = Transform.getOrNull(entity)?.position
     if (pos) triggerGroundRipple(pos)
-  }, 200)
+  }, 400)
 
   // 3. Plant responds after the emote has played through
   timers.setTimeout(() => {
@@ -504,6 +506,7 @@ function resetAllPlants() {
   // Tear down bloom — fades music, settles petals, clears text, stops model anim
   endBloom()
   endBloomSparkles()  // transition orbiting sparkles to rise-and-dissolve
+  stopFireflies()
 
   wateredCount = 0
   updateProgressText()
@@ -642,6 +645,7 @@ export function setupWateringSystem() {
     onVisualBloom: () => {
       hidePersistent()   // bloom is live — clear "Bloom in X" pill
       triggerBloomShockwave()
+      startFireflies()
       const positions: Array<{ x: number; y: number; z: number }> = []
       for (const [entity] of plantRegistry) {
         const pos = Transform.getOrNull(entity)?.position
