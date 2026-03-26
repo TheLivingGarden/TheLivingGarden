@@ -6,6 +6,7 @@
 // =============================================================
 
 import ReactEcs, { ReactEcsRenderer, UiEntity, Label } from '@dcl/sdk/react-ecs'
+import { TestPanelUi } from './testPanel'
 import { Color4 } from '@dcl/sdk/math'
 import { timers } from '@dcl/sdk/ecs'
 
@@ -80,6 +81,9 @@ function uiComponent() {
 
   return (
     <UiEntity>
+
+      {/* ── Test Panel ─────────────────────────────────────────── */}
+      <TestPanelUi />
 
       {/* ── Toast ─────────────────────────────────────────────── */}
       <UiEntity

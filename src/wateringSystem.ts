@@ -40,21 +40,23 @@ import { movePlayerTo, triggerSceneEmote } from '~system/RestrictedActions'
 //   - Post-bloom reset: +60s → +5s
 //   - Server calls    : skipped (console logged instead)
 const TEST_MODE = true
+// Runtime-mutable copy — changed via setRuntimeTestMode() from the test panel.
+let runtimeTestMode = TEST_MODE
 // Set to true to bypass the daily limit entirely (useful during testing
 // or when running as an admin / stress-testing with one client).
-const OVERRIDE_DAILY_LIMIT = false
+let overrideDailyLimit = false
 
 // TODO: replace with your real server base URL
 const SERVER_URL = 'https://YOUR_SERVER_URL/api'
 
-const TOTAL_PLANTS = 6
+const TOTAL_PLANTS = 21
 // How close to a plant to see the Click prompt
-const MAX_CLICK_DISTANCE = 5
+const MAX_CLICK_DISTANCE = 3
 // How long a "watered" state lasts before expiring (ms).
 // Switching between 6h and 12h is easy here.
-const WATERED_EXPIRY_MS = TEST_MODE
-  ? 30_000               // 30 seconds in test mode
-  : 6 * 60 * 60 * 1000  // 6 hours in production
+function getWateredExpiryMs(): number {
+  return runtimeTestMode ? 30_000 : 6 * 60 * 60 * 100000
+}
 
 // Animation clip names — must match the GLB exactly.
 const ANIM_DROOPY_STATE   = 'DroopyState'    // looping droopy idle
@@ -69,7 +71,7 @@ const ANIM_TRANSITION_MS = 1500
 // How long the WateringCan emote plays before the plant responds.
 // Tune this to match the actual GLB clip length so the plant blooms
 // right as the watering-can tips forward at the end of the animation.
-const EMOTE_DURATION_MS = 3000
+const EMOTE_DURATION_MS = 1500
 
 // Water drop indicator shown above droopy plants.
 const WATER_DROP_SRC = 'assets/scene/Models/waterDrop/waterDrop.glb'
@@ -79,20 +81,22 @@ const DROP_FADE_MS   = 800   // how long the fade in/out takes
 // Toggle click method for UX prototyping:
 //   false → click directly on the plant model (default)
 //   true  → invisible oversized clickbox parented to each plant
-const USE_CLICKBOX = false
+// Mutable — can be changed at runtime via setUseClickbox() from the test panel.
+let useClickbox = false
 
-// How many plants a single player can water per day.
-const DAILY_WATER_LIMIT = 3
+// How many plants a single player can water per day (mutable via test panel).
+let dailyWaterLimit = 8
 
 
 
 // Plant entity names as placed in the scene editor.
 const PLANT_NAMES = [
   'Plant_1',  'Plant_2',  'Plant_3',  'Plant_4',
-  'Plant_5',  'Plant_6', 
-  // 'Plant_7',  'Plant_8',
-  //'Plant_9',  'Plant_10', 'Plant_11', 'Plant_12',
-  //'Plant_13', 'Plant_14', 'Plant_15', 'Plant_16',
+  'Plant_5',  'Plant_6', 'Plant_7',  'Plant_8',
+  'Plant_9',  'Plant_10', 'Plant_11', 'Plant_12',
+  'Plant_13', 'Plant_14', 'Plant_15', 'Plant_16',
+  'Plant_17', 'Plant_18', 'Plant_19', 'Plant_20', 
+  'Plant_21'
 ]
 
 // ---------------------------------------------------------------
@@ -162,15 +166,15 @@ let resetTimerMs = 0
 
 function updateProgressText() {
   const lines: string[] = [`${wateredCount}/${TOTAL_PLANTS} Plants Watered`]
-  if (OVERRIDE_DAILY_LIMIT) {
+  if (overrideDailyLimit) {
     lines.push('Waters: Unlimited (override)')
   } else {
-    const remaining = Math.max(0, DAILY_WATER_LIMIT - playerWateredToday)
+    const remaining = Math.max(0, dailyWaterLimit - playerWateredToday)
     lines.push(remaining > 0
-      ? `${remaining}/${DAILY_WATER_LIMIT} Waters Remaining Today`
+      ? `${remaining}/${dailyWaterLimit} Waters Remaining Today`
       : 'Daily Limit Reached')
   }
-  if (TEST_MODE) lines.push('[TEST MODE]')
+  if (runtimeTestMode) lines.push('[TEST MODE]')
   TextShape.getMutable(progressEntity).text = lines.join('\n')
 }
 
@@ -179,7 +183,7 @@ function updateProgressText() {
 // ---------------------------------------------------------------
 
 function fetchPlantStates() {
-  if (TEST_MODE) {
+  if (runtimeTestMode) {
     console.log('[TEST] fetchPlantStates skipped — all plants start droopy')
     return
   }
@@ -197,7 +201,7 @@ function fetchPlantStates() {
 
         const msElapsed = now - state.wateredAt
 
-        if (state.isWatered && msElapsed < WATERED_EXPIRY_MS) {
+        if (state.isWatered && msElapsed < getWateredExpiryMs()) {
           const pd = PlantData.getMutable(entity)
           pd.isWatered = true
           pd.wateredAt = state.wateredAt
@@ -207,7 +211,7 @@ function fetchPlantStates() {
           disablePlantClick(entity)
           wateredCount++
 
-          const msRemaining = WATERED_EXPIRY_MS - msElapsed
+          const msRemaining = getWateredExpiryMs() - msElapsed
           scheduleExpiry(entity, state.wateredAt, msRemaining)
         }
       }
@@ -221,7 +225,7 @@ function fetchPlantStates() {
 }
 
 function sendWateredToServer(plantId: string, wateredAt: number) {
-  if (TEST_MODE) {
+  if (runtimeTestMode) {
     console.log(`[TEST] sendWateredToServer skipped — ${plantId} watered at ${wateredAt}`)
     return
   }
@@ -240,7 +244,7 @@ function sendWateredToServer(plantId: string, wateredAt: number) {
 }
 
 function fetchPlayerDailyCount(pid: string) {
-  if (TEST_MODE) {
+  if (runtimeTestMode) {
     console.log(`[TEST] fetchPlayerDailyCount skipped — ${pid} starts at 0`)
     return
   }
@@ -250,7 +254,7 @@ function fetchPlayerDailyCount(pid: string) {
       const response = await fetch(`${SERVER_URL}/daily-count?playerId=${pid}&date=${today}`)
       const data = await response.json()
       playerWateredToday = data.count ?? 0
-      if (!OVERRIDE_DAILY_LIMIT && playerWateredToday >= DAILY_WATER_LIMIT) {
+      if (!overrideDailyLimit && playerWateredToday >= dailyWaterLimit) {
         onDailyLimitReached()
       }
       updateProgressText()
@@ -267,11 +271,11 @@ function fetchPlayerDailyCount(pid: string) {
 
 // Stores click target and plant name for each plant entity so we can
 // re-register the pointer event after a plant reverts to droopy.
-const plantRegistry = new Map<Entity, { clickTarget: Entity; plantName: string }>()
+const plantRegistry = new Map<Entity, { clickTarget: Entity; plantName: string; clickboxEntity: Entity | null }>()
 
 function enablePlantClick(entity: Entity) {
   // Don't re-enable if the player has used up their daily allowance
-  if (!OVERRIDE_DAILY_LIMIT && dailyLimitReached) return
+  if (!overrideDailyLimit && dailyLimitReached) return
   const info = plantRegistry.get(entity)
   if (!info) return
   pointerEventsSystem.onPointerDown(
@@ -302,9 +306,8 @@ function onDailyLimitReached() {
   console.log('[WateringSystem] Daily water limit reached')
 }
 
-/** TEST_MODE only — resets the in-memory daily counter so one client
- *  can run through the full cycle multiple times. */
-function resetDailyLimit() {
+/** Resets the in-memory daily counter — exposed to the test panel. */
+export function resetDailyLimit() {
   playerWateredToday = 0
   dailyLimitReached  = false
   // Re-enable clicking on all currently-droopy plants
@@ -428,8 +431,8 @@ function waterPlant(entity: Entity, plantId: string) {
   const pd = PlantData.getMutable(entity)
   if (pd.isWatered) return  // already watered — ignore
 
-  // Enforce daily limit (can be bypassed with OVERRIDE_DAILY_LIMIT)
-  if (!OVERRIDE_DAILY_LIMIT && playerWateredToday >= DAILY_WATER_LIMIT) return
+  // Enforce daily limit (can be bypassed with overrideDailyLimit)
+  if (!overrideDailyLimit && playerWateredToday >= dailyWaterLimit) return
 
   const now = Date.now()
   pd.isWatered = true
@@ -437,7 +440,7 @@ function waterPlant(entity: Entity, plantId: string) {
 
   // Track daily usage and check if limit is now reached
   playerWateredToday++
-  const justHitLimit = !OVERRIDE_DAILY_LIMIT && playerWateredToday >= DAILY_WATER_LIMIT
+  const justHitLimit = !overrideDailyLimit && playerWateredToday >= dailyWaterLimit
   if (justHitLimit) onDailyLimitReached()
 
   // Healthy plants are not clickable
@@ -489,20 +492,20 @@ function waterPlant(entity: Entity, plantId: string) {
   updateProgressText()
   showToast('Plant Watered! ✨', 2_500, true)
   // If this water just hit the daily limit, show that toast after "Plant Watered!" clears
-  if (justHitLimit) timers.setTimeout(() => showToast(formatDailyLimitMessage(TEST_MODE), 7_000), 3_000)
+  if (justHitLimit) timers.setTimeout(() => showToast(formatDailyLimitMessage(runtimeTestMode), 7_000), 3_000)
 
   // Schedule expiry
-  scheduleExpiry(entity, now, WATERED_EXPIRY_MS)
+  scheduleExpiry(entity, now, getWateredExpiryMs())
 
   // Check for full-garden bloom
   if (wateredCount >= TOTAL_PLANTS) {
     triggerBloomEvent()
-    showPersistent(formatBloomCountdown(TEST_MODE))
+    showPersistent(formatBloomCountdown(runtimeTestMode))
   }
 }
 
-/** Reset every plant back to droopy (called after bloom). */
-function resetAllPlants() {
+/** Reset every plant back to droopy (called after bloom / by test panel). */
+export function resetAllPlants() {
   // Tear down bloom — fades music, settles petals, clears text, stops model anim
   endBloom()
   endBloomSparkles()  // transition orbiting sparkles to rise-and-dissolve
@@ -582,31 +585,39 @@ function setupPlant(plantName: string) {
     return
   }
 
+  // Guard against duplicate PLANT_NAMES entries resolving to the same entity.
+  // Without this, PlantData.create() throws and crashes _INTERNAL_startup_system.
+  if (PlantData.has(entity)) {
+    console.log(`[WateringSystem] DUPLICATE skipped: "${plantName}" (entity ${entity}) — remove the duplicate from PLANT_NAMES`)
+    return
+  }
+
   // Track watered state
   PlantData.create(entity, { isWatered: false, wateredAt: 0 })
 
   // TODO: add AudioSource once audio files are in place
   // AudioSource.createOrReplace(entity, { audioClipUrl: 'assets/sounds/water.mp3', ... })
 
-  // Click target — swap via USE_CLICKBOX flag at the top of the file
+  // Click target — determined by useClickbox at setup time.
+  // Can be swapped live via setUseClickbox().
   let clickTarget: Entity
-  if (USE_CLICKBOX) {
-    // Invisible oversized box parented to the plant — easy to hit.
-    // Adjust scale/position to taste during UX feedback.
+  let clickboxEntity: Entity | null = null
+  if (useClickbox) {
     const clickBox = engine.addEntity()
     Transform.create(clickBox, {
-      position: { x: 0, y: 1, z: 0 },   // centred 1m above plant base
+      position: { x: 0, y: 1, z: 0 },
       scale:    { x: 1.5, y: 2, z: 1.5 },
       parent:   entity,
     })
     MeshCollider.setBox(clickBox, ColliderLayer.CL_POINTER)
-    clickTarget = clickBox
+    clickTarget     = clickBox
+    clickboxEntity  = clickBox
   } else {
     clickTarget = entity
   }
 
   // Register so enable/disablePlantClick can find the click target later
-  plantRegistry.set(entity, { clickTarget, plantName })
+  plantRegistry.set(entity, { clickTarget, plantName, clickboxEntity })
   // Plants start droopy — enable clicking immediately
   enablePlantClick(entity)
 
@@ -746,6 +757,81 @@ export function setupWateringSystem() {
 }
 
 
+
+// ---------------------------------------------------------------
+// Runtime setters & getters — used by the test panel
+// ---------------------------------------------------------------
+
+export function setOverrideDailyLimit(val: boolean): void {
+  overrideDailyLimit = val
+  updateProgressText()
+}
+
+export function setDailyWaterLimit(val: number): void {
+  dailyWaterLimit = Math.max(1, Math.min(TOTAL_PLANTS, val))
+  updateProgressText()
+}
+
+export function setRuntimeTestMode(val: boolean): void {
+  runtimeTestMode = val
+  updateProgressText()
+}
+
+/** Switch between direct-plant clicks and invisible clickbox at runtime.
+ *  Tears down existing click targets and rebuilds them so the change is immediate. */
+export function setUseClickbox(val: boolean): void {
+  if (val === useClickbox) return
+  useClickbox = val
+
+  for (const [plantEntity, info] of plantRegistry) {
+    // Tear down old pointer events and PointerEvents component
+    pointerEventsSystem.removeOnPointerDown(info.clickTarget)
+    pointerEventsSystem.removeOnPointerHoverEnter(info.clickTarget)
+    PointerEvents.deleteFrom(info.clickTarget)
+
+    if (val) {
+      // Build a new clickbox parented to this plant
+      const clickBox = engine.addEntity()
+      Transform.create(clickBox, {
+        position: { x: 0, y: 1, z: 0 },
+        scale:    { x: 1.5, y: 2, z: 1.5 },
+        parent:   plantEntity,
+      })
+      MeshCollider.setBox(clickBox, ColliderLayer.CL_POINTER)
+      info.clickTarget    = clickBox
+      info.clickboxEntity = clickBox
+    } else {
+      // Remove the old clickbox and revert to the plant entity itself
+      if (info.clickboxEntity) engine.removeEntity(info.clickboxEntity)
+      info.clickboxEntity = null
+      info.clickTarget    = plantEntity
+    }
+
+    // Re-enable click if plant is currently droopy
+    if (!PlantData.get(plantEntity).isWatered) enablePlantClick(plantEntity)
+  }
+}
+
+export function getUseClickbox(): boolean { return useClickbox }
+
+export function getWateringStatus() {
+  return {
+    wateredCount,
+    totalPlants:        TOTAL_PLANTS,
+    playerWateredToday,
+    dailyWaterLimit,
+    dailyLimitReached,
+    overrideDailyLimit,
+    runtimeTestMode,
+  }
+}
+
+/** Force-trigger bloom regardless of plant count — for test panel use. */
+export function forceTriggerBloom(): void {
+  if (isBloomActive()) return
+  triggerBloomEvent()
+  showPersistent(formatBloomCountdown(runtimeTestMode))
+}
 
 /// TODO
 //**

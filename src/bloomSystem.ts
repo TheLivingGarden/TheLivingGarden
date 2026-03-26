@@ -36,6 +36,7 @@ let bloomBillboard:     Entity
 let musicFadeState: 'in' | 'out' | 'none' = 'none'
 let musicFadeMs = 0
 let testMode    = false
+let customBloomHour: number | null = null   // null = use default schedule
 let onResetCallback:       () => void = () => {}
 let onVisualBloomCallback: () => void = () => {}
 
@@ -46,21 +47,16 @@ let onVisualBloomCallback: () => void = () => {}
 function getNextBloomTime(): number {
   if (testMode) return Date.now() + 10_000  // bloom fires in 10s
 
-  const now = new Date()
+  const hour = customBloomHour ?? 18  // default 6pm UTC
+  const now    = new Date()
+  const target = new Date(now)
+  target.setUTCHours(hour, 0, 0, 0)
 
-  const at6am = new Date(now)
-  at6am.setUTCHours(6, 0, 0, 0)
+  if (now < target) return target.getTime()
 
-  const at6pm = new Date(now)
-  at6pm.setUTCHours(18, 0, 0, 0)
-
-  if (now < at6am) return at6am.getTime()
-  if (now < at6pm) return at6pm.getTime()
-
-  // Past 6pm — next is 6am tomorrow
-  const tomorrow6am = new Date(at6am)
-  tomorrow6am.setUTCDate(tomorrow6am.getUTCDate() + 1)
-  return tomorrow6am.getTime()
+  // Past today's target hour — schedule for same time tomorrow
+  target.setUTCDate(target.getUTCDate() + 1)
+  return target.getTime()
 }
 
 function showBloomText(text: string) {
@@ -228,4 +224,18 @@ export function endBloom(): void {
 /** Returns true while the bloom event is active. */
 export function isBloomActive(): boolean {
   return bloomActive
+}
+
+// ---------------------------------------------------------------
+// Runtime setters — used by the test panel
+// ---------------------------------------------------------------
+
+/** Switch instant-bloom mode on/off at runtime (mirrors testMode). */
+export function setBloomTestMode(val: boolean): void {
+  testMode = val
+}
+
+/** Override the scheduled bloom hour (UTC, 0–23). Pass null to restore default (18:00). */
+export function setCustomBloomHour(hour: number | null): void {
+  customBloomHour = hour
 }
