@@ -27,7 +27,7 @@ import { setupPetalSystem, petalParticleSystem } from './petalSystem'
 import { setupBloomSystem, triggerBloomEvent, endBloom, isBloomActive, musicFadeSystem } from './bloomSystem'
 import { setupSparkleSystem, triggerSparkle, sparkleSystem, triggerBloomSparkles, endBloomSparkles, bloomSparkleSystem } from './sparkleSystem'
 import { setupAmbientFX, triggerBloomShockwave, triggerGroundRipple, startFireflies, stopFireflies, ambientFXSystem } from './ambientFX'
-import { showToast, showPersistent, hidePersistent, formatBloomCountdown, formatDailyLimitMessage } from './notifications'
+import { showToast, showDailyLimit, showPersistent, hidePersistent, formatBloomCountdown, formatDailyLimitMessage } from './notifications'
 import { movePlayerTo, triggerSceneEmote } from '~system/RestrictedActions'
 
 // ---------------------------------------------------------------
@@ -55,7 +55,7 @@ const MAX_CLICK_DISTANCE = 3
 // How long a "watered" state lasts before expiring (ms).
 // Switching between 6h and 12h is easy here.
 function getWateredExpiryMs(): number {
-  return runtimeTestMode ? 30_000 : 6 * 60 * 60 * 100000
+  return runtimeTestMode ? 30_000 : 6 * 60 * 60 * 1000 
 }
 
 // Animation clip names — must match the GLB exactly.
@@ -98,6 +98,7 @@ const PLANT_NAMES = [
   'Plant_17', 'Plant_18', 'Plant_19', 'Plant_20', 
   'Plant_21'
 ]
+
 
 // ---------------------------------------------------------------
 // Custom Component — tracks per-plant watered state
@@ -490,9 +491,12 @@ function waterPlant(entity: Entity, plantId: string) {
   // Update progress display
   wateredCount++
   updateProgressText()
-  showToast('Plant Watered! ✨', 2_500, true)
-  // If this water just hit the daily limit, show that toast after "Plant Watered!" clears
-  if (justHitLimit) timers.setTimeout(() => showToast(formatDailyLimitMessage(runtimeTestMode), 7_000), 3_000)
+  showToast('Plant Watered!', 2_500, true)
+  // Daily limit pill fires as "Plant Watered!" fades — stays until player dismisses
+  if (justHitLimit) timers.setTimeout(() => {
+    console.log('[UI] Daily limit pill showing')
+    showDailyLimit(formatDailyLimitMessage(runtimeTestMode))
+  }, 2_500)
 
   // Schedule expiry
   scheduleExpiry(entity, now, getWateredExpiryMs())
