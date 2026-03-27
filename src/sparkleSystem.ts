@@ -166,7 +166,7 @@ export function sparkleSystem(dt: number): void {
 // =============================================================
 
 // Bloom model world position
-const BLOOM_CENTER_X = 8
+const BLOOM_CENTER_X = 6.75
 const BLOOM_CENTER_Z = 24
 
 const BLOOM_POOL_SIZE    = 72   // 6 plants × 12 sparkles

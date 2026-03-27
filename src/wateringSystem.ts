@@ -35,7 +35,7 @@ import { movePlayerTo, triggerSceneEmote } from '~system/RestrictedActions'
 // ---------------------------------------------------------------
 
 // Set to true to compress all timers for rapid prototyping:
-//   - Watered expiry  : 6h   → 30s
+//   - Watered expiry  : 6h   → 5min
 //   - Bloom delay     : next 6am/6pm UTC → 10s
 //   - Post-bloom reset: +60s → +5s
 //   - Server calls    : skipped (console logged instead)
@@ -55,7 +55,7 @@ const MAX_CLICK_DISTANCE = 3
 // How long a "watered" state lasts before expiring (ms).
 // Switching between 6h and 12h is easy here.
 function getWateredExpiryMs(): number {
-  return runtimeTestMode ? 30_000 : 6 * 60 * 60 * 1000 
+  return runtimeTestMode ? 5 * 60 * 1000 : 6 * 60 * 60 * 1000
 }
 
 // Animation clip names — must match the GLB exactly.
@@ -517,6 +517,10 @@ export function resetAllPlants() {
 
   wateredCount = 0
   updateProgressText()
+
+  // Also reset the daily-limit counters so watering is unblocked immediately
+  playerWateredToday = 0
+  dailyLimitReached  = false
 
   // Clear state and build the queue for the reset system
   resetQueue = []

@@ -148,13 +148,13 @@ export function setupBloomSystem(opts: {
 
   // Bloom text billboard — shown when all plants are watered
   bloomBillboard = engine.addEntity()
-  Transform.create(bloomBillboard, { position: { x: 8, y: 5, z: 8 } })
+  Transform.create(bloomBillboard, { position: { x: 6.75, y: 5, z: 24 } })
   TextShape.create(bloomBillboard, { text: '', fontSize: 4 })
   Billboard.create(bloomBillboard, { billboardMode: BillboardMode.BM_Y })
 
   // Ambient background track — plays from scene load, fades out during bloom
   ambientSoundEntity = engine.addEntity()
-  Transform.create(ambientSoundEntity, { position: { x: 8, y: 2, z: 8 } })
+  Transform.create(ambientSoundEntity, { position: { x: 6.75, y: 2, z: 24 } })
   AudioSource.create(ambientSoundEntity, {
     audioClipUrl: 'assets/scene/Sounds/AmbientSound.mp3',
     playing: true, loop: true, volume: AMBIENT_MAX_VOLUME, pitch: 1,
@@ -163,7 +163,7 @@ export function setupBloomSystem(opts: {
   // Bloom music — silent until triggered; Transform at scene centre avoids
   // DCL applying 3-D positional distance/Doppler effects
   bloomSoundEntity = engine.addEntity()
-  Transform.create(bloomSoundEntity, { position: { x: 8, y: 2, z: 8 } })
+  Transform.create(bloomSoundEntity, { position: { x: 6.75, y: 2, z: 24 } })
   AudioSource.create(bloomSoundEntity, {
     audioClipUrl: 'assets/scene/Sounds/MagicSound.mp3',
     playing: false, loop: true, volume: 1, pitch: 1,

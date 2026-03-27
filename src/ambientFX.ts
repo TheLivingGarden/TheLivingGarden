@@ -75,7 +75,7 @@ const SHOCK_COUNT   = 3
 const SHOCK_DUR_MS  = 1400
 const SHOCK_STAGGER = 280
 const SHOCK_R_MAX   = 12
-const SHOCK_POS     = { x: 8, y: 0.12, z: 24 }
+const SHOCK_POS     = { x: 6.75, y: 2, z: 24 }
 
 interface ShockRing {
   entity:  Entity
