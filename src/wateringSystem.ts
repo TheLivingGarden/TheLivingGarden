@@ -24,6 +24,7 @@ import {
   timers,
 } from '@dcl/sdk/ecs'
 import { getPlayer } from '@dcl/sdk/players'
+import { onEnterSceneObservable } from '@dcl/sdk/observables'
 import { setupPetalSystem, petalParticleSystem } from './petalSystem'
 import { setupBloomSystem, triggerBloomEvent, endBloom, isBloomActive, musicFadeSystem } from './bloomSystem'
 import { setupSparkleSystem, triggerSparkle, sparkleSystem, triggerBloomSparkles, endBloomSparkles, bloomSparkleSystem } from './sparkleSystem'
@@ -50,7 +51,8 @@ let overrideDailyLimit = false
 // TODO: replace with your real server base URL
 const SERVER_URL = 'https://YOUR_SERVER_URL/api'
 
-const TOTAL_PLANTS = 21
+const TOTAL_PLANTS    = 21
+const BLOOM_THRESHOLD = Math.ceil(TOTAL_PLANTS * 0.8)  // 80% — triggers bloom
 // How close to a plant to see the Click prompt
 const MAX_CLICK_DISTANCE = 3
 // How long a "watered" state lasts before expiring (ms).
@@ -69,10 +71,15 @@ const ANIM_TO_DROOPY      = 'HealthToDroopy' // one-shot transition
 // TODO: set this to match the actual DroopyToHealthy / HealthToDroopy clip length.
 const ANIM_TRANSITION_MS = 1500
 
-// How long the WateringCan emote plays before the plant responds.
-// Tune this to match the actual GLB clip length so the plant blooms
-// right as the watering-can tips forward at the end of the animation.
+// When in the emote the plant responds — i.e. when the can tips forward.
+// Measured from click (not from emote fire), so the 400ms teleport settle
+// is included in the window.
 const EMOTE_DURATION_MS = 1500
+
+// Full GLB clip length (Watering_Avatar / Watering_Prop = 2933ms).
+// emoteActive stays locked for this long so no second interaction can call
+// movePlayerTo and cut the animation short before the player moves.
+const EMOTE_TOTAL_MS = 2933
 
 // Water drop indicator shown above droopy plants.
 const WATER_DROP_SRC = 'assets/scene/Models/waterDrop/waterDrop.glb'
@@ -123,6 +130,7 @@ let wateredCount = 0
 let playerWateredToday = 0
 let dailyLimitReached  = false
 let playerId           = 'unknown'
+let initialLoadDone    = false   // flipped after first fetchPlantStates completes
 // True while the watering emote is in flight — prevents a second click from
 // interrupting the avatar animation via a new movePlayerTo / triggerSceneEmote.
 let emoteActive = false
@@ -191,8 +199,7 @@ function setVisible(entity: Entity | null, visible: boolean) {
 
 function updateSceneAssets() {
   resolveSceneAssets()
-  const threshold = Math.ceil(TOTAL_PLANTS * 0.8)
-  const healthy   = wateredCount >= threshold
+  const healthy = wateredCount >= BLOOM_THRESHOLD
 
   setVisible(_progressBarsGreen,  healthy)
   setVisible(_progressBarsRed,    !healthy)
@@ -206,7 +213,7 @@ function updateSceneAssets() {
 // ---------------------------------------------------------------
 
 function updateProgressText() {
-  const lines: string[] = [`${wateredCount}/${TOTAL_PLANTS} Plants Watered`]
+  const lines: string[] = [`${wateredCount}/${BLOOM_THRESHOLD} Plants Watered`]
   if (overrideDailyLimit) {
     lines.push('Waters: Unlimited (override)')
   } else {
@@ -224,9 +231,15 @@ function updateProgressText() {
 // Server calls
 // ---------------------------------------------------------------
 
+function showWelcomeProgress() {
+  showToast(`${wateredCount}/${BLOOM_THRESHOLD} Plants Watered`, 4_000)
+}
+
 function fetchPlantStates() {
   if (runtimeTestMode) {
     console.log('[TEST] fetchPlantStates skipped — all plants start droopy')
+    initialLoadDone = true
+    showWelcomeProgress()
     return
   }
   executeTask(async () => {
@@ -259,7 +272,9 @@ function fetchPlantStates() {
       }
 
       updateProgressText()
-      if (wateredCount >= TOTAL_PLANTS) triggerBloomEvent()
+      initialLoadDone = true
+      showWelcomeProgress()
+      if (wateredCount >= BLOOM_THRESHOLD) triggerBloomEvent()
     } catch (e) {
       console.log('Could not fetch plant states from server:', e)
     }
@@ -432,7 +447,7 @@ function triggerWateringEmote(plantEntity: Entity) {
   timers.setTimeout(() => {
     if (emoteGen !== gen) return
     emoteActive = false
-  }, 400 + EMOTE_DURATION_MS)
+  }, 400 + EMOTE_TOTAL_MS)
 }
 
 // ---------------------------------------------------------------
@@ -542,8 +557,8 @@ function waterPlant(entity: Entity, plantId: string) {
   // Schedule expiry
   scheduleExpiry(entity, now, getWateredExpiryMs())
 
-  // Check for full-garden bloom
-  if (wateredCount >= TOTAL_PLANTS) {
+  // Check for bloom threshold (80%)
+  if (wateredCount >= BLOOM_THRESHOLD) {
     triggerBloomEvent()
     showPersistent(formatBloomCountdown(runtimeTestMode))
   }
@@ -693,7 +708,7 @@ export function setupWateringSystem() {
     position: { x: 8, y: 3.5, z: 8 },
   })
   TextShape.create(progressEntity, {
-    text: `0/${TOTAL_PLANTS} Plants Watered${TEST_MODE ? '\n[TEST MODE]' : ''}`,
+    text: `0/${BLOOM_THRESHOLD} Plants Watered${TEST_MODE ? '\n[TEST MODE]' : ''}`,
     fontSize: 3,
   })
   Billboard.create(progressEntity, { billboardMode: BillboardMode.BM_Y })
@@ -802,6 +817,18 @@ export function setupWateringSystem() {
   console.log(`[WateringSystem] Player ID: ${playerId}`)
   fetchPlayerDailyCount(playerId)
   updateProgressText()
+
+  // Show progress toast whenever the local player (re-)enters the scene.
+  // Re-fetch the local userId inside the callback — playerId may have been
+  // 'unknown' at setup time if getPlayer() hadn't resolved yet.
+  // On initial entry fetchPlantStates() fires the toast once initialLoadDone
+  // is set; subsequent re-entries are handled here.
+  onEnterSceneObservable.add((player) => {
+    const localId = getPlayer()?.userId
+    console.log(`[EnterScene] player=${player.userId} local=${localId} loadDone=${initialLoadDone}`)
+    if (!localId || player.userId !== localId) return
+    if (initialLoadDone) showWelcomeProgress()
+  })
 
 }
 
