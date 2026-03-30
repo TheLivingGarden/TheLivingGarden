@@ -15,12 +15,12 @@
   "main": "bin/index.js",
   "tags": [],
   "scene": {
+    "base": "0,0",
     "parcels": [
       "0,2",
       "0,1",
       "0,0"
-    ],
-    "base": "0,0"
+    ]
   },
   "spawnPoints": [
     {
@@ -60,5 +60,8 @@
   "source": {
     "origin": "creator-hub",
     "projectId": "a2839c17-a9d3-429b-be46-41ea47df952b"
+  },
+  "worldConfiguration": {
+    "name": "afkj.dcl.eth"
   }
 }

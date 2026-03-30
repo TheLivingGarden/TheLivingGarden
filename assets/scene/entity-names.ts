@@ -36,5 +36,10 @@ export enum EntityNames {
   Tile_1 = "Tile 1",
   Tile_2 = "Tile 2",
   Tile_3 = "Tile 3",
-  Traditional_Round_Gauze_Lantern = "Traditional Round Gauze Lantern",
+  center_glb = "center.glb",
+  centerTextBloom_glb = "centerTextBloom.glb",
+  centerTextProgress_glb = "centerTextProgress.glb",
+  centerToon_glb = "centerToon.glb",
+  progressBarsGreen_glb = "progressBarsGreen.glb",
+  progressBarsRed_glb = "progressBarsRed.glb",
 } 
