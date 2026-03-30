@@ -223,16 +223,16 @@
               "y": 0,
               "z": 24
             },
+            "scale": {
+              "x": 1,
+              "y": 1,
+              "z": 1
+            },
             "rotation": {
               "x": 0,
               "y": 0,
               "z": 0,
               "w": 1
-            },
-            "scale": {
-              "x": 1,
-              "y": 1,
-              "z": 1
             },
             "parent": 0
           }
@@ -244,16 +244,16 @@
               "y": 0,
               "z": 24
             },
+            "scale": {
+              "x": 1,
+              "y": 1,
+              "z": 1
+            },
             "rotation": {
               "x": 0,
               "y": 0,
               "z": 0,
               "w": 1
-            },
-            "scale": {
-              "x": 1,
-              "y": 1,
-              "z": 1
             },
             "parent": 0
           }
@@ -265,16 +265,16 @@
               "y": 0,
               "z": 24
             },
+            "scale": {
+              "x": 1,
+              "y": 1,
+              "z": 1
+            },
             "rotation": {
               "x": 0,
               "y": 0,
               "z": 0,
               "w": 1
-            },
-            "scale": {
-              "x": 1,
-              "y": 1,
-              "z": 1
             },
             "parent": 0
           }
@@ -349,16 +349,16 @@
               "y": 0,
               "z": 24
             },
+            "scale": {
+              "x": 1,
+              "y": 1,
+              "z": 1
+            },
             "rotation": {
               "x": 0,
               "y": 0,
               "z": 0,
               "w": 1
-            },
-            "scale": {
-              "x": 1,
-              "y": 1,
-              "z": 1
             },
             "parent": 0
           }
@@ -748,16 +748,16 @@
               "y": 0,
               "z": 24
             },
+            "scale": {
+              "x": 1,
+              "y": 1,
+              "z": 1
+            },
             "rotation": {
               "x": 0,
               "y": 0,
               "z": 0,
               "w": 1
-            },
-            "scale": {
-              "x": 1,
-              "y": 1,
-              "z": 1
             },
             "parent": 0
           }
@@ -853,16 +853,16 @@
               "y": 0,
               "z": 24
             },
+            "scale": {
+              "x": 1,
+              "y": 1,
+              "z": 1
+            },
             "rotation": {
               "x": 0,
               "y": 0,
               "z": 0,
               "w": 1
-            },
-            "scale": {
-              "x": 1,
-              "y": 1,
-              "z": 1
             },
             "parent": 0
           }
@@ -2149,17 +2149,17 @@
         },
         "518": {
           "json": {
-            "value": "center.glb"
+            "value": "center"
           }
         },
         "519": {
           "json": {
-            "value": "centerTextBloom.glb"
+            "value": "centerTextBloom"
           }
         },
         "520": {
           "json": {
-            "value": "centerTextProgress.glb"
+            "value": "centerTextProgress"
           }
         },
         "521": {
@@ -2179,7 +2179,7 @@
         },
         "524": {
           "json": {
-            "value": "centerToon.glb"
+            "value": "centerToon"
           }
         },
         "525": {
@@ -2274,7 +2274,7 @@
         },
         "543": {
           "json": {
-            "value": "progressBarsGreen.glb"
+            "value": "progressBarsGreen"
           }
         },
         "544": {
@@ -2299,7 +2299,7 @@
         },
         "548": {
           "json": {
-            "value": "progressBarsRed.glb"
+            "value": "progressBarsRed"
           }
         }
       }
@@ -2346,7 +2346,7 @@
         "serializationType": "map"
       },
       "data": {
-        "548": {
+        "0": {
           "json": {
             "gizmo": 0
           }

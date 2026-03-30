@@ -19,6 +19,7 @@ import {
   PointerEvents,
   InputAction,
   Transform,
+  VisibilityComponent,
   executeTask,
   timers,
 } from '@dcl/sdk/ecs'
@@ -162,6 +163,45 @@ let resetPhase:  'to_droopy' | 'wait' | 'to_droopy_state' | 'done' = 'done'
 let resetTimerMs = 0
 
 // ---------------------------------------------------------------
+// Scene-asset visibility (progress bars, toon, bloom text)
+// ---------------------------------------------------------------
+
+// Resolved lazily on first call — entities may not exist at module load time
+let _sceneAssetsResolved = false
+let _progressBarsGreen:  Entity | null = null
+let _progressBarsRed:    Entity | null = null
+let _centerToon:         Entity | null = null
+let _centerTextBloom:    Entity | null = null
+let _centerTextProgress: Entity | null = null
+
+function resolveSceneAssets() {
+  if (_sceneAssetsResolved) return
+  _sceneAssetsResolved  = true
+  _progressBarsGreen  = engine.getEntityOrNullByName('progressBarsGreen')
+  _progressBarsRed    = engine.getEntityOrNullByName('progressBarsRed')
+  _centerToon         = engine.getEntityOrNullByName('centerToon')
+  _centerTextBloom    = engine.getEntityOrNullByName('centerTextBloom')
+  _centerTextProgress = engine.getEntityOrNullByName('centerTextProgress')
+}
+
+function setVisible(entity: Entity | null, visible: boolean) {
+  if (!entity) return
+  VisibilityComponent.createOrReplace(entity, { visible })
+}
+
+function updateSceneAssets() {
+  resolveSceneAssets()
+  const threshold = Math.ceil(TOTAL_PLANTS * 0.8)
+  const healthy   = wateredCount >= threshold
+
+  setVisible(_progressBarsGreen,  healthy)
+  setVisible(_progressBarsRed,    !healthy)
+  setVisible(_centerToon,         healthy)
+  setVisible(_centerTextBloom,    healthy)
+  setVisible(_centerTextProgress, !healthy)
+}
+
+// ---------------------------------------------------------------
 // UI helpers
 // ---------------------------------------------------------------
 
@@ -177,6 +217,7 @@ function updateProgressText() {
   }
   if (runtimeTestMode) lines.push('[TEST MODE]')
   TextShape.getMutable(progressEntity).text = lines.join('\n')
+  updateSceneAssets()
 }
 
 // ---------------------------------------------------------------
