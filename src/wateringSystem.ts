@@ -137,6 +137,9 @@ let emoteActive = false
 // Generation counter — ensures the end-of-emote cleanup only fires for the
 // emote it was scheduled with, not a newer one.
 let emoteGen = 0
+// World position where the emote started — used to detect if the player has
+// moved (camera turn / walk) so we can dismiss the prop immediately.
+let emoteStartPos: { x: number; y: number; z: number } | null = null
 // Water drop fade state per plant
 type DropFade = 'in' | 'out' | 'visible' | 'hidden'
 interface DropState { entity: Entity; fade: DropFade; fadeMs: number }
@@ -147,6 +150,25 @@ function setDropFade(plantEntity: Entity, direction: 'in' | 'out') {
   if (!s) return
   s.fade   = direction
   s.fadeMs = 0
+}
+
+// Detects when the player moves during an emote (camera turn, accidental step)
+// and immediately fires a movePlayerTo in-place so DCL dismisses the prop GLB.
+// Without this, the Watering_Prop animation outlives the cancelled avatar anim.
+const EMOTE_MOVE_THRESHOLD = 0.4   // metres — below this is normal position jitter
+function emoteCleanupSystem() {
+  if (!emoteActive || !emoteStartPos) return
+  const pos = Transform.getOrNull(engine.PlayerEntity)?.position
+  if (!pos) return
+  const dx   = pos.x - emoteStartPos.x
+  const dz   = pos.z - emoteStartPos.z
+  if (Math.sqrt(dx * dx + dz * dz) < EMOTE_MOVE_THRESHOLD) return
+
+  // Player moved — avatar animation already cancelled by DCL; clean up the prop.
+  ++emoteGen
+  emoteActive   = false
+  emoteStartPos = null
+  movePlayerTo({ newRelativePosition: pos })
 }
 
 function dropFadeSystem(dt: number) {
@@ -436,17 +458,25 @@ function triggerWateringEmote(plantEntity: Entity) {
     })
   }
 
-  emoteActive = true
-  const gen = ++emoteGen
+  emoteActive    = true
+  emoteStartPos  = Transform.getOrNull(engine.PlayerEntity)?.position ?? null
+  const gen      = ++emoteGen
+
   // 400ms delay — gives the teleport time to register and player movement
   // to fully stop before the emote fires.
   timers.setTimeout(() => {
     triggerSceneEmote({ src: EMOTE_SRC, loop: false })
   }, 400)
 
+  // At the end of the full clip: kick avatar + prop back to idle.
+  // loop:false freezes the avatar on the last keyframe (watering-can pose)
+  // instead of returning to idle. An in-place movePlayerTo resets both.
   timers.setTimeout(() => {
     if (emoteGen !== gen) return
-    emoteActive = false
+    emoteActive   = false
+    emoteStartPos = null
+    const pos = Transform.getOrNull(engine.PlayerEntity)?.position
+    if (pos) movePlayerTo({ newRelativePosition: pos })
   }, 400 + EMOTE_TOTAL_MS)
 }
 
@@ -783,6 +813,7 @@ export function setupWateringSystem() {
   setupAmbientFX()
 
   // Music fade system — runs every frame, idles when musicFadeState === 'none'
+  engine.addSystem(emoteCleanupSystem)
   engine.addSystem(musicFadeSystem)
 
   // Reset animation system — runs every frame, idles when resetPhase === 'done'
