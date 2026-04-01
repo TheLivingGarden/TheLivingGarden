@@ -61,6 +61,10 @@
     "origin": "creator-hub",
     "projectId": "a2839c17-a9d3-429b-be46-41ea47df952b"
   },
+  "authoritativeMultiplayer": true,
+  "logsPermissions": [
+    "0x8967AD851cCbD4C1a2D57A128D3C606fCAB29bad"
+  ],
   "worldConfiguration": {
     "name": "afkj.dcl.eth"
   }

@@ -1,16 +1,26 @@
 import {} from '@dcl/sdk/math'
-import { engine } from '@dcl/sdk/ecs'
+import { isServer } from '@dcl/sdk/network'
 import { setupNotifications } from './notifications'
 import { setupWateringSystem } from './wateringSystem'
-import { setupSittingSystem } from './sittingSystem'
+import { setupSittingSystem }  from './sittingSystem'
 
+// Importing shared schemas + messages here ensures registerMessages()
+// and defineComponent() run on BOTH server and client before any
+// system or message handler is registered.
+import './shared/schemas'
+import './shared/messages'
 
-export function main() {
+export async function main() {
+  if (isServer()) {
+    const { server } = await import('./server/server')
+    await server()
+    return
+  }
+
+  // ── Client only ────────────────────────────────────────────
   setupNotifications()
   setupWateringSystem()
 
-  // Register every named seat entity in the scene.
-  // Replace / extend this list with your actual entity names.
   setupSittingSystem([
     'Sit Spot 1',
     'Sit Spot 2',

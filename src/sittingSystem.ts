@@ -134,7 +134,7 @@ function onSeatClicked(clicked: Seat): void {
   // Play a random looping sit emote after the teleport settles.
   const emote = SIT_EMOTES[Math.floor(Math.random() * SIT_EMOTES.length)]
   setTimeout(() => {
-    AvatarEmoteCommand.createOrReplace(engine.PlayerEntity, {
+    AvatarEmoteCommand.addValue(engine.PlayerEntity, {
       emoteUrn:  emote,
       loop:      true,
       timestamp: Date.now(),
@@ -165,7 +165,7 @@ function standUpSystem(): void {
       // Stop the looping sit emote by issuing a fresh idle command.
       // DCL doesn't expose a dedicated "stop emote" — overwriting with
       // a non-looping empty-ish emote returns the avatar to idle.
-      AvatarEmoteCommand.createOrReplace(engine.PlayerEntity, {
+      AvatarEmoteCommand.addValue(engine.PlayerEntity, {
         emoteUrn:  'handsair',   // brief built-in emote → returns to idle
         loop:      false,
         timestamp: Date.now(),
