@@ -31,6 +31,10 @@ const plantEntities = new Map<string, Entity>()   // plantId → entity
 const knownPlayers  = new Set<Entity>()           // entities seen this session
 let   bloomActive   = false
 
+// ── Leaderboard ──────────────────────────────────────────────
+interface LeaderboardEntry { displayName: string; total: number }
+const leaderboard = new Map<string, LeaderboardEntry>()  // address → entry
+
 // ---------------------------------------------------------------
 // Storage helpers
 // ---------------------------------------------------------------
@@ -74,6 +78,42 @@ async function savePlantStates(): Promise<void> {
     records.push({ plantId, isWatered: ps.isWatered, wateredAt: Number(ps.wateredAt) })
   }
   await Storage.set('plants', JSON.stringify(records))
+}
+
+// ── Leaderboard helpers ──────────────────────────────────────
+
+async function loadLeaderboard(): Promise<void> {
+  const raw = await Storage.get<string>('leaderboard')
+  if (!raw) return
+  const records: Array<{ address: string; displayName: string; total: number }> = JSON.parse(raw)
+  for (const r of records) leaderboard.set(r.address, { displayName: r.displayName, total: r.total })
+  console.log(`[Server] Loaded leaderboard: ${leaderboard.size} players`)
+}
+
+async function saveLeaderboard(): Promise<void> {
+  const records = [...leaderboard.entries()].map(([address, e]) => ({ address, ...e }))
+  await Storage.set('leaderboard', JSON.stringify(records))
+}
+
+/** Top-10 sorted entries as JSON, ready to send over the wire. */
+function leaderboardJson(): string {
+  return JSON.stringify(
+    [...leaderboard.values()]
+      .sort((a, b) => b.total - a.total)
+      .slice(0, 10)
+      .map(e => ({ displayName: e.displayName, count: e.total }))
+  )
+}
+
+function broadcastLeaderboard(to?: string[]): void {
+  const entriesJson = leaderboardJson()
+  if (to) {
+    // Targeted send — used on player join to push current state to one client
+    room.send('leaderboardUpdate', { entriesJson }, { to })
+  } else {
+    // Broadcast — reaches all connected clients including the triggering player
+    room.send('leaderboardUpdate', { entriesJson })
+  }
 }
 
 function dailyKey(date: string): string { return `daily:${date}` }
@@ -172,7 +212,10 @@ function playerJoinSystem(): void {
         room.send('plantStateUpdate', { plantId, isWatered: ps.isWatered, wateredAt: ps.wateredAt }, { to: [address] })
       }
 
-      console.log(`[Server] Player joined: ${address} (${wateredToday}/${DAILY_WATER_LIMIT} today, ${getWateredCount()}/${BLOOM_THRESHOLD} watered)`)
+      broadcastLeaderboard([address])
+      // Re-send bloom state to players who join while it is already active
+      if (bloomActive) room.send('bloomTriggered', {}, { to: [address] })
+      console.log(`[Server] Player joined: ${address} (${wateredToday}/${DAILY_WATER_LIMIT} today, ${getWateredCount()}/${BLOOM_THRESHOLD} watered, bloom=${bloomActive})`)
     })
   }
 }
@@ -194,8 +237,9 @@ export async function server(): Promise<void> {
 
   console.log(`[Server] ${plantEntities.size} plants registered`)
 
-  // Restore persisted plant states
+  // Restore persisted plant states and leaderboard
   await loadPlantStates()
+  await loadLeaderboard()
   console.log(`[Server] ${getWateredCount()} plants currently watered`)
 
   // ── Message: waterPlant ──────────────────────────────────────
@@ -239,16 +283,41 @@ export async function server(): Promise<void> {
       PlantSync.getMutable(entity).wateredAt = now
 
       const newCount = await incrementPlayerDailyCount(playerAddress)
+
+      // Update all-time leaderboard total for this player
+      const entry = leaderboard.get(playerAddress)
+      if (entry) {
+        entry.total += 1
+      } else {
+        leaderboard.set(playerAddress, { displayName: playerAddress.slice(0, 8) + '…', total: 1 })
+      }
+
       await savePlantStates()
+      await saveLeaderboard()
       scheduleExpiry(plantId, entity, now, WATERED_EXPIRY_MS)
 
       room.send('playerDailyState', { wateredToday: newCount, dailyLimit: DAILY_WATER_LIMIT }, { to: [playerAddress] })
       room.send('plantStateUpdate', { plantId, isWatered: true, wateredAt: now })
+      broadcastLeaderboard()
       console.log(`[Server] ${plantId} watered by ${playerAddress} (${newCount}/${DAILY_WATER_LIMIT} today, ${getWateredCount()}/${BLOOM_THRESHOLD} garden)`)
 
       // Check bloom threshold
       if (!bloomActive && getWateredCount() >= BLOOM_THRESHOLD) triggerBloom()
     })
+  })
+
+  // ── Message: registerPlayer ──────────────────────────────────
+  room.onMessage('registerPlayer', (data, context) => {
+    if (!context) return
+    const address = context.from
+    const entry   = leaderboard.get(address)
+    if (entry) {
+      entry.displayName = data.displayName
+    } else {
+      leaderboard.set(address, { displayName: data.displayName, total: 0 })
+    }
+    executeTask(async () => { await saveLeaderboard() })
+    console.log(`[Server] Registered player: ${data.displayName} (${address})`)
   })
 
   // Player join detection — runs every frame, lightweight

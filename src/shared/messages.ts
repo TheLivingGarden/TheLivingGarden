@@ -10,6 +10,8 @@ export const room = registerMessages({
   // ── Client → Server ───────────────────────────────────────
   /** Player requests to water a plant. Server validates and updates PlantSync. */
   waterPlant:       Schemas.Map({ plantId: Schemas.String }),
+  /** Sent on join so the server can map address → display name for the leaderboard. */
+  registerPlayer:   Schemas.Map({ displayName: Schemas.String }),
 
   // ── Server → specific client ──────────────────────────────
   /** Sent on player join and after each successful watering. */
@@ -24,4 +26,6 @@ export const room = registerMessages({
   bloomTriggered:   Schemas.Map({}),
   /** Broadcast when the server resets all plants after bloom. */
   bloomReset:       Schemas.Map({}),
+  /** Top-10 all-time leaderboard — sent to all on water, to joining player on join. */
+  leaderboardUpdate: Schemas.Map({ entriesJson: Schemas.String }),
 })

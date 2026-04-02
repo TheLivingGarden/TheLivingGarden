@@ -73,13 +73,14 @@ interface SparkleState {
 
 const activeSparkles: SparkleState[] = []
 
-/** Call once at scene startup — builds bloom pool only. */
+/** Call once at scene startup — builds bloom and tribute pools. */
 export function setupSparkleSystem(): void {
   // Bloom orbit pool
   for (let i = 0; i < BLOOM_POOL_SIZE; i++) {
     const ent = makeSparkleEntity(2.0)
     bloomPool.push({
       entity:       ent,
+      mode:         'bloom',
       phase:        'idle',
       startPos:     { x: 0, y: -100, z: 0 },
       travelTarget: { x: 0, y: 0,    z: 0 },
@@ -101,7 +102,34 @@ export function setupSparkleSystem(): void {
     })
   }
 
-  console.log(`[Sparkles] Bloom pool: ${BLOOM_POOL_SIZE}`)
+  // Tribute pool (per-watering travel-to-centre)
+  for (let i = 0; i < TRIBUTE_POOL_SIZE; i++) {
+    const ent = makeSparkleEntity(1.8)
+    tributePool.push({
+      entity:       ent,
+      mode:         'tribute',
+      phase:        'idle',
+      startPos:     { x: 0, y: -100, z: 0 },
+      travelTarget: { x: 0, y: 0,    z: 0 },
+      travelMs:     0,
+      travelDurMs:  TRIBUTE_DUR_BASE,
+      orbitAngle:   0,
+      orbitSpeed:   0,
+      orbitRadius:  0.4,
+      orbitBaseY:   1.5,
+      bobPhase:     0,
+      bobSpeed:     1.5,
+      bobAmp:       0.2,
+      riseMs:       0,
+      riseDelay:    0,
+      riseDurMs:    TRIBUTE_DISSOLVE_MS,
+      riseStartPos: { x: 0, y: 0, z: 0 },
+      pos:          { x: 0, y: -100, z: 0 },
+      scale:        0.001,
+    })
+  }
+
+  console.log(`[Sparkles] Bloom pool: ${BLOOM_POOL_SIZE}  Tribute pool: ${TRIBUTE_POOL_SIZE}`)
 }
 
 /** Emit a burst of sparkles centred on `pos` (world position of the plant). */
@@ -196,10 +224,11 @@ const RISE_DUR_MS      = 2_800  // ms for rise fade
 const RISE_HEIGHT      = 1.5    // m of vertical travel while rising
 const RISE_DELAY_MAX   = 2_000  // ms max stagger between sparkles
 
-type BloomPhase = 'idle' | 'travel' | 'orbit' | 'rise'
+type BloomPhase = 'idle' | 'travel' | 'orbit' | 'rise' | 'dissolve'
 
 interface BloomSparkleState {
   entity:       Entity
+  mode:         'bloom' | 'tribute'   // bloom → orbit after travel; tribute → dissolve
   phase:        BloomPhase
   // Travel
   startPos:     { x: number; y: number; z: number }
@@ -224,7 +253,17 @@ interface BloomSparkleState {
   scale:        number
 }
 
-const bloomPool: BloomSparkleState[] = []
+const bloomPool:   BloomSparkleState[] = []
+
+// ── Tribute pool — per-watering travel-to-centre effect ──────────
+const TRIBUTE_POOL_SIZE   = 48    // 6 sparkles × 8 possible in-flight
+const TRIBUTE_COUNT       = 6     // sparkles per watering
+const TRIBUTE_DUR_BASE    = 1_200 // ms
+const TRIBUTE_DUR_VARY    = 500
+const TRIBUTE_SPARKLE_SIZE = 0.18
+const TRIBUTE_DISSOLVE_MS  = 450  // fade at centre after arriving
+
+const tributePool: BloomSparkleState[] = []
 
 /** Smoothstep easing (0→1). */
 function smoothstep(t: number): number {
@@ -295,6 +334,50 @@ export function triggerBloomSparkles(
 }
 
 /**
+ * Fire a small wave of sparkles that travel from `plantPos` to the bloom
+ * centre — called after the per-plant burst has played (~650 ms delay).
+ * Uses the tribute pool so it never conflicts with the bloom orbit effect.
+ */
+export function triggerWateringTribute(
+  plantPos: { x: number; y: number; z: number },
+): void {
+  let activated = 0
+  for (const s of tributePool) {
+    if (s.phase !== 'idle' || activated >= TRIBUTE_COUNT) continue
+
+    // Arrive at a random point close to the bloom centre
+    s.orbitAngle  = Math.random() * Math.PI * 2
+    s.orbitRadius = 0.25 + Math.random() * 0.35
+    s.orbitBaseY  = 1.0  + Math.random() * 1.5
+    s.travelTarget = {
+      x: BLOOM_CENTER_X + Math.cos(s.orbitAngle) * s.orbitRadius,
+      y: s.orbitBaseY,
+      z: BLOOM_CENTER_Z + Math.sin(s.orbitAngle) * s.orbitRadius,
+    }
+
+    // Burst slightly offset from plant base
+    const burstA = Math.random() * Math.PI * 2
+    const burstR = 0.08 + Math.random() * 0.18
+    s.startPos = {
+      x: plantPos.x + Math.cos(burstA) * burstR,
+      y: plantPos.y + 0.3 + Math.random() * 0.4,
+      z: plantPos.z + Math.sin(burstA) * burstR,
+    }
+
+    s.travelMs    = -(Math.random() * 250)     // stagger launch
+    s.travelDurMs = TRIBUTE_DUR_BASE + Math.random() * TRIBUTE_DUR_VARY
+    s.riseMs      = 0
+    s.riseDurMs   = TRIBUTE_DISSOLVE_MS
+    s.scale       = 0
+    s.phase       = 'travel'
+    s.mode        = 'tribute'
+
+    Transform.getMutable(s.entity).scale = { x: 0.001, y: 0.001, z: 0.001 }
+    activated++
+  }
+}
+
+/**
  * Begin rise-and-dissolve for all orbiting bloom sparkles.
  * Call from resetAllPlants (i.e. when bloom ends).
  */
@@ -314,7 +397,7 @@ export function endBloomSparkles(): void {
 export function bloomSparkleSystem(dt: number): void {
   const dtMs = dt * 1000
 
-  for (const s of bloomPool) {
+  for (const s of [...bloomPool, ...tributePool]) {
     if (s.phase === 'idle') continue
 
     const tf = Transform.getMutable(s.entity)
@@ -344,8 +427,15 @@ export function bloomSparkleSystem(dt: number): void {
       tf.scale    = { x: s.scale, y: s.scale, z: s.scale }
 
       if (rawT >= 1) {
-        s.phase    = 'orbit'
-        s.bobPhase = Math.random() * Math.PI * 2   // randomise bob start
+        if (s.mode === 'tribute') {
+          s.phase        = 'dissolve'
+          s.riseMs       = 0
+          s.riseDurMs    = TRIBUTE_DISSOLVE_MS
+          s.riseStartPos = { ...s.travelTarget }
+        } else {
+          s.phase    = 'orbit'
+          s.bobPhase = Math.random() * Math.PI * 2
+        }
       }
       continue
     }
@@ -383,6 +473,22 @@ export function bloomSparkleSystem(dt: number): void {
       tf.scale    = { x: s.scale, y: s.scale, z: s.scale }
 
       if (riseT >= 1) {
+        s.phase     = 'idle'
+        tf.position = { x: 0, y: -100, z: 0 }
+        tf.scale    = { x: 0.001, y: 0.001, z: 0.001 }
+      }
+    }
+
+    // ── Dissolve phase (tribute only) ──────────────────────────────
+    if (s.phase === 'dissolve') {
+      s.riseMs += dtMs
+      const t  = Math.min(s.riseMs / s.riseDurMs, 1)
+      const sc = TRIBUTE_SPARKLE_SIZE * (1 - t) * (1 - t)   // quadratic fade
+
+      tf.position = s.riseStartPos
+      tf.scale    = { x: sc, y: sc, z: sc }
+
+      if (t >= 1) {
         s.phase     = 'idle'
         tf.position = { x: 0, y: -100, z: 0 }
         tf.scale    = { x: 0.001, y: 0.001, z: 0.001 }

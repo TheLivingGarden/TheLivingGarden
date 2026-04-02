@@ -14,9 +14,9 @@ export { setupUi as setupNotifications } from './ui'
 // Message formatters
 // ---------------------------------------------------------------
 
-/** Persistent pill copy — shown while player waits for next bloom window. */
+/** Bloom countdown — returns only the time remaining (h and min). */
 export function formatBloomCountdown(testMode: boolean): string {
-  if (testMode) return 'All plants watered!\nBloom starting soon...'
+  if (testMode) return 'Soon...'
   const now   = new Date()
   const at6am = new Date(now); at6am.setUTCHours(6,  0, 0, 0)
   const at6pm = new Date(now); at6pm.setUTCHours(18, 0, 0, 0)
@@ -27,7 +27,7 @@ export function formatBloomCountdown(testMode: boolean): string {
   const ms = next.getTime() - Date.now()
   const h  = Math.floor(ms / 3_600_000)
   const m  = Math.floor((ms % 3_600_000) / 60_000)
-  return `All plants watered!\nBloom in ${h}h ${m}min`
+  return `${h}h ${m}m`
 }
 
 /** Toast copy — shown when the player hits their daily watering limit. */

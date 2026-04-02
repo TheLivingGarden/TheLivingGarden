@@ -124,9 +124,9 @@ export function TestPanelUi() {
           uiBackground={{ color: WARN_BG }}
         >
           <Label
-            value={'⚠  No server connected — data resets each session\nAll settings here are runtime-only and not persisted'}
+            value={'🌿  Server connected — plant state & daily counts persist\nSettings below only affect local client timing & testing'}
             fontSize={10}
-            color={WARN_TEXT}
+            color={OK_TEXT}
             textAlign="middle-center"
             uiTransform={{ width: '100%', height: '100%' }}
           />
@@ -179,7 +179,7 @@ export function TestPanelUi() {
 
         {/* Fast Mode (30s expiry, skip server) */}
         <UiEntity uiTransform={{ width: '100%', height: 40, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', margin: { bottom: 6 } }}>
-          <Label value="Fast Mode  (30s expiry, skip server)" fontSize={12} color={WHITE} uiTransform={{ flexGrow: 1 }} />
+          <Label value="Fast Expiry  (5 min instead of 6h)" fontSize={12} color={WHITE} uiTransform={{ flexGrow: 1 }} />
           <UiEntity uiTransform={{ flexDirection: 'row' }}>
             <UiEntity
               uiTransform={{ width: 52, height: 30, alignItems: 'center', justifyContent: 'center', margin: { right: 4 } }}
