@@ -741,27 +741,6 @@
             "parent": 533
           }
         },
-        "543": {
-          "json": {
-            "position": {
-              "x": 8,
-              "y": 0,
-              "z": 24
-            },
-            "scale": {
-              "x": 1,
-              "y": 1,
-              "z": 1
-            },
-            "rotation": {
-              "x": 0,
-              "y": 0,
-              "z": 0,
-              "w": 1
-            },
-            "parent": 0
-          }
-        },
         "544": {
           "json": {
             "position": {
@@ -844,27 +823,6 @@
               "w": 1
             },
             "parent": 533
-          }
-        },
-        "548": {
-          "json": {
-            "position": {
-              "x": 8,
-              "y": 0,
-              "z": 24
-            },
-            "scale": {
-              "x": 1,
-              "y": 1,
-              "z": 1
-            },
-            "rotation": {
-              "x": 0,
-              "y": 0,
-              "z": 0,
-              "w": 1
-            },
-            "parent": 0
           }
         },
         "551": {
@@ -1185,13 +1143,13 @@
         "566": {
           "json": {
             "position": {
-              "x": 0.7465555667877197,
-              "y": 1.453887939453125,
-              "z": 29.520322799682617
+              "x": 0.75,
+              "y": 1.4500000476837158,
+              "z": 29.520000457763672
             },
             "rotation": {
               "x": 0,
-              "y": 0.707099974155426,
+              "y": -0.707099974155426,
               "z": 0,
               "w": 0.707099974155426
             },
@@ -1206,20 +1164,20 @@
         "567": {
           "json": {
             "position": {
-              "x": 4.378863334655762,
-              "y": 0.6775845885276794,
-              "z": 34.83792495727539
+              "x": 4.380000114440918,
+              "y": 0.6800000071525574,
+              "z": 34.84000015258789
             },
             "rotation": {
               "x": 0,
-              "y": 0,
+              "y": 1,
               "z": 0,
-              "w": 1
+              "w": 0
             },
             "scale": {
-              "x": 0.35711830854415894,
-              "y": 0.40939709544181824,
-              "z": 0.5101690292358398
+              "x": 0.36000001430511475,
+              "y": 0.4099999964237213,
+              "z": 0.5099999904632568
             },
             "parent": 0
           }
@@ -1229,13 +1187,13 @@
             "position": {
               "x": 4.380000114440918,
               "y": 0.6800000071525574,
-              "z": 13.134124755859375
+              "z": 13.130000114440918
             },
             "rotation": {
               "x": 0,
-              "y": 1,
+              "y": 0,
               "z": 0,
-              "w": 0
+              "w": 1
             },
             "scale": {
               "x": 0.36000001430511475,
@@ -2313,13 +2271,6 @@
             "invisibleMeshesCollisionMask": 1
           }
         },
-        "543": {
-          "json": {
-            "src": "assets/scene/Models/progressBarsGreen/progressBarsGreen.glb",
-            "visibleMeshesCollisionMask": 0,
-            "invisibleMeshesCollisionMask": 3
-          }
-        },
         "544": {
           "json": {
             "src": "assets/scene/Models/demoPlant/demoPlant.glb",
@@ -2346,13 +2297,6 @@
             "src": "assets/scene/Models/demoPlant/demoPlant.glb",
             "visibleMeshesCollisionMask": 0,
             "invisibleMeshesCollisionMask": 1
-          }
-        },
-        "548": {
-          "json": {
-            "src": "assets/scene/Models/progressBarsRed/progressBarsRed.glb",
-            "visibleMeshesCollisionMask": 0,
-            "invisibleMeshesCollisionMask": 3
           }
         },
         "565": {
@@ -3598,11 +3542,6 @@
             "value": "Plant_18"
           }
         },
-        "543": {
-          "json": {
-            "value": "progressBarsGreen"
-          }
-        },
         "544": {
           "json": {
             "value": "Plant_19"
@@ -3621,11 +3560,6 @@
         "547": {
           "json": {
             "value": "Plant_22"
-          }
-        },
-        "548": {
-          "json": {
-            "value": "progressBarsRed"
           }
         },
         "551": {
@@ -3762,7 +3696,7 @@
         "serializationType": "map"
       },
       "data": {
-        "569": {
+        "568": {
           "json": {
             "gizmo": 1
           }
@@ -3825,8 +3759,6 @@
                   519,
                   520,
                   524,
-                  543,
-                  548,
                   551,
                   552,
                   553,
@@ -4023,14 +3955,6 @@
                 "children": []
               },
               {
-                "entity": 543,
-                "children": []
-              },
-              {
-                "entity": 548,
-                "children": []
-              },
-              {
                 "entity": 551,
                 "children": []
               },
@@ -4205,9 +4129,6 @@
         "542": {
           "json": {}
         },
-        "543": {
-          "json": {}
-        },
         "544": {
           "json": {}
         },
@@ -4218,9 +4139,6 @@
           "json": {}
         },
         "547": {
-          "json": {}
-        },
-        "548": {
           "json": {}
         },
         "551": {

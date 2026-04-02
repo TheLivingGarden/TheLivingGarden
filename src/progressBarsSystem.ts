@@ -33,20 +33,59 @@ const PLACEHOLDER_NAMES = [
   'BarPlaceholder_4',
 ]
 
-// How much taller to make the bars compared to the placeholder's Y scale
-const HEIGHT_MULTIPLIER = 6
-// Width (X) multiplier
-const WIDTH_MULTIPLIER  = .6
-// Depth (Z) multiplier — shrinks the bar to a thin slab
-const DEPTH_MULTIPLIER  = 0.2
-// World-space upward offset applied to every bar (metres)
-const BAR_LIFT_M        = 1
+// ===============================================================
+// ██████╗ ██████╗  ██████╗  ██████╗ ██████╗ ███████╗███████╗███████╗
+// ██╔══██╗██╔══██╗██╔═══██╗██╔════╝ ██╔══██╗██╔════╝██╔════╝██╔════╝
+// ██████╔╝██████╔╝██║   ██║██║  ███╗██████╔╝█████╗  ███████╗███████╗
+// ██╔═══╝ ██╔══██╗██║   ██║██║   ██║██╔══██╗██╔══╝  ╚════██║╚════██║
+// ██║     ██║  ██║╚██████╔╝╚██████╔╝██║  ██║███████╗███████║███████║
+// ╚═╝     ╚═╝  ╚═╝ ╚═════╝  ╚═════╝ ╚═╝  ╚═╝╚══════╝╚══════╝╚══════╝
+//                     B A R   C O N F I G
+// ===============================================================
+
+// ── Shape ────────────────────────────────────────────────────────
+const HEIGHT_MULTIPLIER = 6      // multiply placeholder Y scale
+const WIDTH_MULTIPLIER  = 0.6    // multiply placeholder X scale
+const DEPTH_MULTIPLIER  = 0.2    // multiply placeholder Z scale (keep thin)
+const BAR_LIFT_M        = 1      // world-space upward offset (metres)
+
+// ── Fill thresholds (0–1 ratio of total plants) ───────────────────
+const ORANGE_RATIO = 0.50        // red → orange at this fraction
+// green threshold is driven by BLOOM_THRESHOLD / TOTAL_PLANTS
+
+// ── Background ───────────────────────────────────────────────────
+const BG_COLOR     = { r: 0.08, g: 0.08, b: 0.10, a: 0.75 }
+const BG_EMISSIVE  = { r: 0.08, g: 0.08, b: 0.10 }
+const BG_EMISSION  = 0.4
+
+// ── Fill colours & emission ───────────────────────────────────────
+const FILL_RED_COLOR    = { r: 0.90, g: 0.18, b: 0.18 }
+const FILL_ORANGE_COLOR = { r: 1.00, g: 0.50, b: 0.05 }
+const FILL_GREEN_COLOR  = { r: 0.20, g: 0.88, b: 0.35 }
+const FILL_EMISSION     = 0.8    // emissive intensity for all fill states
+
+// ── Marker ticks ──────────────────────────────────────────────────
+const MARKER_COLOR      = { r: 0.85, g: 0.85, b: 0.85 }
+const MARKER_EMISSION   = 0.7
+const THRESHOLD_COLOR   = { r: 1.00, g: 0.84, b: 0.10 }   // gold at 80%
+const THRESHOLD_EMISSION = 1.6
+
+// ── Marker label font sizes & position ───────────────────────────
+const LABEL_FONT_SIZE           = 1.9
+const LABEL_FONT_SIZE_THRESHOLD = 2.4
+// World-space gap between the bar's right edge and the label (metres)
+// Positive = further right, negative = overlap the bar
+const LABEL_OFFSET_M            = 0.4
+
+// ===============================================================
+//                  end of config
+// ===============================================================
 
 // Small world-space gap between background and fill (metres)
 const FILL_INSET = 0.015
 // Fill/tick depth is capped so thick-depth placeholders don't produce brick-like fills
-const MAX_FILL_DEPTH_M = 0.06   // 6 cm max world depth for fill
-const MAX_TICK_DEPTH_M = 0.025  // 2.5 cm max world depth for ticks
+const MAX_FILL_DEPTH_M = 0.06
+const MAX_TICK_DEPTH_M = 0.025
 
 // Marker ticks — fraction of bar height (0–1)
 const MARKERS: Array<{ ratio: number; label: string; isThreshold?: boolean }> = [
@@ -55,23 +94,15 @@ const MARKERS: Array<{ ratio: number; label: string; isThreshold?: boolean }> = 
   { ratio: 0.80, label: '80%', isThreshold: true },
 ]
 
-// ---------------------------------------------------------------
-// Colours
-// ---------------------------------------------------------------
+// Derived colour constants (Color4 from config above)
+const COLOR_BG          = Color4.create(BG_COLOR.r,          BG_COLOR.g,          BG_COLOR.b,          BG_COLOR.a)
+const COLOR_FILL_RED    = Color4.create(FILL_RED_COLOR.r,    FILL_RED_COLOR.g,    FILL_RED_COLOR.b,    1)
+const COLOR_FILL_ORANGE = Color4.create(FILL_ORANGE_COLOR.r, FILL_ORANGE_COLOR.g, FILL_ORANGE_COLOR.b, 1)
+const COLOR_FILL_GREEN  = Color4.create(FILL_GREEN_COLOR.r,  FILL_GREEN_COLOR.g,  FILL_GREEN_COLOR.b,  1)
+const COLOR_MARKER      = Color4.create(MARKER_COLOR.r,      MARKER_COLOR.g,      MARKER_COLOR.b,      1)
+const COLOR_THRESHOLD   = Color4.create(THRESHOLD_COLOR.r,   THRESHOLD_COLOR.g,   THRESHOLD_COLOR.b,   1)
 
-const COLOR_BG          = Color4.create(0.08, 0.08, 0.10, 0.75)
-const COLOR_FILL_RED    = Color4.create(0.90, 0.18, 0.18, 1)
-const COLOR_FILL_ORANGE = Color4.create(1.00, 0.50, 0.05, 1)
-const COLOR_FILL_GREEN  = Color4.create(0.20, 0.88, 0.35, 1)
-const COLOR_MARKER      = Color4.create(0.85, 0.85, 0.85, 1)
-const COLOR_THRESHOLD   = Color4.create(1.00, 0.84, 0.10, 1)
-
-const EMISSIVE_RED    = { r: 0.90, g: 0.18, b: 0.18 }
-const EMISSIVE_ORANGE = { r: 1.00, g: 0.50, b: 0.05 }
-const EMISSIVE_GREEN  = { r: 0.20, g: 0.88, b: 0.35 }
-
-const BLOOM_RATIO  = BLOOM_THRESHOLD / TOTAL_PLANTS
-const ORANGE_RATIO = 0.50
+const BLOOM_RATIO = BLOOM_THRESHOLD / TOTAL_PLANTS
 
 // ---------------------------------------------------------------
 // State
@@ -136,8 +167,8 @@ export function setupProgressBars(): void {
     MeshRenderer.setBox(ph)
     Material.setPbrMaterial(ph, {
       albedoColor:       COLOR_BG,
-      emissiveColor:     { r: 0.08, g: 0.08, b: 0.10 },
-      emissiveIntensity: 0.4,
+      emissiveColor:     BG_EMISSIVE,
+      emissiveIntensity: BG_EMISSION,
       transparencyMode:  MaterialTransparencyMode.MTM_ALPHA_BLEND,
     })
 
@@ -161,8 +192,8 @@ export function setupProgressBars(): void {
     MeshRenderer.setBox(fill)
     Material.setPbrMaterial(fill, {
       albedoColor:       COLOR_FILL_RED,
-      emissiveColor:     EMISSIVE_RED,
-      emissiveIntensity: 0.5,
+      emissiveColor:     FILL_RED_COLOR,
+      emissiveIntensity: FILL_EMISSION,
     })
     bars.push({ fill, lastRatio: -1, fillScaleX, fillScaleZ, fillFrontZ, minFillH })
 
@@ -178,9 +209,7 @@ export function setupProgressBars(): void {
       const tickDeepL  = tickWorldDepth / sz
 
       const color    = m.isThreshold ? COLOR_THRESHOLD : COLOR_MARKER
-      const emissive = m.isThreshold
-        ? { r: 1.0, g: 0.84, b: 0.10 }
-        : { r: 0.85, g: 0.85, b: 0.85 }
+      const emissive = m.isThreshold ? THRESHOLD_COLOR : MARKER_COLOR
 
       const tick = engine.addEntity()
       Transform.create(tick, {
@@ -192,14 +221,14 @@ export function setupProgressBars(): void {
       Material.setPbrMaterial(tick, {
         albedoColor:       color,
         emissiveColor:     emissive,
-        emissiveIntensity: m.isThreshold ? 1.6 : 0.7,
+        emissiveIntensity: m.isThreshold ? THRESHOLD_EMISSION : MARKER_EMISSION,
       })
 
       // ── Label — world-space, rotated to match the bar's facing ───
       // Not parented (avoids TextShape distortion from non-uniform parent scale).
       // The label inherits the bar's Y rotation so it faces the same direction
       // as the bar's front face instead of defaulting to global +Z.
-      const labelDist = sx * 0.5 + 0.14
+      const labelDist = sx * 0.5 + LABEL_OFFSET_M
       const labelX    = px + rx * labelDist
       const labelY    = py + (m.ratio - 0.5) * sy
       const labelZ    = pz + rz * labelDist
@@ -211,7 +240,7 @@ export function setupProgressBars(): void {
       })
       TextShape.create(label, {
         text:      m.label,
-        fontSize:  m.isThreshold ? 2.4 : 1.9,
+        fontSize:  m.isThreshold ? LABEL_FONT_SIZE_THRESHOLD : LABEL_FONT_SIZE,
         textColor: m.isThreshold ? COLOR_THRESHOLD : COLOR_MARKER,
       })
     }
@@ -230,7 +259,7 @@ export function updateProgressBars(wateredCount: number, total: number): void {
   const isOrange = !isGreen && ratio >= ORANGE_RATIO
 
   const albedo   = isGreen ? COLOR_FILL_GREEN  : isOrange ? COLOR_FILL_ORANGE  : COLOR_FILL_RED
-  const emissive = isGreen ? EMISSIVE_GREEN     : isOrange ? EMISSIVE_ORANGE    : EMISSIVE_RED
+  const emissive = isGreen ? FILL_GREEN_COLOR  : isOrange ? FILL_ORANGE_COLOR  : FILL_RED_COLOR
 
   for (const bar of bars) {
     if (bar.lastRatio === ratio) continue
@@ -246,7 +275,7 @@ export function updateProgressBars(wateredCount: number, total: number): void {
     Material.setPbrMaterial(bar.fill, {
       albedoColor:       albedo,
       emissiveColor:     emissive,
-      emissiveIntensity: 0.5,
+      emissiveIntensity: FILL_EMISSION,
     })
   }
 }

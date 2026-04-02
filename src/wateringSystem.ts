@@ -167,8 +167,6 @@ let resetTimerMs = 0
 // ---------------------------------------------------------------
 
 let _sceneAssetsResolved = false
-let _progressBarsGreen:  Entity | null = null
-let _progressBarsRed:    Entity | null = null
 let _centerToon:         Entity | null = null
 let _centerTextBloom:    Entity | null = null
 let _centerTextProgress: Entity | null = null
@@ -176,8 +174,6 @@ let _centerTextProgress: Entity | null = null
 function resolveSceneAssets() {
   if (_sceneAssetsResolved) return
   _sceneAssetsResolved  = true
-  _progressBarsGreen  = engine.getEntityOrNullByName('progressBarsGreen')
-  _progressBarsRed    = engine.getEntityOrNullByName('progressBarsRed')
   _centerToon         = engine.getEntityOrNullByName('centerToon')
   _centerTextBloom    = engine.getEntityOrNullByName('centerTextBloom')
   _centerTextProgress = engine.getEntityOrNullByName('centerTextProgress')
@@ -191,8 +187,6 @@ function setVisible(entity: Entity | null, visible: boolean) {
 function updateSceneAssets() {
   resolveSceneAssets()
   const healthy = computeWateredCount() >= BLOOM_THRESHOLD
-  setVisible(_progressBarsGreen,  healthy)
-  setVisible(_progressBarsRed,    !healthy)
   setVisible(_centerToon,         healthy)
   setVisible(_centerTextBloom,    healthy)
   setVisible(_centerTextProgress, !healthy)
