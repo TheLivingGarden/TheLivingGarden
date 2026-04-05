@@ -279,27 +279,6 @@
             "parent": 0
           }
         },
-        "521": {
-          "json": {
-            "position": {
-              "x": 8,
-              "y": 0.10000000149011612,
-              "z": 24
-            },
-            "scale": {
-              "x": 1,
-              "y": 1,
-              "z": 1
-            },
-            "rotation": {
-              "x": 0,
-              "y": 0,
-              "z": 0,
-              "w": 1
-            },
-            "parent": 0
-          }
-        },
         "522": {
           "json": {
             "position": {
@@ -741,6 +720,27 @@
             "parent": 533
           }
         },
+        "543": {
+          "json": {
+            "position": {
+              "x": 8,
+              "y": 0,
+              "z": 24
+            },
+            "rotation": {
+              "x": 0,
+              "y": 0,
+              "z": 0,
+              "w": 1
+            },
+            "scale": {
+              "x": 1,
+              "y": 1,
+              "z": 1
+            },
+            "parent": 0
+          }
+        },
         "544": {
           "json": {
             "position": {
@@ -916,16 +916,16 @@
               "y": 0.8399999737739563,
               "z": 21.09000015258789
             },
+            "scale": {
+              "x": 0.75,
+              "y": 0.5,
+              "z": 0.5
+            },
             "rotation": {
               "x": 0,
               "y": 0.1753000020980835,
               "z": 0,
               "w": -0.984499990940094
-            },
-            "scale": {
-              "x": 0.75,
-              "y": 0.5,
-              "z": 0.5
             },
             "parent": 0
           }
@@ -937,16 +937,16 @@
               "y": 0.8399999737739563,
               "z": 24.98995018005371
             },
+            "scale": {
+              "x": 0.75,
+              "y": 0.5,
+              "z": 0.5
+            },
             "rotation": {
               "x": 0,
               "y": 0.8245063424110413,
               "z": 0,
               "w": -0.5658265352249146
-            },
-            "scale": {
-              "x": 0.75,
-              "y": 0.5,
-              "z": 0.5
             },
             "parent": 0
           }
@@ -958,16 +958,16 @@
               "y": 0.8399999737739563,
               "z": 26.691835403442383
             },
+            "scale": {
+              "x": 0.75,
+              "y": 0.5,
+              "z": 0.5
+            },
             "rotation": {
               "x": 0,
               "y": 0.9815543293952942,
               "z": 0,
               "w": 0.19110597670078278
-            },
-            "scale": {
-              "x": 0.75,
-              "y": 0.5,
-              "z": 0.5
             },
             "parent": 0
           }
@@ -979,16 +979,16 @@
               "y": 0.8399999737739563,
               "z": 22.854496002197266
             },
+            "scale": {
+              "x": 0.75,
+              "y": 0.5,
+              "z": 0.5
+            },
             "rotation": {
               "x": 0,
               "y": 0.6122950911521912,
               "z": 0,
               "w": 0.7906106114387512
-            },
-            "scale": {
-              "x": 0.75,
-              "y": 0.5,
-              "z": 0.5
             },
             "parent": 0
           }
@@ -1000,16 +1000,16 @@
               "y": 0.7300000190734863,
               "z": 24
             },
+            "scale": {
+              "x": 2,
+              "y": 0.699999988079071,
+              "z": 2
+            },
             "rotation": {
               "x": 0,
               "y": 0.707099974155426,
               "z": 0,
               "w": 0.707099974155426
-            },
-            "scale": {
-              "x": 2,
-              "y": 0.699999988079071,
-              "z": 2
             },
             "parent": 0
           }
@@ -1021,16 +1021,16 @@
               "y": 0.7300000190734863,
               "z": 24
             },
+            "scale": {
+              "x": 2,
+              "y": 0.699999988079071,
+              "z": 2
+            },
             "rotation": {
               "x": 0,
               "y": 0.707099974155426,
               "z": 0,
               "w": -0.707099974155426
-            },
-            "scale": {
-              "x": 2,
-              "y": 0.699999988079071,
-              "z": 2
             },
             "parent": 0
           }
@@ -1042,16 +1042,16 @@
               "y": 0.7300000190734863,
               "z": 26.880939483642578
             },
+            "scale": {
+              "x": 2,
+              "y": 0.699999988079071,
+              "z": 2
+            },
             "rotation": {
               "x": 0,
               "y": 0,
               "z": 0,
               "w": 1
-            },
-            "scale": {
-              "x": 2,
-              "y": 0.699999988079071,
-              "z": 2
             },
             "parent": 0
           }
@@ -1063,16 +1063,16 @@
               "y": 0.7300000190734863,
               "z": 21.112646102905273
             },
+            "scale": {
+              "x": 2,
+              "y": 0.699999988079071,
+              "z": 2
+            },
             "rotation": {
               "x": 0,
               "y": 1,
               "z": 0,
               "w": 0
-            },
-            "scale": {
-              "x": 2,
-              "y": 0.699999988079071,
-              "z": 2
             },
             "parent": 0
           }
@@ -1084,16 +1084,16 @@
               "y": 2.2300000190734863,
               "z": 0.8799999952316284
             },
+            "scale": {
+              "x": 2.700000047683716,
+              "y": 1.5,
+              "z": 2
+            },
             "rotation": {
               "x": 0,
               "y": 1,
               "z": 0,
               "w": 0
-            },
-            "scale": {
-              "x": 2.700000047683716,
-              "y": 1.5,
-              "z": 2
             },
             "parent": 0
           }
@@ -1105,100 +1105,16 @@
               "y": 2.2300000190734863,
               "z": 46.88093948364258
             },
-            "rotation": {
-              "x": 0,
-              "y": 0,
-              "z": 0,
-              "w": 1
-            },
             "scale": {
               "x": 2.700000047683716,
               "y": 1.5,
               "z": 2
             },
-            "parent": 0
-          }
-        },
-        "565": {
-          "json": {
-            "position": {
-              "x": 0.75,
-              "y": 1.4500000476837158,
-              "z": 18.40999984741211
-            },
-            "rotation": {
-              "x": 0,
-              "y": -0.707099974155426,
-              "z": 0,
-              "w": 0.707099974155426
-            },
-            "scale": {
-              "x": 0.699999988079071,
-              "y": 0.699999988079071,
-              "z": 1
-            },
-            "parent": 0
-          }
-        },
-        "566": {
-          "json": {
-            "position": {
-              "x": 0.75,
-              "y": 1.4500000476837158,
-              "z": 29.520000457763672
-            },
-            "rotation": {
-              "x": 0,
-              "y": -0.707099974155426,
-              "z": 0,
-              "w": 0.707099974155426
-            },
-            "scale": {
-              "x": 0.699999988079071,
-              "y": 0.699999988079071,
-              "z": 1
-            },
-            "parent": 0
-          }
-        },
-        "567": {
-          "json": {
-            "position": {
-              "x": 4.380000114440918,
-              "y": 0.6800000071525574,
-              "z": 34.84000015258789
-            },
-            "rotation": {
-              "x": 0,
-              "y": 1,
-              "z": 0,
-              "w": 0
-            },
-            "scale": {
-              "x": 0.36000001430511475,
-              "y": 0.4099999964237213,
-              "z": 0.5099999904632568
-            },
-            "parent": 0
-          }
-        },
-        "568": {
-          "json": {
-            "position": {
-              "x": 4.380000114440918,
-              "y": 0.6800000071525574,
-              "z": 13.130000114440918
-            },
             "rotation": {
               "x": 0,
               "y": 0,
               "z": 0,
               "w": 1
-            },
-            "scale": {
-              "x": 0.36000001430511475,
-              "y": 0.4099999964237213,
-              "z": 0.5099999904632568
             },
             "parent": 0
           }
@@ -2107,7 +2023,7 @@
           "json": {
             "src": "assets/scene/Models/center/center.glb",
             "visibleMeshesCollisionMask": 0,
-            "invisibleMeshesCollisionMask": 3
+            "invisibleMeshesCollisionMask": 2
           }
         },
         "519": {
@@ -2122,13 +2038,6 @@
             "src": "assets/scene/Models/centerTextProgress/centerTextProgress.glb",
             "visibleMeshesCollisionMask": 0,
             "invisibleMeshesCollisionMask": 3
-          }
-        },
-        "521": {
-          "json": {
-            "src": "assets/scene/Models/TheLivingGarden_DemoScene/TheLivingGarden_DemoScene.glb",
-            "visibleMeshesCollisionMask": 2,
-            "invisibleMeshesCollisionMask": 0
           }
         },
         "522": {
@@ -2211,8 +2120,8 @@
         "534": {
           "json": {
             "src": "assets/scene/Models/Bloom/Bloom.glb",
-            "visibleMeshesCollisionMask": 2,
-            "invisibleMeshesCollisionMask": 3
+            "visibleMeshesCollisionMask": 0,
+            "invisibleMeshesCollisionMask": 0
           }
         },
         "535": {
@@ -2271,6 +2180,13 @@
             "invisibleMeshesCollisionMask": 1
           }
         },
+        "543": {
+          "json": {
+            "src": "assets/scene/Models/scene/scene.glb",
+            "visibleMeshesCollisionMask": 0,
+            "invisibleMeshesCollisionMask": 2
+          }
+        },
         "544": {
           "json": {
             "src": "assets/scene/Models/demoPlant/demoPlant.glb",
@@ -2297,34 +2213,6 @@
             "src": "assets/scene/Models/demoPlant/demoPlant.glb",
             "visibleMeshesCollisionMask": 0,
             "invisibleMeshesCollisionMask": 1
-          }
-        },
-        "565": {
-          "json": {
-            "src": "assets/asset-packs/half_column/Half_Column.glb",
-            "visibleMeshesCollisionMask": 0,
-            "invisibleMeshesCollisionMask": 3
-          }
-        },
-        "566": {
-          "json": {
-            "src": "assets/asset-packs/half_column/Half_Column.glb",
-            "visibleMeshesCollisionMask": 0,
-            "invisibleMeshesCollisionMask": 3
-          }
-        },
-        "567": {
-          "json": {
-            "src": "assets/asset-packs/half_column/Half_Column.glb",
-            "visibleMeshesCollisionMask": 0,
-            "invisibleMeshesCollisionMask": 3
-          }
-        },
-        "568": {
-          "json": {
-            "src": "assets/asset-packs/half_column/Half_Column.glb",
-            "visibleMeshesCollisionMask": 0,
-            "invisibleMeshesCollisionMask": 3
           }
         }
       }
@@ -3432,11 +3320,6 @@
             "value": "centerTextProgress"
           }
         },
-        "521": {
-          "json": {
-            "value": "TheLivingGarden_DemoScene.glb"
-          }
-        },
         "522": {
           "json": {
             "value": "Plant_7"
@@ -3542,6 +3425,11 @@
             "value": "Plant_18"
           }
         },
+        "543": {
+          "json": {
+            "value": "scene.glb"
+          }
+        },
         "544": {
           "json": {
             "value": "Plant_19"
@@ -3631,26 +3519,6 @@
           "json": {
             "value": "Leaderboard_2"
           }
-        },
-        "565": {
-          "json": {
-            "value": "BarPlaceholder_1"
-          }
-        },
-        "566": {
-          "json": {
-            "value": "BarPlaceholder_2"
-          }
-        },
-        "567": {
-          "json": {
-            "value": "BarPlaceholder_3"
-          }
-        },
-        "568": {
-          "json": {
-            "value": "BarPlaceholder_4"
-          }
         }
       }
     },
@@ -3696,9 +3564,9 @@
         "serializationType": "map"
       },
       "data": {
-        "568": {
+        "543": {
           "json": {
-            "gizmo": 1
+            "gizmo": 0
           }
         }
       }
@@ -3754,7 +3622,6 @@
                   534,
                   516,
                   517,
-                  521,
                   518,
                   519,
                   520,
@@ -3773,10 +3640,7 @@
                   562,
                   563,
                   564,
-                  565,
-                  566,
-                  567,
-                  568
+                  543
                 ]
               },
               {
@@ -3868,10 +3732,6 @@
               },
               {
                 "entity": 517,
-                "children": []
-              },
-              {
-                "entity": 521,
                 "children": []
               },
               {
@@ -4011,19 +3871,7 @@
                 "children": []
               },
               {
-                "entity": 565,
-                "children": []
-              },
-              {
-                "entity": 566,
-                "children": []
-              },
-              {
-                "entity": 567,
-                "children": []
-              },
-              {
-                "entity": 568,
+                "entity": 543,
                 "children": []
               }
             ]
@@ -4061,9 +3909,6 @@
           "json": {}
         },
         "520": {
-          "json": {}
-        },
-        "521": {
           "json": {}
         },
         "522": {
@@ -4129,6 +3974,9 @@
         "542": {
           "json": {}
         },
+        "543": {
+          "json": {}
+        },
         "544": {
           "json": {}
         },
@@ -4181,18 +4029,6 @@
           "json": {}
         },
         "564": {
-          "json": {}
-        },
-        "565": {
-          "json": {}
-        },
-        "566": {
-          "json": {}
-        },
-        "567": {
-          "json": {}
-        },
-        "568": {
           "json": {}
         },
         "569": {

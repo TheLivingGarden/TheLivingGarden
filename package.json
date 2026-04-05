@@ -3,12 +3,16 @@
   "version": "1.0.0",
   "description": "SDK7 Template scene",
   "scripts": {
+    "prestart": "node patch-glbs.cjs",
     "start": "sdk-commands start",
+    "predeploy": "node patch-glbs.cjs && node check-glb.cjs",
     "deploy": "sdk-commands deploy",
     "build": "sdk-commands build",
     "upgrade-sdk": "npm install --save-dev @dcl/sdk@latest",
     "upgrade-sdk:next": "npm install --save-dev @dcl/sdk@next",
-    "server-logs": "sdk-commands sdk-server-logs"
+    "server-logs": "sdk-commands sdk-server-logs",
+    "postinstall": "node patch-node-modules.cjs",
+    "check-glb": "node check-glb.cjs"
   },
   "devDependencies": {
     "@dcl/hammurabi-server": "^1.0.0-22765994716.commit-c1fbbed",

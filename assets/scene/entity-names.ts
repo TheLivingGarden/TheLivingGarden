@@ -5,10 +5,6 @@
  * Object containing all entity names in the scene for autocomplete support.
  */
 export enum EntityNames {
-  BarPlaceholder_1 = "BarPlaceholder_1",
-  BarPlaceholder_2 = "BarPlaceholder_2",
-  BarPlaceholder_3 = "BarPlaceholder_3",
-  BarPlaceholder_4 = "BarPlaceholder_4",
   Bloom = "Bloom",
   Ground = "Ground",
   Image = "Image",
@@ -46,8 +42,6 @@ export enum EntityNames {
   Plant_7 = "Plant_7",
   Plant_8 = "Plant_8",
   Plant_9 = "Plant_9",
-  Solid_Pale_Brown = "Solid Pale Brown",
-  TheLivingGarden_DemoScene_glb = "TheLivingGarden_DemoScene.glb",
   Tile_1 = "Tile 1",
   Tile_2 = "Tile 2",
   Tile_3 = "Tile 3",
@@ -55,8 +49,7 @@ export enum EntityNames {
   centerTextBloom = "centerTextBloom",
   centerTextProgress = "centerTextProgress",
   centerToon = "centerToon",
-  progressBarsGreen = "progressBarsGreen",
-  progressBarsRed = "progressBarsRed",
+  scene_glb = "scene.glb",
   wateringLabel1 = "wateringLabel1",
   wateringLabel2 = "wateringLabel2",
   wateringLabel3 = "wateringLabel3",
