@@ -298,7 +298,8 @@ function updateLeaderboardDisplay(entries: Array<{ displayName: string; count: n
 
 function showWelcomeProgress() {
   const count = computeWateredCount()
-  showToast(`${count}/${BLOOM_THRESHOLD} Plants Watered`, 4_000)
+  const pct = Math.round((count / TOTAL_PLANTS) * 100)
+  showToast(`${pct}% of Plants Watered`, 4_000)
 }
 
 // ---------------------------------------------------------------
@@ -494,7 +495,8 @@ function waterPlant(entity: Entity, plantId: string) {
 
   // ── Local UI ─────────────────────────────────────────────────
   updateProgressText()
-  showToast('Plant Watered!', 2_500, true)
+  const _pct = Math.round((computeWateredCount() / TOTAL_PLANTS) * 100)
+  showToast(`Plant Watered! ${_pct}%`, 2_500, true)
   if (justHitLimit) timers.setTimeout(() => {
     showDailyLimit(formatDailyLimitMessage(runtimeTestMode))
   }, 2_500)
@@ -732,7 +734,8 @@ export function setupWateringSystem() {
     playerWateredToday = data.wateredToday
     if (!initialLoadDone) {
       initialLoadDone = true
-      showWelcomeProgress()
+      // Delay so plantStateUpdate join-sync messages arrive before we show the %
+      timers.setTimeout(showWelcomeProgress, 1_500)
     }
     if (!overrideDailyLimit && playerWateredToday >= dailyWaterLimit && !dailyLimitReached) {
       onDailyLimitReached()
