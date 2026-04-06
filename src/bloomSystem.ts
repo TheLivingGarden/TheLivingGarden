@@ -7,13 +7,11 @@ import {
   Entity,
   AudioSource,
   Animator,
-  TextShape,
-  Billboard,
-  BillboardMode,
   Transform,
   timers,
 } from '@dcl/sdk/ecs'
 import { startPetalRain, startPetalSettle } from './petalSystem'
+import { showToast } from './notifications'
 
 // ---------------------------------------------------------------
 // Configuration
@@ -22,7 +20,8 @@ import { startPetalRain, startPetalSettle } from './petalSystem'
 const MUSIC_FADE_IN_MS   = 3_000   // bloom music swells in over 3s, then visuals trigger
 const MUSIC_FADE_OUT_MS  = 6_000   // bloom music fades out over 6s
 const AMBIENT_MAX_VOLUME = 0.7     // background level for the ambient track
-const ANIM_BLOOM         = 'Bloom'
+const ANIM_BLOOM         = 'OpenAction'
+const ANIM_IDLE          = 'CloseIdle'
 
 // ---------------------------------------------------------------
 // State
@@ -32,7 +31,6 @@ let bloomActive        = false
 let bloomSoundEntity:   Entity | null = null
 let ambientSoundEntity: Entity | null = null
 let bloomModelEntity:   Entity | null = null
-let bloomBillboard:     Entity
 let musicFadeState: 'in' | 'out' | 'none' = 'none'
 let musicFadeMs = 0
 let testMode    = false
@@ -59,12 +57,8 @@ function getNextBloomTime(): number {
   return target.getTime()
 }
 
-function showBloomText(text: string) {
-  TextShape.getMutable(bloomBillboard).text = text
-}
-
 function launchVisualBloom() {
-  showBloomText('The Garden is in Full Bloom!')
+  showToast('The Garden is in Full Bloom!', 6_000)
   console.log('Bloom visual launched!')
 
   onVisualBloomCallback()
@@ -146,12 +140,6 @@ export function setupBloomSystem(opts: {
   onResetCallback        = opts.onReset
   onVisualBloomCallback  = opts.onVisualBloom ?? (() => {})
 
-  // Bloom text billboard — shown when all plants are watered
-  bloomBillboard = engine.addEntity()
-  Transform.create(bloomBillboard, { position: { x: 6.75, y: 5, z: 24 } })
-  TextShape.create(bloomBillboard, { text: '', fontSize: 4 })
-  Billboard.create(bloomBillboard, { billboardMode: BillboardMode.BM_Y })
-
   // Ambient background track — plays from scene load, fades out during bloom
   ambientSoundEntity = engine.addEntity()
   Transform.create(ambientSoundEntity, { position: { x: 6.75, y: 2, z: 24 } })
@@ -174,7 +162,10 @@ export function setupBloomSystem(opts: {
   if (bloomEnt) {
     bloomModelEntity = bloomEnt
     Animator.createOrReplace(bloomEnt, {
-      states: [{ clip: ANIM_BLOOM, playing: false, loop: true }],
+      states: [
+        { clip: ANIM_IDLE,  playing: true,  loop: true },
+        { clip: ANIM_BLOOM, playing: false, loop: true },
+      ],
     })
   } else {
     console.log('[BloomSystem] Bloom entity not found')
@@ -205,7 +196,6 @@ export function triggerBloomEvent(): void {
  *  Call from wateringSystem.resetAllPlants at the start of the reset sequence. */
 export function endBloom(): void {
   bloomActive = false
-  showBloomText('')
 
   if (bloomSoundEntity) {
     musicFadeMs    = 0
@@ -215,9 +205,9 @@ export function endBloom(): void {
   startPetalSettle()
 
   if (bloomModelEntity) {
-    // Turn off looping — the current cycle plays through to the end and
-    // the model settles on its final frame rather than snapping to a stop.
-    Animator.getMutable(bloomModelEntity).states[0].loop = false
+    // Switch back to CloseIdle — lets the current OpenAction cycle finish
+    // naturally before the idle loop takes over.
+    Animator.playSingleAnimation(bloomModelEntity, ANIM_IDLE)
   }
 }
 

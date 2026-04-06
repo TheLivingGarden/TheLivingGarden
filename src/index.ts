@@ -2,7 +2,6 @@ import {} from '@dcl/sdk/math'
 import { isServer } from '@dcl/sdk/network'
 import { setupNotifications } from './notifications'
 import { setupWateringSystem } from './wateringSystem'
-import { setupSittingSystem }  from './sittingSystem'
 
 // Importing shared schemas + messages here ensures registerMessages()
 // and defineComponent() run on BOTH server and client before any
@@ -21,8 +20,5 @@ export async function main() {
   setupNotifications()
   setupWateringSystem()
 
-  setupSittingSystem([
-    'Sit Spot 1',
-    'Sit Spot 2',
-  ])
+
 }

@@ -1,52 +1,58 @@
 // =============================================================
 // The Living Garden — Vertical Progress Bars
 //
-// Each bar's transform is read from a BarPlaceholder_N entity
-// placed in Creator Hub.  The placeholder's GltfContainer is
-// removed and it is repurposed as the background plate.
-// Fill and marker ticks are parented to it (inherit rotation).
-// Labels are world-space + BillboardMode.BM_Y so they always
-// face the player regardless of which way the bar is oriented.
+// All bar positions are defined in BAR_DEFINITIONS — no Creator
+// Hub placeholder entities required.  Each bar is a code-created
+// background plate; fill and marker ticks are parented to it so
+// they inherit rotation.  Labels are world-space so they render
+// correctly regardless of bar orientation.
 // =============================================================
 
 import {
   engine,
   Entity,
-  GltfContainer,
   MeshRenderer,
   Material,
   MaterialTransparencyMode,
   Transform,
   TextShape,
 } from '@dcl/sdk/ecs'
-import { Color4 } from '@dcl/sdk/math'
+import { Color4, Quaternion } from '@dcl/sdk/math'
 import { BLOOM_THRESHOLD, TOTAL_PLANTS } from './shared/config'
 
-// ---------------------------------------------------------------
-// Placeholder names — created in Creator Hub
-// ---------------------------------------------------------------
+// ===============================================================
+// ██████╗  █████╗ ██████╗      ██████╗ ██████╗ ███╗   ██╗███████╗██╗ ██████╗
+// ██╔══██╗██╔══██╗██╔══██╗    ██╔════╝██╔═══██╗████╗  ██║██╔════╝██║██╔════╝
+// ██████╔╝███████║██████╔╝    ██║     ██║   ██║██╔██╗ ██║█████╗  ██║██║  ███╗
+// ██╔══██╗██╔══██║██╔══██╗    ██║     ██║   ██║██║╚██╗██║██╔══╝  ██║██║   ██║
+// ██████╔╝██║  ██║██║  ██║    ╚██████╗╚██████╔╝██║ ╚████║██║     ██║╚██████╔╝
+// ╚═════╝ ╚═╝  ╚═╝╚═╝  ╚═╝     ╚═════╝ ╚═════╝ ╚═╝  ╚═══╝╚═╝     ╚═╝ ╚═════╝
+//
+//  No Creator Hub entities required — all bar positions live here.
+//  Add / remove entries in BAR_DEFINITIONS to place bars in the scene.
+// ===============================================================
 
-const PLACEHOLDER_NAMES = [
-  'BarPlaceholder_1',
-  'BarPlaceholder_2',
-  'BarPlaceholder_3',
-  'BarPlaceholder_4',
+// ── Bar positions & dimensions ───────────────────────────────────
+// Each entry defines one bar's world-space anchor.
+// rotation: euler degrees (pitch X, yaw Y, roll Z)
+//           { x:0, y:0,   z:0 } = faces +Z
+//           { x:0, y:90,  z:0 } = faces +X (rotated 90° right)
+//           { x:0, y:180, z:0 } = faces -Z (flipped)
+const BAR_DEFINITIONS: Array<{
+  position: { x: number; y: number; z: number }
+  rotation: { x: number; y: number; z: number }   // euler degrees
+  width:    number   // metres
+  height:   number   // metres
+  depth:    number   // metres (keep thin, e.g. 0.06)
+}> = [
+  // ── placeholder positions — replace with your actual locations ──
+  { position: { x: 4.425,  y: 1, z: 13.25 }, rotation: { x:0, y:0, z:0 }, width: 0.25, height: 3, depth: 0.06 },
+  { position: { x: 4.45,  y: 1, z: 34.75 }, rotation: { x:0, y:180, z:0 }, width: 0.25, height: 3, depth: 0.06 },
+  { position: { x: 0.4, y: 3, z: 18.375 }, rotation: { x:0, y:-90, z:0 }, width: 0.35, height: 5, depth: 0.06 },
+  { position: { x: 0.4, y: 3, z: 29.61 }, rotation: { x:0, y:-90, z:0 }, width: 0.35, height: 5, depth: 0.06 },
 ]
 
-// ===============================================================
-// ██████╗ ██████╗  ██████╗  ██████╗ ██████╗ ███████╗███████╗███████╗
-// ██╔══██╗██╔══██╗██╔═══██╗██╔════╝ ██╔══██╗██╔════╝██╔════╝██╔════╝
-// ██████╔╝██████╔╝██║   ██║██║  ███╗██████╔╝█████╗  ███████╗███████╗
-// ██╔═══╝ ██╔══██╗██║   ██║██║   ██║██╔══██╗██╔══╝  ╚════██║╚════██║
-// ██║     ██║  ██║╚██████╔╝╚██████╔╝██║  ██║███████╗███████║███████║
-// ╚═╝     ╚═╝  ╚═╝ ╚═════╝  ╚═════╝ ╚═╝  ╚═╝╚══════╝╚══════╝╚══════╝
-//                     B A R   C O N F I G
-// ===============================================================
-
 // ── Shape ────────────────────────────────────────────────────────
-const HEIGHT_MULTIPLIER = 6      // multiply placeholder Y scale
-const WIDTH_MULTIPLIER  = 0.6    // multiply placeholder X scale
-const DEPTH_MULTIPLIER  = 0.2    // multiply placeholder Z scale (keep thin)
 const BAR_LIFT_M        = 1      // world-space upward offset (metres)
 
 // ── Fill thresholds (0–1 ratio of total plants) ───────────────────
@@ -71,11 +77,11 @@ const THRESHOLD_COLOR   = { r: 1.00, g: 0.84, b: 0.10 }   // gold at 80%
 const THRESHOLD_EMISSION = 1.6
 
 // ── Marker label font sizes & position ───────────────────────────
-const LABEL_FONT_SIZE           = 1.9
-const LABEL_FONT_SIZE_THRESHOLD = 2.4
+const LABEL_FONT_SIZE           = 1
+const LABEL_FONT_SIZE_THRESHOLD = 1.5
 // World-space gap between the bar's right edge and the label (metres)
 // Positive = further right, negative = overlap the bar
-const LABEL_OFFSET_M            = 0.4
+const LABEL_OFFSET_M            = 0.2
 
 // ===============================================================
 //                  end of config
@@ -137,33 +143,23 @@ function quatRightZ(qx: number, qy: number, qz: number, qw: number): number {
 // ---------------------------------------------------------------
 
 export function setupProgressBars(): void {
-  for (const name of PLACEHOLDER_NAMES) {
-    const ph = engine.getEntityOrNullByName(name)
-    if (!ph) { console.log(`[ProgressBars] ${name} not found`); continue }
+  for (const def of BAR_DEFINITIONS) {
+    const sx = def.width   // world width
+    const sy = def.height  // world height
+    const sz = def.depth   // world depth
+    const px = def.position.x
+    const py = def.position.y + BAR_LIFT_M   // lifted
+    const pz = def.position.z
+    const quat = Quaternion.fromEulerDegrees(def.rotation.x, def.rotation.y, def.rotation.z)
+    const { x: qx, y: qy, z: qz, w: qw } = quat
 
-    const tf = Transform.getOrNull(ph)
-    if (!tf) { console.log(`[ProgressBars] ${name} has no Transform`); continue }
-
-    const sx = tf.scale.x * WIDTH_MULTIPLIER   // world width
-    const sy = tf.scale.y * HEIGHT_MULTIPLIER  // world height (scaled up)
-    const sz = tf.scale.z * DEPTH_MULTIPLIER   // world depth  (thinned)
-    const px = tf.position.x
-    const py = tf.position.y + BAR_LIFT_M      // lifted
-    const pz = tf.position.z
-    const { x: qx, y: qy, z: qz, w: qw } = tf.rotation
-
-    // ── Remove Creator Hub's original mesh, then set our background ─
-    // Creator Hub places primitives as GltfContainer; if we leave it
-    // alongside MeshRenderer.setBox both render at once (produces the
-    // pink/salmon double-mesh seen in the screenshot).
-    GltfContainer.deleteFrom(ph)
-    // Write adjusted dimensions back so the background box and all parented
-    // children (fill, ticks) reflect the new height, depth, and position.
-    const phTf      = Transform.getMutable(ph)
-    phTf.scale.x    = sx
-    phTf.scale.y    = sy
-    phTf.scale.z    = sz
-    phTf.position.y = py
+    // ── Background plate — code-created entity, no Creator Hub dependency ─
+    const ph = engine.addEntity()
+    Transform.create(ph, {
+      position: { x: px, y: py, z: pz },
+      rotation: quat,
+      scale:    { x: sx, y: sy, z: sz },
+    })
     MeshRenderer.setBox(ph)
     Material.setPbrMaterial(ph, {
       albedoColor:       COLOR_BG,
@@ -236,7 +232,7 @@ export function setupProgressBars(): void {
       const label = engine.addEntity()
       Transform.create(label, {
         position: { x: labelX, y: labelY, z: labelZ },
-        rotation: tf.rotation,   // same Y rotation as the bar → text faces bar front
+        rotation: quat,   // same Y rotation as the bar → text faces bar front
       })
       TextShape.create(label, {
         text:      m.label,

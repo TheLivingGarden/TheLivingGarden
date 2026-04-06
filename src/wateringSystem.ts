@@ -38,6 +38,7 @@ import { setupBloomSystem, triggerBloomEvent, endBloom, isBloomActive, musicFade
 import { setupSparkleSystem, triggerSparkle, triggerWateringTribute, sparkleSystem, triggerBloomSparkles, endBloomSparkles, bloomSparkleSystem } from './sparkleSystem'
 import { setupAmbientFX, triggerBloomShockwave, triggerGroundRipple, startFireflies, stopFireflies, ambientFXSystem } from './ambientFX'
 import { setupProgressBars, updateProgressBars } from './progressBarsSystem'
+import { setupLeaderboardBoards, updateLeaderboardDisplay } from './leaderboardSystem'
 import { showToast, showDailyLimit, hideDailyLimit, showPersistent, hidePersistent, formatBloomCountdown, formatDailyLimitMessage } from './notifications'
 import { movePlayerTo, triggerSceneEmote } from '~system/RestrictedActions'
 import { room }       from './shared/messages'
@@ -91,7 +92,6 @@ export const PlantData = engine.defineComponent('plant-data', {
 let percentageEntity:    Entity
 const wateringLabels:    Entity[] = []   // Image_2–5 placed in Creator Hub
 const bloomLabels:       Entity[] = []   // Image_6–9 placed in Creator Hub
-const leaderboardLabels: Entity[] = []   // auto-created, parented to Leaderboard_1 & Leaderboard_2
 let hoverSoundEntity:    Entity
 let clickSoundEntity:    Entity
 let wateringSoundEntity: Entity
@@ -167,14 +167,12 @@ let resetTimerMs = 0
 // ---------------------------------------------------------------
 
 let _sceneAssetsResolved = false
-let _centerToon:         Entity | null = null
 let _centerTextBloom:    Entity | null = null
 let _centerTextProgress: Entity | null = null
 
 function resolveSceneAssets() {
   if (_sceneAssetsResolved) return
   _sceneAssetsResolved  = true
-  _centerToon         = engine.getEntityOrNullByName('centerToon')
   _centerTextBloom    = engine.getEntityOrNullByName('centerTextBloom')
   _centerTextProgress = engine.getEntityOrNullByName('centerTextProgress')
 }
@@ -187,7 +185,6 @@ function setVisible(entity: Entity | null, visible: boolean) {
 function updateSceneAssets() {
   resolveSceneAssets()
   const healthy = computeWateredCount() >= BLOOM_THRESHOLD
-  setVisible(_centerToon,         healthy)
   setVisible(_centerTextBloom,    healthy)
   setVisible(_centerTextProgress, !healthy)
   // Hide the % progress labels (Image_2–5 + wateringPercentage) during bloom
@@ -244,56 +241,6 @@ function updateProgressText() {
 
   updateProgressBars(count, TOTAL_PLANTS)
   updateSceneAssets()
-}
-
-const LEADERBOARD_ENTRIES = 4
-const LEADERBOARD_BOARDS  = ['Leaderboard_1', 'Leaderboard_2']
-const LEADERBOARD_START_Y = 0.55    // y of first entry in the board's local space
-const LEADERBOARD_STEP_Y  = 0.37    // vertical gap between entries
-
-const LEADERBOARD_HEADER_Y = LEADERBOARD_START_Y + LEADERBOARD_STEP_Y * 0.9
-
-function setupLeaderboardBoards() {
-  for (const boardName of LEADERBOARD_BOARDS) {
-    const board = engine.getEntityOrNullByName(boardName)
-    if (!board) { console.log(`[WateringSystem] ${boardName} not found`); continue }
-
-    // Header row — sits above the first entry
-    const header = engine.addEntity()
-    Transform.create(header, {
-      position: { x: 0, y: LEADERBOARD_HEADER_Y, z: 0.01 },
-      parent: board,
-    })
-    TextShape.create(header, {
-      text:      'NAME                    WATERS',
-      fontSize:  1.6,
-      textColor: { r: 1, g: 0.84, b: 0.1, a: 1 },  // gold
-    })
-
-    // Entry rows
-    for (let i = 0; i < LEADERBOARD_ENTRIES; i++) {
-      const label = engine.addEntity()
-      Transform.create(label, {
-        position: { x: 0, y: LEADERBOARD_START_Y - i * LEADERBOARD_STEP_Y, z: 0.01 },
-        parent: board,
-      })
-      TextShape.create(label, {
-        text:      '',
-        fontSize:  2,
-        textColor: { r: 1, g: 1, b: 1, a: 1 },
-      })
-      leaderboardLabels.push(label)
-    }
-  }
-}
-
-function updateLeaderboardDisplay(entries: Array<{ displayName: string; count: number }>) {
-  for (let i = 0; i < leaderboardLabels.length; i++) {
-    const entryIdx = i % LEADERBOARD_ENTRIES
-    const entry    = entries[entryIdx]
-    const text     = entry ? `${entryIdx + 1}.  ${entry.displayName}    ${entry.count}` : ''
-    TextShape.getMutable(leaderboardLabels[i]).text = text
-  }
 }
 
 function showWelcomeProgress() {
