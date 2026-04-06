@@ -185,9 +185,6 @@ const RIPPLE_R_MAX  = 4.5   // world-unit radius
 interface ActiveRipple { entity: Entity; elapsed: number }
 const activeRipples: ActiveRipple[] = []
 
-// No pool setup needed — entities are created on demand.
-function setupRipples() {}
-
 export function triggerGroundRipple(pos: { x: number; y: number; z: number }): void {
   const ent = engine.addEntity()
   Transform.create(ent, {
@@ -241,7 +238,6 @@ export function setupAmbientFX(): void {
   setupMotes()
   setupShockwaves()
   setupFireflies()
-  setupRipples()
 }
 
 // =============================================================

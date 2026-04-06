@@ -183,8 +183,9 @@ function scheduleExpiry(
       const ps = PlantSync.getOrNull(entity)
       if (!ps || !ps.isWatered || ps.wateredAt !== sessionTimestamp) return
 
-      PlantSync.getMutable(entity).isWatered = false
-      PlantSync.getMutable(entity).wateredAt = 0
+      const expired = PlantSync.getMutable(entity)
+      expired.isWatered = false
+      expired.wateredAt = 0
       await savePlantStates()
       room.send('plantStateUpdate', { plantId, isWatered: false, wateredAt: 0 })
       console.log(`[Server] Plant expired: ${plantId}`)
@@ -221,6 +222,23 @@ function playerJoinSystem(): void {
 }
 
 // ---------------------------------------------------------------
+// Message handler helper
+// ---------------------------------------------------------------
+
+/** Wraps room.onMessage with context validation and executeTask so
+ *  every handler is guaranteed a valid sender address. */
+function onRoomMessage<T>(
+  name:    Parameters<typeof room.onMessage>[0],
+  handler: (data: T, address: string) => Promise<void>,
+): void {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  room.onMessage(name, (data: any, context) => {
+    if (!context) return
+    executeTask(() => handler(data as T, context.from))
+  })
+}
+
+// ---------------------------------------------------------------
 // Main entry point
 // ---------------------------------------------------------------
 
@@ -243,18 +261,16 @@ export async function server(): Promise<void> {
   console.log(`[Server] ${getWateredCount()} plants currently watered`)
 
   // ── Message: waterPlant ──────────────────────────────────────
-  room.onMessage('waterPlant', (data, context) => {
-    if (!context) return
-    const playerAddress = context.from
-    const { plantId }   = data
-    const entity        = plantEntities.get(plantId)
+  onRoomMessage<{ plantId: string }>('waterPlant', async (data, playerAddress) => {
+    const { plantId } = data
+    const entity      = plantEntities.get(plantId)
 
     if (!entity) {
       console.log(`[Server] Unknown plant: ${plantId}`)
       return
     }
 
-    executeTask(async () => {
+    {
       const ps = PlantSync.getOrNull(entity)
       if (!ps) return
 
@@ -278,9 +294,10 @@ export async function server(): Promise<void> {
       }
 
       // ── All valid — water the plant ──────────────────────────
-      const now = Date.now()
-      PlantSync.getMutable(entity).isWatered = true
-      PlantSync.getMutable(entity).wateredAt = now
+      const now      = Date.now()
+      const watered  = PlantSync.getMutable(entity)
+      watered.isWatered = true
+      watered.wateredAt = now
 
       const newCount = await incrementPlayerDailyCount(playerAddress)
 
@@ -303,20 +320,18 @@ export async function server(): Promise<void> {
 
       // Check bloom threshold
       if (!bloomActive && getWateredCount() >= BLOOM_THRESHOLD) triggerBloom()
-    })
+    }
   })
 
   // ── Message: registerPlayer ──────────────────────────────────
-  room.onMessage('registerPlayer', (data, context) => {
-    if (!context) return
-    const address = context.from
-    const entry   = leaderboard.get(address)
+  onRoomMessage<{ displayName: string }>('registerPlayer', async (data, address) => {
+    const entry = leaderboard.get(address)
     if (entry) {
       entry.displayName = data.displayName
     } else {
       leaderboard.set(address, { displayName: data.displayName, total: 0 })
     }
-    executeTask(async () => { await saveLeaderboard() })
+    await saveLeaderboard()
     console.log(`[Server] Registered player: ${data.displayName} (${address})`)
   })
 

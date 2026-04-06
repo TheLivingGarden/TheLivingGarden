@@ -6,8 +6,6 @@
 // Server communication:
 //   send    →  room.send('waterPlant', { plantId })
 //   receive ←  playerDailyState | waterRejected | plantStateUpdate | bloomTriggered | bloomReset
-//
-// Cross-player plant state is synced via plantStateUpdate room messages.
 // =============================================================
 
 import {
@@ -31,50 +29,115 @@ import {
   VisibilityComponent,
   timers,
 } from '@dcl/sdk/ecs'
-import { getPlayer }               from '@dcl/sdk/players'
-import { onEnterSceneObservable }  from '@dcl/sdk/observables'
-import { setupPetalSystem, petalParticleSystem }                           from './petalSystem'
-import { setupBloomSystem, triggerBloomEvent, endBloom, isBloomActive, musicFadeSystem } from './bloomSystem'
+import { getPlayer }              from '@dcl/sdk/players'
+import { onEnterSceneObservable } from '@dcl/sdk/observables'
+import { setupPetalSystem, petalParticleSystem }                                                                   from './petalSystem'
+import { setupBloomSystem, triggerBloomEvent, endBloom, isBloomActive, musicFadeSystem }                          from './bloomSystem'
 import { setupSparkleSystem, triggerSparkle, triggerWateringTribute, sparkleSystem, triggerBloomSparkles, endBloomSparkles, bloomSparkleSystem } from './sparkleSystem'
 import { setupAmbientFX, triggerBloomShockwave, triggerGroundRipple, startFireflies, stopFireflies, ambientFXSystem } from './ambientFX'
-import { setupProgressBars, updateProgressBars } from './progressBarsSystem'
-import { setupLeaderboardBoards, updateLeaderboardDisplay } from './leaderboardSystem'
+import { setupProgressBars, updateProgressBars }              from './progressBarsSystem'
+import { setupLeaderboardBoards, updateLeaderboardDisplay }   from './leaderboardSystem'
 import { showToast, showDailyLimit, hideDailyLimit, showPersistent, hidePersistent, formatBloomCountdown, formatDailyLimitMessage } from './notifications'
-import { movePlayerTo, triggerSceneEmote } from '~system/RestrictedActions'
-import { room }       from './shared/messages'
+import { movePlayerTo, triggerSceneEmote }  from '~system/RestrictedActions'
+import { room }                             from './shared/messages'
 import { TOTAL_PLANTS, BLOOM_THRESHOLD, DAILY_WATER_LIMIT, PLANT_NAMES } from './shared/config'
 
-// ---------------------------------------------------------------
-// Configuration
-// ---------------------------------------------------------------
+// ===============================================================
+// ██████╗ ██████╗ ███╗   ██╗███████╗██╗ ██████╗
+// ██╔════╝██╔═══██╗████╗  ██║██╔════╝██║██╔════╝
+// ██║     ██║   ██║██╔██╗ ██║█████╗  ██║██║  ███╗
+// ██║     ██║   ██║██║╚██╗██║██╔══╝  ██║██║   ██║
+// ╚██████╗╚██████╔╝██║ ╚████║██║     ██║╚██████╔╝
+//  ╚═════╝ ╚═════╝ ╚═╝  ╚═══╝╚═╝     ╚═╝ ╚═════╝
+// ===============================================================
 
+// ── Test / debug ──────────────────────────────────────────────
 // Set to true to compress all timers for rapid prototyping:
-//   - Watered expiry  : 6h   → 5min
+//   - Watered expiry  : 6h  → 5min
 //   - Bloom delay     : next 6pm UTC → 10s
-//   - Server calls    : still sent, but TEST markers in logs
 const TEST_MODE = false
-let runtimeTestMode = TEST_MODE
 
-let overrideDailyLimit = false
+// ── Animation clip names (must match GLB exactly) ─────────────
+const ANIM_DROOPY_STATE  = 'DroopyState'
+const ANIM_TO_HEALTHY    = 'DroopyToHealthy'
+const ANIM_HEALTHY_STATE = 'HealthyState'
+const ANIM_TO_DROOPY     = 'HealthToDroopy'
+const ANIM_TRANSITION_MS = 1500   // ms — length of transition clips
+const ANIMATOR_INIT_DELAY_MS = 1000  // ms — defer Animator.create until GLBs load
 
-// Animation clip names — must match the GLB exactly.
-const ANIM_DROOPY_STATE   = 'DroopyState'
-const ANIM_TO_HEALTHY     = 'DroopyToHealthy'
-const ANIM_HEALTHY_STATE  = 'HealthyState'
-const ANIM_TO_DROOPY      = 'HealthToDroopy'
-const ANIM_TRANSITION_MS  = 1500
+// ── Emote ─────────────────────────────────────────────────────
+const EMOTE_SRC            = 'assets/scene/Models/Emotes/WateringCan_emote.glb'
+const EMOTE_DELAY_MS       = 400    // ms before emote fires after click
+const EMOTE_DURATION_MS    = 1500   // ms — when in the emote the plant responds
+const EMOTE_TOTAL_MS       = 2933   // ms — full clip length (keeps emoteActive locked)
+const EMOTE_MOVE_THRESHOLD = 0.4    // metres — cancel emote if player moves this far
+const WATER_DISTANCE       = 1.5    // metres — how close player steps to the plant
 
-// When in the emote the plant responds (can tips forward).
-const EMOTE_DURATION_MS = 1500
-// Full GLB clip length — emoteActive stays locked this long to prevent interruption.
-const EMOTE_TOTAL_MS    = 2933
+// ── Watering choreography milestones ─────────────────────────
+// t=0          click lands — emote starts moving player
+// t=WATER_FX   watering sound + ground ripple fire
+// t=WATER_ANIM plant tips forward — animate to healthy + magic FX
+// t=WATER_ANIM + ANIM_TRANSITION_MS — sparkles burst, tribute travels to centre
+const WATER_FX_MS   = EMOTE_DELAY_MS    // 400 ms
+const WATER_ANIM_MS = EMOTE_DURATION_MS // 1500 ms
 
+// ── Water drop prop ───────────────────────────────────────────
 const WATER_DROP_SRC = 'assets/scene/Models/waterDrop/waterDrop.glb'
-const WATER_DROP_Y   = 0.8
-const DROP_FADE_MS   = 800
+const WATER_DROP_Y   = 0.8   // local Y above plant pivot
+const DROP_FADE_MS   = 800   // ms for scale-in / scale-out tween
 
-let useClickbox      = false
-let dailyWaterLimit  = DAILY_WATER_LIMIT
+// ── Sounds ────────────────────────────────────────────────────
+const SND_HOVER    = 'assets/scene/Sounds/hover.mp3'
+const SND_CLICK    = 'assets/scene/Sounds/click.mp3'
+const SND_WATERING = 'assets/scene/Sounds/watering.mp3'
+const SND_MAGIC    = 'assets/scene/Sounds/MagicFX.mp3'
+const VOL_HOVER    = 0.7
+const VOL_CLICK    = 0.9
+const VOL_WATERING = 1.0
+const VOL_MAGIC    = 1.0
+const SND_INIT_POS = { x: 8, y: 1, z: 8 }   // initial transform — overwritten on play
+const MAGIC_SOUND_CLEANUP_MS = 8_000          // remove one-shot entity after this many ms
+
+// ── Clickbox (optional alternative pointer target) ────────────
+const CLICKBOX_Y     = 1    // local Y offset above plant pivot
+const CLICKBOX_SCALE = { x: 1.5, y: 2, z: 1.5 }
+
+// ── In-world text labels ──────────────────────────────────────
+const FONT_PCT_LABEL   = 6    // Image_2–5 + wateringPercentage entity
+const FONT_BLOOM_LABEL = 2.5  // Image_6–9 bloom countdown
+const FONT_BLOOM_CTR   = 1.5  // centerTextBloom entity
+// TextShape has no emissiveIntensity — colour only.
+const TEXT_LABEL_COLOR = { r: 0.96, g: 0.92, b: 0.80, a: 1 }  // warm cream — matches GLB text
+const SCALE_PCT_LABEL   = 0.6   // uniform scale applied to Image_2–5 + wateringPercentage
+const SCALE_BLOOM_LABEL = 1.4   // uniform scale applied to Image_6–9
+
+// ── Timers & durations ────────────────────────────────────────
+const WELCOME_DELAY_MS        = 1_500    // wait for server sync before first welcome toast
+const TOAST_WATERED_MS        = 2_500    // "Plant Watered! X%" duration
+const TOAST_WELCOME_MS        = 4_000    // "X% of Plants Watered" duration
+const TOAST_CONNECTING_MS     = 1_500    // "Connecting…" fallback
+const BLOOM_LABEL_TICK_MS     = 60_000   // re-check bloom countdown every 60 s
+const LIVE_WATER_THRESHOLD_MS = 10_000   // plantStateUpdate < 10 s old = live water by another player
+const LIMIT_DEBOUNCE_MS       = 5_000    // min gap between daily-limit toast notifications
+const EMOTE_RESET_DELAY_MS    = 500      // emote state cleanup on hot-reload
+
+// ── Expiry ────────────────────────────────────────────────────
+const EXPIRY_PROD_MS = 6 * 60 * 60 * 1_000   // 6 hours
+const EXPIRY_TEST_MS = 5 * 60 * 1_000        // 5 minutes (TEST_MODE)
+
+// ── Bloom notification text ───────────────────────────────────
+// NOTIFY_BLOOM_ACTIVE replaces the countdown pill the moment the visual
+// bloom launches (3 s after bloomTriggered) and stays until the reset.
+const NOTIFY_BLOOM_ACTIVE = 'The Garden is in Full Bloom!'
+
+// =============================================================
+//                  end of config
+// =============================================================
+
+let runtimeTestMode    = TEST_MODE
+let overrideDailyLimit = false
+let useClickbox        = false
+let dailyWaterLimit    = DAILY_WATER_LIMIT
 
 // ---------------------------------------------------------------
 // Custom Component — local per-plant watered state (client only)
@@ -96,12 +159,11 @@ let hoverSoundEntity:    Entity
 let clickSoundEntity:    Entity
 let wateringSoundEntity: Entity
 
-let playerWateredToday       = 0
-let dailyLimitReached        = false
-let lastLimitNotificationMs  = 0   // debounce — don't spam the notification
-let playerId           = 'unknown'
-let initialLoadDone    = false
-let roomReady          = false
+let playerWateredToday      = 0
+let dailyLimitReached       = false
+let lastLimitNotificationMs = 0
+let initialLoadDone         = false
+let roomReady               = false
 
 let emoteActive   = false
 let emoteGen      = 0
@@ -122,7 +184,6 @@ function setDropFade(plantEntity: Entity, direction: 'in' | 'out') {
 // Emote cleanup — dismisses the prop GLB if player moves mid-emote
 // ---------------------------------------------------------------
 
-const EMOTE_MOVE_THRESHOLD = 0.4
 function emoteCleanupSystem() {
   if (!emoteActive || !emoteStartPos) return
   const pos = Transform.getOrNull(engine.PlayerEntity)?.position
@@ -153,17 +214,15 @@ function dropFadeSystem(dt: number) {
   }
 }
 
-
 // ---------------------------------------------------------------
 // Reset animation state machine
 // ---------------------------------------------------------------
 
-let resetQueue:   Entity[] = []
-let resetPhase:   'to_droopy' | 'wait' | 'to_droopy_state' | 'done' = 'done'
-let resetTimerMs = 0
+type ResetPhase = 'to_droopy' | 'wait' | 'to_droopy_state' | 'done'
+const reset = { phase: 'done' as ResetPhase, queue: [] as Entity[], timerMs: 0 }
 
 // ---------------------------------------------------------------
-// Scene-asset visibility (progress bars, toon, bloom text)
+// Scene-asset visibility
 // ---------------------------------------------------------------
 
 let _sceneAssetsResolved = false
@@ -184,15 +243,13 @@ function setVisible(entity: Entity | null, visible: boolean) {
 
 function updateSceneAssets() {
   resolveSceneAssets()
-  const healthy = computeWateredCount() >= BLOOM_THRESHOLD
-  setVisible(_centerTextBloom,    healthy)
-  setVisible(_centerTextProgress, !healthy)
-  // Hide the % progress labels (Image_2–5 + wateringPercentage) during bloom
-  setVisible(percentageEntity, !healthy)
-  for (const e of wateringLabels) setVisible(e, !healthy)
-  // Write countdown text immediately when threshold is reached — don't wait
-  // for bloomTriggered to arrive from the server (can be 50–500 ms later).
-  if (healthy) setBloomLabelText(formatBloomCountdown(runtimeTestMode))
+  // Show bloom state whenever threshold is met OR bloom has been force-triggered
+  const bloomMode = isBloomActive() || computeWateredCount() >= BLOOM_THRESHOLD
+  setVisible(_centerTextBloom,    bloomMode)
+  setVisible(_centerTextProgress, !bloomMode)
+  setVisible(percentageEntity, !bloomMode)
+  for (const e of wateringLabels) setVisible(e, !bloomMode)
+  if (bloomMode) setBloomLabelText(formatBloomCountdown(runtimeTestMode))
 }
 
 // ---------------------------------------------------------------
@@ -207,23 +264,21 @@ function clearBloomLabels() {
   for (const e of bloomLabels) TextShape.getMutable(e).text = ''
 }
 
-/** Starts updating bloom countdown labels every 60s while bloom is active. */
 function startBloomLabelUpdater() {
   if (runtimeTestMode) { setBloomLabelText('All plants watered!\nBloom starting soon...'); return }
   setBloomLabelText(formatBloomCountdown(false))
   function tick() {
     if (!isBloomActive()) return
     setBloomLabelText(formatBloomCountdown(false))
-    timers.setTimeout(tick, 60_000)
+    timers.setTimeout(tick, BLOOM_LABEL_TICK_MS)
   }
-  timers.setTimeout(tick, 60_000)
+  timers.setTimeout(tick, BLOOM_LABEL_TICK_MS)
 }
 
 // ---------------------------------------------------------------
 // UI helpers
 // ---------------------------------------------------------------
 
-/** Count watered plants from local PlantData. */
 function computeWateredCount(): number {
   let count = 0
   for (const [, pd] of engine.getEntitiesWith(PlantData)) {
@@ -233,20 +288,19 @@ function computeWateredCount(): number {
 }
 
 function updateProgressText() {
-  const count = computeWateredCount()
-  const pct = Math.round((count / TOTAL_PLANTS) * 100)
-  const pctText = `${pct}%`
-  TextShape.getMutable(percentageEntity).text = pctText
-  for (const e of wateringLabels) TextShape.getMutable(e).text = pctText
-
+  const count  = computeWateredCount()
+  const pct    = Math.round((count / TOTAL_PLANTS) * 100)
+  const pctStr = `${pct}%`
+  TextShape.getMutable(percentageEntity).text = pctStr
+  for (const e of wateringLabels) TextShape.getMutable(e).text = pctStr
   updateProgressBars(count, TOTAL_PLANTS)
   updateSceneAssets()
 }
 
 function showWelcomeProgress() {
   const count = computeWateredCount()
-  const pct = Math.round((count / TOTAL_PLANTS) * 100)
-  showToast(`${pct}% of Plants Watered`, 4_000)
+  const pct   = Math.round((count / TOTAL_PLANTS) * 100)
+  showToast(`${pct}% of Plants Watered`, TOAST_WELCOME_MS)
 }
 
 // ---------------------------------------------------------------
@@ -288,7 +342,7 @@ function onDailyLimitReached() {
 export function resetDailyLimit() {
   playerWateredToday = 0
   dailyLimitReached  = false
-  hideDailyLimit()   // dismiss the persistent notification so the UI reflects the reset
+  hideDailyLimit()
   for (const [entity] of plantRegistry) {
     if (!PlantData.get(entity).isWatered) enablePlantClick(entity)
   }
@@ -300,8 +354,6 @@ export function resetDailyLimit() {
 // Interaction sounds & emote
 // ---------------------------------------------------------------
 
-const EMOTE_SRC = 'assets/scene/Models/Emotes/WateringCan_emote.glb'
-
 function playAtPlayer(soundEntity: Entity, audioClipUrl: string, volume: number) {
   const pos = Transform.getOrNull(engine.PlayerEntity)?.position ?? { x: 8, y: 1, z: 8 }
   Transform.getMutable(soundEntity).position = pos
@@ -309,19 +361,17 @@ function playAtPlayer(soundEntity: Entity, audioClipUrl: string, volume: number)
   timers.setTimeout(() => { AudioSource.getMutable(soundEntity).playing = true }, 0)
 }
 
-function playHoverSound()    { playAtPlayer(hoverSoundEntity,    'assets/scene/Sounds/hover.mp3',    0.7) }
-function playClickSound()    { playAtPlayer(clickSoundEntity,    'assets/scene/Sounds/click.mp3',    0.9) }
-function playWateringSound() { playAtPlayer(wateringSoundEntity, 'assets/scene/Sounds/watering.mp3', 1.0) }
+function playHoverSound()    { playAtPlayer(hoverSoundEntity,    SND_HOVER,    VOL_HOVER)    }
+function playClickSound()    { playAtPlayer(clickSoundEntity,    SND_CLICK,    VOL_CLICK)    }
+function playWateringSound() { playAtPlayer(wateringSoundEntity, SND_WATERING, VOL_WATERING) }
 
 function playMagicFXSound() {
   const pos = Transform.getOrNull(engine.PlayerEntity)?.position ?? { x: 8, y: 1, z: 8 }
   const ent = engine.addEntity()
   Transform.create(ent, { position: pos })
-  AudioSource.create(ent, { audioClipUrl: 'assets/scene/Sounds/MagicFX.mp3', playing: true, loop: false, volume: 1.0, pitch: 1 })
-  timers.setTimeout(() => engine.removeEntity(ent), 8_000)
+  AudioSource.create(ent, { audioClipUrl: SND_MAGIC, playing: true, loop: false, volume: VOL_MAGIC, pitch: 1 })
+  timers.setTimeout(() => engine.removeEntity(ent), MAGIC_SOUND_CLEANUP_MS)
 }
-
-const WATER_DISTANCE = 1.5
 
 function triggerWateringEmote(plantEntity: Entity) {
   const plantPos  = Transform.getOrNull(plantEntity)?.position
@@ -338,11 +388,11 @@ function triggerWateringEmote(plantEntity: Entity) {
     })
   }
 
-  emoteActive    = true
-  emoteStartPos  = Transform.getOrNull(engine.PlayerEntity)?.position ?? null
-  const gen      = ++emoteGen
+  emoteActive   = true
+  emoteStartPos = Transform.getOrNull(engine.PlayerEntity)?.position ?? null
+  const gen     = ++emoteGen
 
-  timers.setTimeout(() => { triggerSceneEmote({ src: EMOTE_SRC, loop: false }) }, 400)
+  timers.setTimeout(() => { triggerSceneEmote({ src: EMOTE_SRC, loop: false }) }, EMOTE_DELAY_MS)
 
   timers.setTimeout(() => {
     if (emoteGen !== gen) return
@@ -350,14 +400,13 @@ function triggerWateringEmote(plantEntity: Entity) {
     emoteStartPos = null
     const pos = Transform.getOrNull(engine.PlayerEntity)?.position
     if (pos) movePlayerTo({ newRelativePosition: pos })
-  }, 400 + EMOTE_TOTAL_MS)
+  }, EMOTE_DELAY_MS + EMOTE_TOTAL_MS)
 }
 
 // ---------------------------------------------------------------
 // Plant lifecycle
 // ---------------------------------------------------------------
 
-/** Schedule a client-side expiry timer (for the local player's plants only). */
 function scheduleExpiry(entity: Entity, sessionTimestamp: number, delayMs: number) {
   timers.setTimeout(() => {
     if (isBloomActive()) return
@@ -379,18 +428,17 @@ function scheduleExpiry(entity: Entity, sessionTimestamp: number, delayMs: numbe
   }, delayMs)
 }
 
-/** Water a single plant — optimistic local update + server message. */
 function waterPlant(entity: Entity, plantId: string) {
   if (isBloomActive()) return
   if (emoteActive)     return
-  if (!roomReady && !runtimeTestMode) { showToast('Connecting...', 1_500); return }
+  if (!roomReady && !runtimeTestMode) { showToast('Connecting...', TOAST_CONNECTING_MS); return }
 
   const pd = PlantData.getMutable(entity)
   if (pd.isWatered) return
 
   if (!overrideDailyLimit && playerWateredToday >= dailyWaterLimit) {
     const now = Date.now()
-    if (now - lastLimitNotificationMs > 5_000) {
+    if (now - lastLimitNotificationMs > LIMIT_DEBOUNCE_MS) {
       lastLimitNotificationMs = now
       showDailyLimit(formatDailyLimitMessage(runtimeTestMode))
     }
@@ -408,21 +456,23 @@ function waterPlant(entity: Entity, plantId: string) {
   disablePlantClick(entity)
   setDropFade(entity, 'out')
 
-  // ── Event sequence ──────────────────────────────────────────
   playClickSound()
   triggerWateringEmote(entity)
 
-  timers.setTimeout(playWateringSound, 400)
+  // t=WATER_FX_MS — sound + ripple
+  timers.setTimeout(playWateringSound, WATER_FX_MS)
   timers.setTimeout(() => {
     const pos = Transform.getOrNull(entity)?.position
     if (pos) triggerGroundRipple(pos)
-  }, 400)
+  }, WATER_FX_MS)
 
+  // t=WATER_ANIM_MS — plant tips forward, animate to healthy
   timers.setTimeout(() => {
     const current = PlantData.get(entity)
     if (!current.isWatered || current.wateredAt !== now) return
     Animator.playSingleAnimation(entity, ANIM_TO_HEALTHY)
     playMagicFXSound()
+    // t=WATER_ANIM_MS + ANIM_TRANSITION_MS — sparkles burst
     timers.setTimeout(() => {
       const latest = PlantData.get(entity)
       if (latest.isWatered && latest.wateredAt === now) {
@@ -430,85 +480,79 @@ function waterPlant(entity: Entity, plantId: string) {
         const plantPos = Transform.getOrNull(entity)?.position
         if (plantPos) {
           triggerSparkle(plantPos)
-          // After the burst settles, send sparkles travelling to the bloom centre
           timers.setTimeout(() => triggerWateringTribute(plantPos), 650)
         }
       }
     }, ANIM_TRANSITION_MS)
-  }, EMOTE_DURATION_MS)
+  }, WATER_ANIM_MS)
 
-  // ── Server message (authoritative validation + persistence) ──
   room.send('waterPlant', { plantId })
 
-  // ── Local UI ─────────────────────────────────────────────────
   updateProgressText()
   const _pct = Math.round((computeWateredCount() / TOTAL_PLANTS) * 100)
-  showToast(`Plant Watered! ${_pct}%`, 2_500, true)
+  showToast(`Plant Watered! ${_pct}%`, TOAST_WATERED_MS, true)
   if (justHitLimit) timers.setTimeout(() => {
     showDailyLimit(formatDailyLimitMessage(runtimeTestMode))
-  }, 2_500)
+  }, TOAST_WATERED_MS)
 
-  // Schedule client-side expiry (test mode: 5 min / prod: 6 h)
-  const expiryMs = runtimeTestMode ? 5 * 60 * 1000 : 6 * 60 * 60 * 1000
+  const expiryMs = runtimeTestMode ? EXPIRY_TEST_MS : EXPIRY_PROD_MS
   scheduleExpiry(entity, now, expiryMs)
 }
 
-/** Visual-only reset — called when server broadcasts bloomReset. */
 export function resetAllPlants() {
   endBloom()
   endBloomSparkles()
   stopFireflies()
   hidePersistent()
 
-  resetQueue = []
+  reset.queue = []
   for (const [entity] of engine.getEntitiesWith(PlantData)) {
     const pd   = PlantData.getMutable(entity)
     pd.isWatered = false
     pd.wateredAt = 0
-    resetQueue.push(entity)
+    reset.queue.push(entity)
   }
-  // Also reset daily counters so plants are immediately clickable again
   playerWateredToday = 0
   dailyLimitReached  = false
 
-  resetPhase   = 'to_droopy'
-  resetTimerMs = 0
+  reset.phase   = 'to_droopy'
+  reset.timerMs = 0
   updateProgressText()
-  console.log(`[Client] resetAllPlants — ${resetQueue.length} plants queued`)
+  console.log(`[Client] resetAllPlants — ${reset.queue.length} plants queued`)
 }
 
 function resetAnimSystem(dt: number) {
-  if (resetPhase === 'done') return
+  if (reset.phase === 'done') return
 
-  if (resetPhase === 'to_droopy') {
-    const entity = resetQueue.shift()
+  if (reset.phase === 'to_droopy') {
+    const entity = reset.queue.shift()
     if (entity) {
       Animator.stopAllAnimations(entity, true)
       Animator.playSingleAnimation(entity, ANIM_TO_DROOPY, true)
     }
-    if (resetQueue.length === 0) {
-      resetPhase   = 'wait'
-      resetTimerMs = 0
-      for (const [e] of engine.getEntitiesWith(PlantData)) resetQueue.push(e)
+    if (reset.queue.length === 0) {
+      reset.phase   = 'wait'
+      reset.timerMs = 0
+      for (const [e] of engine.getEntitiesWith(PlantData)) reset.queue.push(e)
     }
     return
   }
 
-  if (resetPhase === 'wait') {
-    resetTimerMs += dt * 1000
-    if (resetTimerMs >= ANIM_TRANSITION_MS) resetPhase = 'to_droopy_state'
+  if (reset.phase === 'wait') {
+    reset.timerMs += dt * 1000
+    if (reset.timerMs >= ANIM_TRANSITION_MS) reset.phase = 'to_droopy_state'
     return
   }
 
-  if (resetPhase === 'to_droopy_state') {
-    const entity = resetQueue.shift()
+  if (reset.phase === 'to_droopy_state') {
+    const entity = reset.queue.shift()
     if (entity && !PlantData.get(entity).isWatered) {
       Animator.stopAllAnimations(entity, true)
       Animator.playSingleAnimation(entity, ANIM_DROOPY_STATE, true)
       setDropFade(entity, 'in')
     }
-    if (resetQueue.length === 0) {
-      resetPhase = 'done'
+    if (reset.queue.length === 0) {
+      reset.phase = 'done'
       for (const entity of plantRegistry.keys()) enablePlantClick(entity)
       console.log('[Client] Reset complete — all plants droopy')
     }
@@ -530,8 +574,6 @@ function setupPlant(plantName: string) {
 
   PlantData.create(entity, { isWatered: false, wateredAt: 0 })
 
-  // GltfContainer collision masks default to physics-only — pointer raycasts
-  // won't register without CL_POINTER on the visible mesh layer.
   if (GltfContainer.has(entity)) {
     GltfContainer.getMutable(entity).visibleMeshesCollisionMask =
       ColliderLayer.CL_PHYSICS | ColliderLayer.CL_POINTER
@@ -541,7 +583,7 @@ function setupPlant(plantName: string) {
   let clickboxEntity: Entity | null = null
   if (useClickbox) {
     const clickBox = engine.addEntity()
-    Transform.create(clickBox, { position: { x: 0, y: 1, z: 0 }, scale: { x: 1.5, y: 2, z: 1.5 }, parent: entity })
+    Transform.create(clickBox, { position: { x: 0, y: CLICKBOX_Y, z: 0 }, scale: CLICKBOX_SCALE, parent: entity })
     MeshCollider.setBox(clickBox, ColliderLayer.CL_POINTER)
     clickTarget    = clickBox
     clickboxEntity = clickBox
@@ -564,10 +606,21 @@ function setupPlant(plantName: string) {
 // Public entry point
 // ---------------------------------------------------------------
 
+/** Apply a uniform scale to an entity — safe whether or not it already has a Transform. */
+function setScale(entity: Entity, s: number): void {
+  const existing = Transform.getOrNull(entity)
+  if (existing) {
+    Transform.getMutable(entity).scale = { x: s, y: s, z: s }
+  } else {
+    Transform.create(entity, { scale: { x: s, y: s, z: s } })
+  }
+}
+
 export function setupWateringSystem() {
-  // ── Percentage text — placed via Creator Hub (entity "wateringPercentage") ──
+  // ── Percentage text (entity "wateringPercentage" in Creator Hub) ──
   percentageEntity = engine.getEntityOrNullByName('wateringPercentage') ?? engine.addEntity()
-  TextShape.createOrReplace(percentageEntity, { text: '0%', fontSize: 6, textColor: { r: 1, g: 1, b: 1, a: 1 } })
+  setScale(percentageEntity, SCALE_PCT_LABEL)
+  TextShape.createOrReplace(percentageEntity, { text: '0%', fontSize: FONT_PCT_LABEL, textColor: TEXT_LABEL_COLOR })
 
   // ── Watering progress labels — Image_2 through Image_5 ──
   for (let i = 2; i <= 5; i++) {
@@ -575,38 +628,39 @@ export function setupWateringSystem() {
     if (!e) { console.log(`[WateringSystem] Image_${i} not found`); continue }
     MeshRenderer.deleteFrom(e)
     Material.deleteFrom(e)
-    TextShape.createOrReplace(e, { text: '0%', fontSize: 6, textColor: { r: 1, g: 1, b: 1, a: 1 } })
+    setScale(e, SCALE_PCT_LABEL)
+    TextShape.createOrReplace(e, { text: '0%', fontSize: FONT_PCT_LABEL, textColor: TEXT_LABEL_COLOR })
     wateringLabels.push(e)
   }
 
-  // ── Bloom countdown labels — Image_6 through Image_9 + centerTextBloom ──
+  // ── Bloom countdown labels — Image_6 through Image_9 ──
   for (let i = 6; i <= 9; i++) {
     const e = engine.getEntityOrNullByName(`Image_${i}`)
     if (!e) { console.log(`[WateringSystem] Image_${i} not found`); continue }
     MeshRenderer.deleteFrom(e)
     Material.deleteFrom(e)
-    TextShape.createOrReplace(e, { text: '', fontSize: 2.5, textColor: { r: 1, g: 1, b: 1, a: 1 } })
+    setScale(e, SCALE_BLOOM_LABEL)
+    TextShape.createOrReplace(e, { text: '', fontSize: FONT_BLOOM_LABEL, textColor: TEXT_LABEL_COLOR })
     bloomLabels.push(e)
   }
-  // centerTextBloom is the in-world scene entity — give it a TextShape so
-  // setBloomLabelText / clearBloomLabels keep it in sync automatically.
   const ctb = engine.getEntityOrNullByName('centerTextBloom')
   if (ctb) {
-    TextShape.createOrReplace(ctb, { text: '', fontSize: 1.5, textColor: { r: 1, g: 1, b: 1, a: 1 } })
+    setScale(ctb, 1)
+    TextShape.createOrReplace(ctb, { text: '', fontSize: FONT_BLOOM_CTR, textColor: TEXT_LABEL_COLOR })
     bloomLabels.push(ctb)
   } else {
     console.log('[WateringSystem] centerTextBloom not found')
   }
 
-  // ── Leaderboard — text labels parented to Leaderboard_1 & Leaderboard_2 ──
   setupLeaderboardBoards()
 
-  // Bloom system — client visual only; server drives trigger + reset
   setupBloomSystem({
     testMode:      TEST_MODE,
-    onReset:       () => {},   // server sends bloomReset — handled via message below
+    onReset:       () => {},
     onVisualBloom: () => {
-      hidePersistent()
+      // Switch the persistent pill from "Bloom in Xh Ym" → active bloom message.
+      // Don't hide it — it must survive any daily-limit pill that may be stacked above it.
+      showPersistent(NOTIFY_BLOOM_ACTIVE)
       triggerBloomShockwave()
       startFireflies()
       const positions: Array<{ x: number; y: number; z: number }> = []
@@ -619,18 +673,16 @@ export function setupWateringSystem() {
   })
 
   // Sound entities
-  const SND_POS = { x: 8, y: 1, z: 8 }
   hoverSoundEntity    = engine.addEntity()
-  Transform.create(hoverSoundEntity,    { position: SND_POS })
-  AudioSource.create(hoverSoundEntity,  { audioClipUrl: 'assets/scene/Sounds/hover.mp3',    playing: false, loop: false, volume: 1, pitch: 1 })
+  Transform.create(hoverSoundEntity,    { position: SND_INIT_POS })
+  AudioSource.create(hoverSoundEntity,  { audioClipUrl: SND_HOVER,    playing: false, loop: false, volume: VOL_HOVER,    pitch: 1 })
   clickSoundEntity    = engine.addEntity()
-  Transform.create(clickSoundEntity,    { position: SND_POS })
-  AudioSource.create(clickSoundEntity,  { audioClipUrl: 'assets/scene/Sounds/click.mp3',    playing: false, loop: false, volume: 1, pitch: 1 })
+  Transform.create(clickSoundEntity,    { position: SND_INIT_POS })
+  AudioSource.create(clickSoundEntity,  { audioClipUrl: SND_CLICK,    playing: false, loop: false, volume: VOL_CLICK,    pitch: 1 })
   wateringSoundEntity = engine.addEntity()
-  Transform.create(wateringSoundEntity, { position: SND_POS })
-  AudioSource.create(wateringSoundEntity, { audioClipUrl: 'assets/scene/Sounds/watering.mp3', playing: false, loop: false, volume: 1, pitch: 1 })
+  Transform.create(wateringSoundEntity, { position: SND_INIT_POS })
+  AudioSource.create(wateringSoundEntity, { audioClipUrl: SND_WATERING, playing: false, loop: false, volume: VOL_WATERING, pitch: 1 })
 
-  // Wire up each plant
   for (const name of PLANT_NAMES) setupPlant(name)
 
   // Deferred animator setup — ensures GltfContainers have loaded
@@ -649,7 +701,7 @@ export function setupWateringSystem() {
       const initAnim = PlantData.getOrNull(entity)?.isWatered ? ANIM_HEALTHY_STATE : ANIM_DROOPY_STATE
       Animator.playSingleAnimation(entity, initAnim, true)
     }
-  }, 1000)
+  }, ANIMATOR_INIT_DELAY_MS)
 
   setupPetalSystem()
   setupSparkleSystem()
@@ -665,46 +717,36 @@ export function setupWateringSystem() {
   engine.addSystem(bloomSparkleSystem)
   engine.addSystem(ambientFXSystem)
 
-  // ── Room ready — set flag so waterPlant() can proceed ─────
   room.onReady(() => {
     console.log('[Client] Connected to room')
     roomReady = true
-    // Send display name now that the connection is open
     const lp = getPlayer()
     room.send('registerPlayer', { displayName: lp?.name ?? lp?.userId ?? 'unknown' })
   })
 
-  // ── Server message handlers ────────────────────────────────
+  // ── Server message handlers ──────────────────────────────────
 
-  /** Server confirmed a watering — update daily count display. */
   room.onMessage('playerDailyState', (data) => {
     playerWateredToday = data.wateredToday
     if (!initialLoadDone) {
       initialLoadDone = true
-      // Delay so plantStateUpdate join-sync messages arrive before we show the %
-      timers.setTimeout(showWelcomeProgress, 1_500)
+      timers.setTimeout(showWelcomeProgress, WELCOME_DELAY_MS)
     }
     if (!overrideDailyLimit && playerWateredToday >= dailyWaterLimit && !dailyLimitReached) {
       onDailyLimitReached()
-      // Show the dismissible notification immediately — covers players who enter
-      // the scene having already hit their limit (pointer events are removed so
-      // there is no other way for them to discover why they can't water anything).
       showDailyLimit(formatDailyLimitMessage(runtimeTestMode))
     }
     updateProgressText()
   })
 
-  /** Server rejected a watering — revert optimistic progress counters. */
   room.onMessage('waterRejected', (data) => {
     console.log(`[Client] Water rejected: ${data.plantId} (${data.reason})`)
 
     if (data.reason === 'daily_limit') {
-      // Revert the optimistic increment — the server never recorded this watering
       playerWateredToday = Math.max(0, playerWateredToday - 1)
-      // Player clicked before playerDailyState arrived — now we know the limit is hit
       if (!dailyLimitReached) onDailyLimitReached()
       const now = Date.now()
-      if (now - lastLimitNotificationMs > 5_000) {
+      if (now - lastLimitNotificationMs > LIMIT_DEBOUNCE_MS) {
         lastLimitNotificationMs = now
         showDailyLimit(formatDailyLimitMessage(runtimeTestMode))
       }
@@ -712,7 +754,6 @@ export function setupWateringSystem() {
     }
 
     if (data.reason === 'already_watered' || data.reason === 'bloom_active') {
-      // Revert the optimistic count; plantStateUpdate will correct the plant visual
       playerWateredToday = Math.max(0, playerWateredToday - 1)
       if (dailyLimitReached && playerWateredToday < dailyWaterLimit) {
         dailyLimitReached = false
@@ -724,29 +765,25 @@ export function setupWateringSystem() {
     }
   })
 
-  /** Server triggered bloom — start visual sequence. */
   room.onMessage('bloomTriggered', () => {
     if (!isBloomActive()) {
       triggerBloomEvent()
       showPersistent(formatBloomCountdown(runtimeTestMode))
       startBloomLabelUpdater()
+      updateSceneAssets()
     }
   })
 
-  /** Server reset all plants after bloom — drive visual reset. */
   room.onMessage('bloomReset', () => {
     resetAllPlants()
     clearBloomLabels()
   })
 
-  /** Top-10 all-time leaderboard — update the in-world label entities. */
   room.onMessage('leaderboardUpdate', (data) => {
     const entries: Array<{ displayName: string; count: number }> = JSON.parse(data.entriesJson)
     updateLeaderboardDisplay(entries)
   })
 
-  /** Server broadcast: authoritative plant state (real-time water/expiry OR join-sync).
-   *  Always applied unconditionally so pointer events are restored on re-entry. */
   room.onMessage('plantStateUpdate', (data) => {
     const entity = plantNameToEntity.get(data.plantId)
     if (!entity) return
@@ -757,27 +794,18 @@ export function setupWateringSystem() {
     const plantPos   = Transform.getOrNull(entity)?.position
 
     if (data.isWatered) {
-      // ── Plant is watered ─────────────────────────────────────
       PlantData.getMutable(entity).isWatered = true
-      // Only adopt the server timestamp when WE didn't water this plant ourselves.
-      // If wasWatered is already true the local client did an optimistic update and
-      // queued animation timers that are guarded by the local `now` timestamp —
-      // overwriting it with the server's (slightly different) timestamp would cause
-      // those guards to fail and the plant animation would never play.
       if (!wasWatered) PlantData.getMutable(entity).wateredAt = data.wateredAt
       disablePlantClick(entity)
 
       if (!wasWatered) {
         setDropFade(entity, 'out')
-
-        // Recent watering (< 10 s ago) = another player just did it — full FX sequence.
-        // Old timestamp = join-sync for a plant already watered — snap to healthy idle.
-        const isLive = (Date.now() - data.wateredAt) < 10_000
+        const isLive = (Date.now() - data.wateredAt) < LIVE_WATER_THRESHOLD_MS
         if (isLive) {
           Animator.playSingleAnimation(entity, ANIM_TO_HEALTHY)
           if (plantPos) {
             Transform.getMutable(wateringSoundEntity).position = plantPos
-            AudioSource.createOrReplace(wateringSoundEntity, { audioClipUrl: 'assets/scene/Sounds/watering.mp3', playing: true, loop: false, volume: 1.0, pitch: 1 })
+            AudioSource.createOrReplace(wateringSoundEntity, { audioClipUrl: SND_WATERING, playing: true, loop: false, volume: VOL_WATERING, pitch: 1 })
             triggerGroundRipple(plantPos)
           }
           timers.setTimeout(() => {
@@ -789,20 +817,15 @@ export function setupWateringSystem() {
           Animator.playSingleAnimation(entity, ANIM_HEALTHY_STATE)
         }
       }
-
     } else {
-      // ── Plant is droopy ──────────────────────────────────────
       PlantData.getMutable(entity).isWatered = false
       PlantData.getMutable(entity).wateredAt = 0
-      // Always re-enable — restores pointer events lost on scene re-entry
       enablePlantClick(entity)
 
       if (wasWatered) {
-        // Was healthy, now expired
         setDropFade(entity, 'in')
         Animator.playSingleAnimation(entity, ANIM_DROOPY_STATE)
       }
-      // If already droopy, animation is already playing — no change needed
     }
 
     updateProgressText()
@@ -813,15 +836,13 @@ export function setupWateringSystem() {
   timers.setTimeout(() => {
     const pos = Transform.getOrNull(engine.PlayerEntity)?.position
     if (pos) movePlayerTo({ newRelativePosition: pos, avatarTarget: pos })
-  }, 500)
+  }, EMOTE_RESET_DELAY_MS)
 
-  // Player identity
   const localPlayer = getPlayer()
-  playerId = localPlayer?.userId ?? 'unknown'
+  const playerId    = localPlayer?.userId ?? 'unknown'
   console.log(`[WateringSystem] Player: ${localPlayer?.name ?? playerId} (${playerId})`)
   updateProgressText()
 
-  // Re-entry welcome toast
   onEnterSceneObservable.add((player) => {
     const localId = getPlayer()?.userId
     console.log(`[EnterScene] player=${player.userId} local=${localId} loadDone=${initialLoadDone}`)
@@ -858,7 +879,7 @@ export function setUseClickbox(val: boolean): void {
     PointerEvents.deleteFrom(info.clickTarget)
     if (val) {
       const clickBox = engine.addEntity()
-      Transform.create(clickBox, { position: { x: 0, y: 1, z: 0 }, scale: { x: 1.5, y: 2, z: 1.5 }, parent: plantEntity })
+      Transform.create(clickBox, { position: { x: 0, y: CLICKBOX_Y, z: 0 }, scale: CLICKBOX_SCALE, parent: plantEntity })
       MeshCollider.setBox(clickBox, ColliderLayer.CL_POINTER)
       info.clickTarget    = clickBox
       info.clickboxEntity = clickBox
@@ -875,8 +896,8 @@ export function getUseClickbox(): boolean { return useClickbox }
 
 export function getWateringStatus() {
   return {
-    wateredCount:       computeWateredCount(),
-    totalPlants:        TOTAL_PLANTS,
+    wateredCount: computeWateredCount(),
+    totalPlants:  TOTAL_PLANTS,
     playerWateredToday,
     dailyWaterLimit,
     dailyLimitReached,
@@ -890,9 +911,5 @@ export function forceTriggerBloom(): void {
   triggerBloomEvent()
   showPersistent(formatBloomCountdown(runtimeTestMode))
   startBloomLabelUpdater()
-}
-
-export function resetAllPlantsTestPanel(): void {
-  resetAllPlants()
-  clearBloomLabels()
+  updateSceneAssets()
 }

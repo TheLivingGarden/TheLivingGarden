@@ -86,6 +86,12 @@ const LB_MOCK_DATA: Array<{ displayName: string; count: number }> = [
 // interleaved per board: [name0, score0, name1, score1, …] × boards
 const leaderboardLabels: Entity[] = []
 
+/** Returns the name and score label entities for a given board and row. */
+function getLabels(boardIdx: number, entryIdx: number): { name: Entity; score: Entity } {
+  const base = boardIdx * (LB_ENTRIES * 2) + entryIdx * 2
+  return { name: leaderboardLabels[base], score: leaderboardLabels[base + 1] }
+}
+
 export function setupLeaderboardBoards(): void {
   for (const boardDef of LB_BOARDS) {
     const quat = Quaternion.fromEulerDegrees(
@@ -130,15 +136,13 @@ export function setupLeaderboardBoards(): void {
 }
 
 export function updateLeaderboardDisplay(entries: Array<{ displayName: string; count: number }>): void {
-  const labelsPerBoard = LB_ENTRIES * 2
   for (let b = 0; b < LB_BOARDS.length; b++) {
     for (let i = 0; i < LB_ENTRIES; i++) {
-      const entry      = entries[i]
-      const nameLabel  = leaderboardLabels[b * labelsPerBoard + i * 2]
-      const scoreLabel = leaderboardLabels[b * labelsPerBoard + i * 2 + 1]
-      if (!nameLabel || !scoreLabel) continue
-      TextShape.getMutable(nameLabel).text  = entry ? `${i + 1}.  ${entry.displayName}` : ''
-      TextShape.getMutable(scoreLabel).text = entry ? `${entry.count}` : ''
+      const entry          = entries[i]
+      const { name, score } = getLabels(b, i)
+      if (!name || !score) continue
+      TextShape.getMutable(name).text  = entry ? `${i + 1}.  ${entry.displayName}` : ''
+      TextShape.getMutable(score).text = entry ? `${entry.count}` : ''
     }
   }
 }

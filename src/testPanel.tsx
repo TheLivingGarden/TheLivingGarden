@@ -55,6 +55,42 @@ let clickboxMode    = getUseClickbox()  // mirrors useClickbox
 
 // ── Helpers ──────────────────────────────────────────────────────
 
+/** Two-state toggle — false button on left, true button on right. */
+function ToggleButton({
+  value,
+  onChange,
+  labelFalse = 'OFF',
+  labelTrue  = 'ON',
+  widthFalse = 52,
+  widthTrue  = 52,
+}: {
+  value:       boolean
+  onChange:    (v: boolean) => void
+  labelFalse?: string
+  labelTrue?:  string
+  widthFalse?: number
+  widthTrue?:  number
+}) {
+  return (
+    <UiEntity uiTransform={{ flexDirection: 'row' }}>
+      <UiEntity
+        uiTransform={{ width: widthFalse, height: 30, alignItems: 'center', justifyContent: 'center', margin: { right: 4 } }}
+        uiBackground={{ color: !value ? BTN_ON : BTN_OFF }}
+        onMouseDown={() => onChange(false)}
+      >
+        <Label value={labelFalse} fontSize={10} color={!value ? WHITE : MUTED} textAlign="middle-center" />
+      </UiEntity>
+      <UiEntity
+        uiTransform={{ width: widthTrue, height: 30, alignItems: 'center', justifyContent: 'center' }}
+        uiBackground={{ color: value ? BTN_ON : BTN_OFF }}
+        onMouseDown={() => onChange(true)}
+      >
+        <Label value={labelTrue} fontSize={10} color={value ? WHITE : MUTED} textAlign="middle-center" />
+      </UiEntity>
+    </UiEntity>
+  )
+}
+
 function applyBloomSettings(): void {
   setBloomTestMode(bloomInstant)
   setCustomBloomHour(bloomInstant ? null : bloomHour)
@@ -137,22 +173,10 @@ export function TestPanelUi() {
         {/* Daily Limit Override */}
         <UiEntity uiTransform={{ width: '100%', height: 40, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', margin: { bottom: 6 } }}>
           <Label value="Daily Limit Override" fontSize={12} color={WHITE} uiTransform={{ flexGrow: 1 }} />
-          <UiEntity uiTransform={{ flexDirection: 'row' }}>
-            <UiEntity
-              uiTransform={{ width: 52, height: 30, alignItems: 'center', justifyContent: 'center', margin: { right: 4 } }}
-              uiBackground={{ color: !overrideLimit ? BTN_ON : BTN_OFF }}
-              onMouseDown={() => { overrideLimit = false; setOverrideDailyLimit(false) }}
-            >
-              <Label value="OFF" fontSize={11} color={!overrideLimit ? WHITE : MUTED} textAlign="middle-center" />
-            </UiEntity>
-            <UiEntity
-              uiTransform={{ width: 52, height: 30, alignItems: 'center', justifyContent: 'center' }}
-              uiBackground={{ color: overrideLimit ? BTN_ON : BTN_OFF }}
-              onMouseDown={() => { overrideLimit = true; setOverrideDailyLimit(true) }}
-            >
-              <Label value="ON" fontSize={11} color={overrideLimit ? WHITE : MUTED} textAlign="middle-center" />
-            </UiEntity>
-          </UiEntity>
+          <ToggleButton
+            value={overrideLimit}
+            onChange={v => { overrideLimit = v; setOverrideDailyLimit(v) }}
+          />
         </UiEntity>
 
         {/* Plants Needed for Bloom */}
@@ -180,64 +204,34 @@ export function TestPanelUi() {
         {/* Fast Mode (30s expiry, skip server) */}
         <UiEntity uiTransform={{ width: '100%', height: 40, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', margin: { bottom: 6 } }}>
           <Label value="Fast Expiry  (5 min instead of 6h)" fontSize={12} color={WHITE} uiTransform={{ flexGrow: 1 }} />
-          <UiEntity uiTransform={{ flexDirection: 'row' }}>
-            <UiEntity
-              uiTransform={{ width: 52, height: 30, alignItems: 'center', justifyContent: 'center', margin: { right: 4 } }}
-              uiBackground={{ color: !fastMode ? BTN_ON : BTN_OFF }}
-              onMouseDown={() => { fastMode = false; setRuntimeTestMode(false) }}
-            >
-              <Label value="OFF" fontSize={11} color={!fastMode ? WHITE : MUTED} textAlign="middle-center" />
-            </UiEntity>
-            <UiEntity
-              uiTransform={{ width: 52, height: 30, alignItems: 'center', justifyContent: 'center' }}
-              uiBackground={{ color: fastMode ? BTN_ON : BTN_OFF }}
-              onMouseDown={() => { fastMode = true; setRuntimeTestMode(true) }}
-            >
-              <Label value="ON" fontSize={11} color={fastMode ? WHITE : MUTED} textAlign="middle-center" />
-            </UiEntity>
-          </UiEntity>
+          <ToggleButton
+            value={fastMode}
+            onChange={v => { fastMode = v; setRuntimeTestMode(v) }}
+          />
         </UiEntity>
 
         {/* Clickbox Mode */}
         <UiEntity uiTransform={{ width: '100%', height: 40, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', margin: { bottom: 6 } }}>
           <Label value="Click Target  (plant / clickbox)" fontSize={12} color={WHITE} uiTransform={{ flexGrow: 1 }} />
-          <UiEntity uiTransform={{ flexDirection: 'row' }}>
-            <UiEntity
-              uiTransform={{ width: 52, height: 30, alignItems: 'center', justifyContent: 'center', margin: { right: 4 } }}
-              uiBackground={{ color: !clickboxMode ? BTN_ON : BTN_OFF }}
-              onMouseDown={() => { clickboxMode = false; setUseClickbox(false) }}
-            >
-              <Label value="PLANT" fontSize={10} color={!clickboxMode ? WHITE : MUTED} textAlign="middle-center" />
-            </UiEntity>
-            <UiEntity
-              uiTransform={{ width: 52, height: 30, alignItems: 'center', justifyContent: 'center' }}
-              uiBackground={{ color: clickboxMode ? BTN_ON : BTN_OFF }}
-              onMouseDown={() => { clickboxMode = true; setUseClickbox(true) }}
-            >
-              <Label value="BOX" fontSize={10} color={clickboxMode ? WHITE : MUTED} textAlign="middle-center" />
-            </UiEntity>
-          </UiEntity>
+          <ToggleButton
+            value={clickboxMode}
+            onChange={v => { clickboxMode = v; setUseClickbox(v) }}
+            labelFalse="PLANT"
+            labelTrue="BOX"
+          />
         </UiEntity>
 
-        {/* Bloom Mode */}
+        {/* Bloom Mode — note: true=INSTANT (false button), false=SCHEDULED (true button) */}
         <UiEntity uiTransform={{ width: '100%', height: 40, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', margin: { bottom: 6 } }}>
           <Label value="Bloom Trigger" fontSize={12} color={WHITE} uiTransform={{ flexGrow: 1 }} />
-          <UiEntity uiTransform={{ flexDirection: 'row' }}>
-            <UiEntity
-              uiTransform={{ width: 68, height: 30, alignItems: 'center', justifyContent: 'center', margin: { right: 4 } }}
-              uiBackground={{ color: bloomInstant ? BTN_ON : BTN_OFF }}
-              onMouseDown={() => { bloomInstant = true; applyBloomSettings() }}
-            >
-              <Label value="INSTANT" fontSize={10} color={bloomInstant ? WHITE : MUTED} textAlign="middle-center" />
-            </UiEntity>
-            <UiEntity
-              uiTransform={{ width: 82, height: 30, alignItems: 'center', justifyContent: 'center' }}
-              uiBackground={{ color: !bloomInstant ? BTN_ON : BTN_OFF }}
-              onMouseDown={() => { bloomInstant = false; applyBloomSettings() }}
-            >
-              <Label value="SCHEDULED" fontSize={10} color={!bloomInstant ? WHITE : MUTED} textAlign="middle-center" />
-            </UiEntity>
-          </UiEntity>
+          <ToggleButton
+            value={!bloomInstant}
+            onChange={v => { bloomInstant = !v; applyBloomSettings() }}
+            labelFalse="INSTANT"
+            labelTrue="SCHEDULED"
+            widthFalse={68}
+            widthTrue={82}
+          />
         </UiEntity>
 
         {/* Bloom Hour (UTC) */}

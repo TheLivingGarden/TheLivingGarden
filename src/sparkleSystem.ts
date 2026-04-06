@@ -75,60 +75,8 @@ const activeSparkles: SparkleState[] = []
 
 /** Call once at scene startup — builds bloom and tribute pools. */
 export function setupSparkleSystem(): void {
-  // Bloom orbit pool
-  for (let i = 0; i < BLOOM_POOL_SIZE; i++) {
-    const ent = makeSparkleEntity(2.0)
-    bloomPool.push({
-      entity:       ent,
-      mode:         'bloom',
-      phase:        'idle',
-      startPos:     { x: 0, y: -100, z: 0 },
-      travelTarget: { x: 0, y: 0,    z: 0 },
-      travelMs:     0,
-      travelDurMs:  TRAVEL_DUR_BASE,
-      orbitAngle:   0,
-      orbitSpeed:   0,
-      orbitRadius:  1.5,
-      orbitBaseY:   1.5,
-      bobPhase:     0,
-      bobSpeed:     1.5,
-      bobAmp:       0.2,
-      riseMs:       0,
-      riseDelay:    0,
-      riseDurMs:    RISE_DUR_MS,
-      riseStartPos: { x: 0, y: 0, z: 0 },
-      pos:          { x: 0, y: -100, z: 0 },
-      scale:        0.001,
-    })
-  }
-
-  // Tribute pool (per-watering travel-to-centre)
-  for (let i = 0; i < TRIBUTE_POOL_SIZE; i++) {
-    const ent = makeSparkleEntity(1.8)
-    tributePool.push({
-      entity:       ent,
-      mode:         'tribute',
-      phase:        'idle',
-      startPos:     { x: 0, y: -100, z: 0 },
-      travelTarget: { x: 0, y: 0,    z: 0 },
-      travelMs:     0,
-      travelDurMs:  TRIBUTE_DUR_BASE,
-      orbitAngle:   0,
-      orbitSpeed:   0,
-      orbitRadius:  0.4,
-      orbitBaseY:   1.5,
-      bobPhase:     0,
-      bobSpeed:     1.5,
-      bobAmp:       0.2,
-      riseMs:       0,
-      riseDelay:    0,
-      riseDurMs:    TRIBUTE_DISSOLVE_MS,
-      riseStartPos: { x: 0, y: 0, z: 0 },
-      pos:          { x: 0, y: -100, z: 0 },
-      scale:        0.001,
-    })
-  }
-
+  bloomPool   = createPool(BLOOM_POOL_SIZE,   'bloom',   2.0, TRAVEL_DUR_BASE,  1.5, RISE_DUR_MS)
+  tributePool = createPool(TRIBUTE_POOL_SIZE, 'tribute', 1.8, TRIBUTE_DUR_BASE, 0.4, TRIBUTE_DISSOLVE_MS)
   console.log(`[Sparkles] Bloom pool: ${BLOOM_POOL_SIZE}  Tribute pool: ${TRIBUTE_POOL_SIZE}`)
 }
 
@@ -253,7 +201,45 @@ interface BloomSparkleState {
   scale:        number
 }
 
-const bloomPool:   BloomSparkleState[] = []
+// ── Pool factory ─────────────────────────────────────────────────
+
+function createPool(
+  size:              number,
+  mode:              'bloom' | 'tribute',
+  emissiveIntensity: number,
+  travelDurMs:       number,
+  orbitRadius:       number,
+  riseDurMs:         number,
+): BloomSparkleState[] {
+  const pool: BloomSparkleState[] = []
+  for (let i = 0; i < size; i++) {
+    pool.push({
+      entity:       makeSparkleEntity(emissiveIntensity),
+      mode,
+      phase:        'idle',
+      startPos:     { x: 0, y: -100, z: 0 },
+      travelTarget: { x: 0, y: 0,    z: 0 },
+      travelMs:     0,
+      travelDurMs,
+      orbitAngle:   0,
+      orbitSpeed:   0,
+      orbitRadius,
+      orbitBaseY:   1.5,
+      bobPhase:     0,
+      bobSpeed:     1.5,
+      bobAmp:       0.2,
+      riseMs:       0,
+      riseDelay:    0,
+      riseDurMs,
+      riseStartPos: { x: 0, y: 0, z: 0 },
+      pos:          { x: 0, y: -100, z: 0 },
+      scale:        0.001,
+    })
+  }
+  return pool
+}
+
+let bloomPool:   BloomSparkleState[] = []
 
 // ── Tribute pool — per-watering travel-to-centre effect ──────────
 const TRIBUTE_POOL_SIZE   = 48    // 6 sparkles × 8 possible in-flight
@@ -263,7 +249,7 @@ const TRIBUTE_DUR_VARY    = 500
 const TRIBUTE_SPARKLE_SIZE = 0.18
 const TRIBUTE_DISSOLVE_MS  = 450  // fade at centre after arriving
 
-const tributePool: BloomSparkleState[] = []
+let tributePool: BloomSparkleState[] = []
 
 /** Smoothstep easing (0→1). */
 function smoothstep(t: number): number {

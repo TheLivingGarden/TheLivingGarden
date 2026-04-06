@@ -17,11 +17,12 @@ import { showToast } from './notifications'
 // Configuration
 // ---------------------------------------------------------------
 
-const MUSIC_FADE_IN_MS   = 3_000   // bloom music swells in over 3s, then visuals trigger
-const MUSIC_FADE_OUT_MS  = 6_000   // bloom music fades out over 6s
-const AMBIENT_MAX_VOLUME = 0.7     // background level for the ambient track
-const ANIM_BLOOM         = 'OpenAction'
-const ANIM_IDLE          = 'CloseIdle'
+const MUSIC_FADE_IN_MS        = 3_000    // bloom music swells in over 3s, then visuals trigger
+const MUSIC_FADE_OUT_MS       = 6_000    // bloom music fades out over 6s
+const AMBIENT_MAX_VOLUME      = 0.7      // background level for the ambient track
+const TEST_MODE_BLOOM_DELAY_MS = 10_000  // test mode: bloom fires 10s after all plants watered
+const ANIM_BLOOM              = 'OpenAction'
+const ANIM_IDLE               = 'CloseIdle'
 
 // ---------------------------------------------------------------
 // State
@@ -43,7 +44,7 @@ let onVisualBloomCallback: () => void = () => {}
 // ---------------------------------------------------------------
 
 function getNextBloomTime(): number {
-  if (testMode) return Date.now() + 10_000  // bloom fires in 10s
+  if (testMode) return Date.now() + TEST_MODE_BLOOM_DELAY_MS
 
   const hour = customBloomHour ?? 18  // default 6pm UTC
   const now    = new Date()

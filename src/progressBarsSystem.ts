@@ -60,7 +60,7 @@ const ORANGE_RATIO = 0.50        // red → orange at this fraction
 // green threshold is driven by BLOOM_THRESHOLD / TOTAL_PLANTS
 
 // ── Background ───────────────────────────────────────────────────
-const BG_COLOR     = { r: 0.08, g: 0.08, b: 0.10, a: 0.75 }
+const BG_COLOR     = { r: 0.08, g: 0.08, b: 0.10, a: 0.5 }
 const BG_EMISSIVE  = { r: 0.08, g: 0.08, b: 0.10 }
 const BG_EMISSION  = 0.4
 
@@ -68,9 +68,11 @@ const BG_EMISSION  = 0.4
 const FILL_RED_COLOR    = { r: 0.90, g: 0.18, b: 0.18 }
 const FILL_ORANGE_COLOR = { r: 1.00, g: 0.50, b: 0.05 }
 const FILL_GREEN_COLOR  = { r: 0.20, g: 0.88, b: 0.35 }
-const FILL_EMISSION     = 0.8    // emissive intensity for all fill states
+const FILL_EMISSION     = 1.2    // emissive intensity for all fill states
 
 // ── Marker ticks ──────────────────────────────────────────────────
+const TICK_THICK_NORMAL_M    = 0.028   // world height of a standard tick (metres)
+const TICK_THICK_THRESHOLD_M = 0.045   // world height of the threshold tick (metres)
 const MARKER_COLOR      = { r: 0.85, g: 0.85, b: 0.85 }
 const MARKER_EMISSION   = 0.7
 const THRESHOLD_COLOR   = { r: 1.00, g: 0.84, b: 0.10 }   // gold at 80%
@@ -200,7 +202,7 @@ export function setupProgressBars(): void {
 
     for (const m of MARKERS) {
       const localY     = m.ratio - 0.5              // -0.5 = bottom, +0.5 = top
-      const tickThickL = (m.isThreshold ? 0.045 : 0.028) / sy
+      const tickThickL = (m.isThreshold ? TICK_THICK_THRESHOLD_M : TICK_THICK_NORMAL_M) / sy
       const tickWideL  = (sx + 0.06) / sx           // slightly wider than bar
       const tickDeepL  = tickWorldDepth / sz
 
