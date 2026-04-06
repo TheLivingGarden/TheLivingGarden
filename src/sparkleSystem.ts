@@ -33,8 +33,8 @@ function makeSparkleEntity(emissiveIntensity: number): Entity {
   Material.setPbrMaterial(ent, {
     texture:          Material.Texture.Common({ src: SPARKLE_SRC }),
     alphaTexture:     Material.Texture.Common({ src: SPARKLE_SRC }),
-    albedoColor:      Color4.White(),
-    emissiveColor:    { r: 1, g: 1, b: 1 },
+    albedoColor:      Color4.create(1.0, 0.95, 0.78, 1),  // warm cream
+    emissiveColor:    { r: 1.0, g: 0.88, b: 0.52 },       // warm gold
     emissiveIntensity,
     transparencyMode: MaterialTransparencyMode.MTM_ALPHA_BLEND,
   })

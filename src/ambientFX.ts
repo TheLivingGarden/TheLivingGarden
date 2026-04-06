@@ -197,8 +197,8 @@ export function triggerGroundRipple(pos: { x: number; y: number; z: number }): v
     texture:           Material.Texture.Common({ src: SPARKLE_SRC }),
     alphaTexture:      Material.Texture.Common({ src: SPARKLE_SRC }),
     transparencyMode:  MaterialTransparencyMode.MTM_ALPHA_BLEND,
-    albedoColor:       Color4.create(0.6, 0.9, 1.0, 0.75),
-    emissiveColor:     { r: 0.4, g: 0.8, b: 1.0 },
+    albedoColor:       Color4.create(1.0, 0.88, 0.52, 0.75),  // warm gold
+    emissiveColor:     { r: 1.0, g: 0.75, b: 0.32 },           // warm amber
     emissiveIntensity: 2.0,
   })
   activeRipples.push({ entity: ent, elapsed: 0 })
@@ -223,8 +223,8 @@ function tickRipples(dt: number) {
       texture:           Material.Texture.Common({ src: SPARKLE_SRC }),
       alphaTexture:      Material.Texture.Common({ src: SPARKLE_SRC }),
       transparencyMode:  MaterialTransparencyMode.MTM_ALPHA_BLEND,
-      albedoColor:       Color4.create(0.6, 0.9, 1.0, alpha),
-      emissiveColor:     { r: 0.4, g: 0.8, b: 1.0 },
+      albedoColor:       Color4.create(1.0, 0.88, 0.52, alpha),  // warm gold
+      emissiveColor:     { r: 1.0, g: 0.75, b: 0.32 },           // warm amber
       emissiveIntensity: 2.0,
     })
   }
