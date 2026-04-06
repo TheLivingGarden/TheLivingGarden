@@ -21,8 +21,20 @@ const MUSIC_FADE_IN_MS        = 3_000    // bloom music swells in over 3s, then 
 const MUSIC_FADE_OUT_MS       = 6_000    // bloom music fades out over 6s
 const AMBIENT_MAX_VOLUME      = 0.7      // background level for the ambient track
 const TEST_MODE_BLOOM_DELAY_MS = 10_000  // test mode: bloom fires 10s after all plants watered
-const ANIM_BLOOM              = 'OpenAction'
-const ANIM_IDLE               = 'CloseIdle'
+
+// ── Bloom animation clips (must match GLB exactly) ────────────
+const ANIM_IDLE      = 'CloseIdle'   // default closed idle — plays when bloom is inactive
+const ANIM_BLOOM     = 'OpenAction'  // opening animation — plays when bloom triggers
+const ANIM_OPEN_POSE = 'Open'        // held open pose — plays after opening animation finishes
+
+// ── Bloom event configs ───────────────────────────────────────
+// Playback speed for the opening animation (0.5 = half speed / twice as long)
+const BLOOM_ANIM_SPEED       = 0.5
+// How long (ms) after the visual bloom launches before switching to the held open pose.
+// OpenAction clip is 10s at normal speed → 10000 / 0.5 = 20000ms
+const BLOOM_SWITCH_TO_OPEN_MS = 20_000
+// How long to hold the open pose before the server triggers a reset
+const BLOOM_OPEN_POSE_HOLD_MS = 30 * 60 * 1_000   // 30 minutes
 
 // ---------------------------------------------------------------
 // State
@@ -67,16 +79,30 @@ function launchVisualBloom() {
   timers.setTimeout(startPetalRain, 3_700)
 
   if (bloomModelEntity) {
-    Animator.playSingleAnimation(bloomModelEntity, ANIM_BLOOM)
+    // Play opening animation at half speed (twice as long)
+    Animator.createOrReplace(bloomModelEntity, {
+      states: [
+        { clip: ANIM_IDLE,      playing: false, loop: true,  speed: 1 },
+        { clip: ANIM_BLOOM,     playing: true,  loop: false, speed: BLOOM_ANIM_SPEED },
+        { clip: ANIM_OPEN_POSE, playing: false, loop: true,  speed: 1 },
+      ],
+    })
+    // After opening animation completes, switch to held open pose
+    timers.setTimeout(() => {
+      if (bloomActive && bloomModelEntity) {
+        Animator.playSingleAnimation(bloomModelEntity, ANIM_OPEN_POSE)
+        console.log('[BloomSystem] Switched to open pose')
+      }
+    }, BLOOM_SWITCH_TO_OPEN_MS)
   }
 
-  const msUntilNextBloom = getNextBloomTime() - Date.now()
-  const resetDelay = testMode ? 30_000 : 60_000
+  const msUntilNextBloom = BLOOM_OPEN_POSE_HOLD_MS
+  const resetDelay = testMode ? 30_000 : 0
 
   if (testMode) {
     console.log(`[TEST] Visual bloom live — reset in ${(msUntilNextBloom + resetDelay) / 1000}s`)
   } else {
-    console.log(`Next bloom scheduled in ${Math.round(msUntilNextBloom / 1000 / 60)} minutes`)
+    console.log(`Bloom open — held for ${Math.round(msUntilNextBloom / 1000 / 60)} minutes`)
   }
 
   timers.setTimeout(onResetCallback, msUntilNextBloom + resetDelay)
@@ -158,14 +184,15 @@ export function setupBloomSystem(opts: {
     playing: false, loop: true, volume: 1, pitch: 1,
   })
 
-  // Bloom model — separate scene entity with its own Bloom animation clip
+  // Bloom model — separate scene entity with its own animation clips
   const bloomEnt = engine.getEntityOrNullByName('Bloom')
   if (bloomEnt) {
     bloomModelEntity = bloomEnt
     Animator.createOrReplace(bloomEnt, {
       states: [
-        { clip: ANIM_IDLE,  playing: true,  loop: true },
-        { clip: ANIM_BLOOM, playing: false, loop: true },
+        { clip: ANIM_IDLE,      playing: true,  loop: true,  speed: 1 },
+        { clip: ANIM_BLOOM,     playing: false, loop: false, speed: BLOOM_ANIM_SPEED },
+        { clip: ANIM_OPEN_POSE, playing: false, loop: true,  speed: 1 },
       ],
     })
   } else {

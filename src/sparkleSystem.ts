@@ -31,12 +31,13 @@ function makeSparkleEntity(emissiveIntensity: number): Entity {
   const ent = engine.addEntity()
   MeshRenderer.setPlane(ent)
   Material.setPbrMaterial(ent, {
-    texture:           Material.Texture.Common({ src: SPARKLE_SRC }),
-    alphaTexture:      Material.Texture.Common({ src: SPARKLE_SRC }),
-    albedoColor:       Color4.White(),
-    emissiveColor:     { r: 1, g: 1, b: 1 },
+    texture:          Material.Texture.Common({ src: SPARKLE_SRC }),
+    alphaTexture:     Material.Texture.Common({ src: SPARKLE_SRC }),
+    emissiveTexture:  Material.Texture.Common({ src: SPARKLE_SRC }),
+    albedoColor:      Color4.White(),
+    emissiveColor:    { r: 1, g: 1, b: 1 },
     emissiveIntensity,
-    transparencyMode:  MaterialTransparencyMode.MTM_ALPHA_BLEND,
+    transparencyMode: MaterialTransparencyMode.MTM_ALPHA_BLEND,
   })
   Billboard.create(ent, { billboardMode: BillboardMode.BM_ALL })
   Transform.create(ent, {
