@@ -58,7 +58,7 @@ function setupMotes() {
       alphaTexture:      Material.Texture.Common({ src: SPARKLE_SRC }),
       transparencyMode:  MaterialTransparencyMode.MTM_ALPHA_BLEND,
       albedoColor:       { r: 1, g: 1, b: 1, a: rnd(0.25, 0.50) },
-      emissiveColor:     { r: 0.9, g: 0.95, b: 1.0 },
+      emissiveColor:     { r: 1.0, g: 0.82, b: 0.45 },  // warm amber
       emissiveIntensity: 0.8,
     })
     Billboard.create(ent, { billboardMode: BillboardMode.BM_ALL })
@@ -158,8 +158,8 @@ function setupFireflies() {
     })
     MeshRenderer.setSphere(ent)
     Material.setPbrMaterial(ent, {
-      albedoColor:       Color4.create(0.7, 1.0, 0.3 + warm * 0.25, 1),
-      emissiveColor:     { r: 0.6, g: 1.0, b: 0.3 + warm * 0.25 },
+      albedoColor:       Color4.create(1.0, 0.75 + warm * 0.1, 0.2 + warm * 0.15, 1),
+      emissiveColor:     { r: 1.0, g: 0.65 + warm * 0.1, b: 0.1 + warm * 0.1 },  // warm amber
       emissiveIntensity: 2.5,
     })
     fireflies.push({

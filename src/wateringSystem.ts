@@ -37,6 +37,7 @@ import { setupSparkleSystem, triggerSparkle, triggerWateringTribute, sparkleSyst
 import { setupAmbientFX, triggerBloomShockwave, triggerGroundRipple, startFireflies, stopFireflies, ambientFXSystem } from './ambientFX'
 import { setupProgressBars, updateProgressBars }              from './progressBarsSystem'
 import { setupLeaderboardBoards, updateLeaderboardDisplay }   from './leaderboardSystem'
+import { setupFairyLights, setFairyLightsBloom }             from './fairyLightSystem'
 import { showToast, showDailyLimit, hideDailyLimit, showPersistent, hidePersistent, formatBloomCountdown, formatDailyLimitMessage } from './notifications'
 import { movePlayerTo, triggerSceneEmote }  from '~system/RestrictedActions'
 import { room }                             from './shared/messages'
@@ -58,12 +59,12 @@ import { TOTAL_PLANTS, BLOOM_THRESHOLD, DAILY_WATER_LIMIT, PLANT_NAMES } from '.
 const TEST_MODE = false
 
 // ── Animation clip names (must match GLB exactly) ─────────────
-const ANIM_DROOPY_STATE  = 'DroopyState'
-const ANIM_TO_HEALTHY    = 'DroopyToHealthy'
-const ANIM_HEALTHY_STATE = 'HealthyState'
-const ANIM_TO_DROOPY     = 'HealthToDroopy'
-const ANIM_TRANSITION_MS = 1500   // ms — length of transition clips
-const ANIMATOR_INIT_DELAY_MS = 1000  // ms — defer Animator.create until GLBs load
+const ANIM_DROOPY_STATE  = 'CloseIdle'  // droopy idle loop
+const ANIM_TO_HEALTHY    = 'Play'       // droopy → healthy transition
+const ANIM_HEALTHY_STATE = 'OpenIdle'   // healthy idle loop
+// Note: no reverse transition clip — reset snaps directly to CloseIdle
+const ANIM_TRANSITION_MS = 6_000        // ms — duration of Play clip
+const ANIMATOR_INIT_DELAY_MS = 1000     // ms — defer Animator.create until GLBs load
 
 // ── Emote ─────────────────────────────────────────────────────
 const EMOTE_SRC            = 'assets/scene/Models/Emotes/WateringCan_emote.glb'
@@ -218,8 +219,8 @@ function dropFadeSystem(dt: number) {
 // Reset animation state machine
 // ---------------------------------------------------------------
 
-type ResetPhase = 'to_droopy' | 'wait' | 'to_droopy_state' | 'done'
-const reset = { phase: 'done' as ResetPhase, queue: [] as Entity[], timerMs: 0 }
+type ResetPhase = 'to_droopy' | 'done'
+const reset = { phase: 'done' as ResetPhase, queue: [] as Entity[] }
 
 // ---------------------------------------------------------------
 // Scene-asset visibility
@@ -417,14 +418,10 @@ function scheduleExpiry(entity: Entity, sessionTimestamp: number, delayMs: numbe
     pd.wateredAt = 0
     updateProgressText()
 
-    Animator.playSingleAnimation(entity, ANIM_TO_DROOPY)
-    timers.setTimeout(() => {
-      if (!PlantData.get(entity).isWatered) {
-        Animator.playSingleAnimation(entity, ANIM_DROOPY_STATE)
-        enablePlantClick(entity)
-        setDropFade(entity, 'in')
-      }
-    }, ANIM_TRANSITION_MS)
+    // No reverse transition clip — snap directly to droopy idle
+    Animator.playSingleAnimation(entity, ANIM_DROOPY_STATE)
+    enablePlantClick(entity)
+    setDropFade(entity, 'in')
   }, delayMs)
 }
 
@@ -503,6 +500,7 @@ export function resetAllPlants() {
   endBloom()
   endBloomSparkles()
   stopFireflies()
+  setFairyLightsBloom(false)
   hidePersistent()
 
   reset.queue = []
@@ -515,8 +513,7 @@ export function resetAllPlants() {
   playerWateredToday = 0
   dailyLimitReached  = false
 
-  reset.phase   = 'to_droopy'
-  reset.timerMs = 0
+  reset.phase = 'to_droopy'
   updateProgressText()
   console.log(`[Client] resetAllPlants — ${reset.queue.length} plants queued`)
 }
@@ -524,27 +521,8 @@ export function resetAllPlants() {
 function resetAnimSystem(dt: number) {
   if (reset.phase === 'done') return
 
+  // No reverse transition clip — snap each plant directly to droopy idle
   if (reset.phase === 'to_droopy') {
-    const entity = reset.queue.shift()
-    if (entity) {
-      Animator.stopAllAnimations(entity, true)
-      Animator.playSingleAnimation(entity, ANIM_TO_DROOPY, true)
-    }
-    if (reset.queue.length === 0) {
-      reset.phase   = 'wait'
-      reset.timerMs = 0
-      for (const [e] of engine.getEntitiesWith(PlantData)) reset.queue.push(e)
-    }
-    return
-  }
-
-  if (reset.phase === 'wait') {
-    reset.timerMs += dt * 1000
-    if (reset.timerMs >= ANIM_TRANSITION_MS) reset.phase = 'to_droopy_state'
-    return
-  }
-
-  if (reset.phase === 'to_droopy_state') {
     const entity = reset.queue.shift()
     if (entity && !PlantData.get(entity).isWatered) {
       Animator.stopAllAnimations(entity, true)
@@ -553,7 +531,7 @@ function resetAnimSystem(dt: number) {
     }
     if (reset.queue.length === 0) {
       reset.phase = 'done'
-      for (const entity of plantRegistry.keys()) enablePlantClick(entity)
+      for (const e of plantRegistry.keys()) enablePlantClick(e)
       console.log('[Client] Reset complete — all plants droopy')
     }
   }
@@ -663,6 +641,7 @@ export function setupWateringSystem() {
       showPersistent(NOTIFY_BLOOM_ACTIVE)
       triggerBloomShockwave()
       startFireflies()
+      setFairyLightsBloom(true)
       const positions: Array<{ x: number; y: number; z: number }> = []
       for (const [entity] of plantRegistry) {
         const pos = Transform.getOrNull(entity)?.position
@@ -695,7 +674,6 @@ export function setupWateringSystem() {
           { clip: ANIM_DROOPY_STATE,  playing: false, loop: true  },
           { clip: ANIM_TO_HEALTHY,    playing: false, loop: false },
           { clip: ANIM_HEALTHY_STATE, playing: false, loop: true  },
-          { clip: ANIM_TO_DROOPY,     playing: false, loop: false },
         ],
       })
       const initAnim = PlantData.getOrNull(entity)?.isWatered ? ANIM_HEALTHY_STATE : ANIM_DROOPY_STATE
@@ -706,6 +684,7 @@ export function setupWateringSystem() {
   setupPetalSystem()
   setupSparkleSystem()
   setupAmbientFX()
+  setupFairyLights()
   setupProgressBars()
 
   engine.addSystem(emoteCleanupSystem)
