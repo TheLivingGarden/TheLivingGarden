@@ -82,12 +82,27 @@ async function savePlantStates(): Promise<void> {
 
 // ── Leaderboard helpers ──────────────────────────────────────
 
+const LEADERBOARD_RESET_INTERVAL_MS = 7 * 24 * 60 * 60 * 1000  // 7 days
+
 async function loadLeaderboard(): Promise<void> {
   const raw = await Storage.get<string>('leaderboard')
-  if (!raw) return
-  const records: Array<{ address: string; displayName: string; total: number }> = JSON.parse(raw)
-  for (const r of records) leaderboard.set(r.address, { displayName: r.displayName, total: r.total })
-  console.log(`[Server] Loaded leaderboard: ${leaderboard.size} players`)
+  if (raw) {
+    const records: Array<{ address: string; displayName: string; total: number }> = JSON.parse(raw)
+    for (const r of records) leaderboard.set(r.address, { displayName: r.displayName, total: r.total })
+    console.log(`[Server] Loaded leaderboard: ${leaderboard.size} players`)
+  }
+
+  // Weekly reset — check stored timestamp; if missing, start the clock now (preserves existing data)
+  const rawResetAt = await Storage.get<string>('leaderboardResetAt')
+  if (!rawResetAt) {
+    await Storage.set('leaderboardResetAt', String(Date.now()))
+    console.log('[Server] Leaderboard weekly reset clock started')
+  } else if (Date.now() - parseInt(rawResetAt) >= LEADERBOARD_RESET_INTERVAL_MS) {
+    leaderboard.clear()
+    await saveLeaderboard()
+    await Storage.set('leaderboardResetAt', String(Date.now()))
+    console.log('[Server] Weekly leaderboard reset complete')
+  }
 }
 
 async function saveLeaderboard(): Promise<void> {

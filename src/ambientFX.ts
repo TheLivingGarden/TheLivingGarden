@@ -217,14 +217,8 @@ function tickRipples(dt: number) {
     const sc    = (1 - (1 - t) * (1 - t)) * RIPPLE_R_MAX
     const alpha = (1 - t) * (1 - t) * 0.75
     Transform.getMutable(r.entity).scale = { x: sc, y: sc, z: sc }
-    Material.setPbrMaterial(r.entity, {
-      texture:           Material.Texture.Common({ src: SPARKLE_SRC }),
-      alphaTexture:      Material.Texture.Common({ src: SPARKLE_SRC }),
-      transparencyMode:  MaterialTransparencyMode.MTM_ALPHA_BLEND,
-      albedoColor:       Color4.create(1.0, 0.88, 0.52, alpha),  // warm gold
-      emissiveColor:     { r: 1.0, g: 0.75, b: 0.32 },           // warm amber
-      emissiveIntensity: 2.0,
-    })
+    const mat = Material.getFlatMutable(r.entity)
+    if (mat.albedoColor) mat.albedoColor.a = alpha
   }
 }
 
@@ -265,14 +259,8 @@ export function ambientFXSystem(dt: number): void {
     }
     const sc = (1 - (1 - t) * (1 - t)) * SHOCK_R_MAX
     Transform.getMutable(ring.entity).scale = { x: sc, y: sc, z: sc }
-    Material.setPbrMaterial(ring.entity, {
-      texture:           Material.Texture.Common({ src: SPARKLE_SRC }),
-      alphaTexture:      Material.Texture.Common({ src: SPARKLE_SRC }),
-      transparencyMode:  MaterialTransparencyMode.MTM_ALPHA_BLEND,
-      albedoColor:       Color4.create(1, 0.95, 0.7, (1 - t) * (1 - t) * 0.85),
-      emissiveColor:     { r: 1, g: 0.9, b: 0.5 },
-      emissiveIntensity: 2.5,
-    })
+    const mat = Material.getFlatMutable(ring.entity)
+    if (mat.albedoColor) mat.albedoColor.a = (1 - t) * (1 - t) * 0.85
   }
 
   // ── Fireflies — bloom only ───────────────────────────────────

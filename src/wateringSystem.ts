@@ -390,10 +390,16 @@ function triggerWateringEmote(plantEntity: Entity) {
   }
 
   emoteActive   = true
-  emoteStartPos = Transform.getOrNull(engine.PlayerEntity)?.position ?? null
+  emoteStartPos = null   // don't check position yet — player is mid-move
   const gen     = ++emoteGen
 
-  timers.setTimeout(() => { triggerSceneEmote({ src: EMOTE_SRC, loop: false }) }, EMOTE_DELAY_MS)
+  // Fire emote once player has arrived; capture position only now so the
+  // cleanup system doesn't cancel due to movement from the teleport itself.
+  timers.setTimeout(() => {
+    if (emoteGen !== gen) return
+    triggerSceneEmote({ src: EMOTE_SRC, loop: false })
+    emoteStartPos = Transform.getOrNull(engine.PlayerEntity)?.position ?? null
+  }, EMOTE_DELAY_MS)
 
   timers.setTimeout(() => {
     if (emoteGen !== gen) return
@@ -510,9 +516,6 @@ export function resetAllPlants(): void {
     pd.wateredAt = 0
     reset.queue.push(entity)
   }
-  playerWateredToday = 0
-  dailyLimitReached  = false
-
   reset.phase = 'to_droopy'
   updateProgressText()
   console.log(`[Client] resetAllPlants — ${reset.queue.length} plants queued`)
@@ -778,9 +781,9 @@ export function setupWateringSystem(): void {
       disablePlantClick(entity)
 
       if (!wasWatered) {
-        setDropFade(entity, 'out')
         const isLive = (Date.now() - data.wateredAt) < LIVE_WATER_THRESHOLD_MS
         if (isLive) {
+          setDropFade(entity, 'out')
           Animator.playSingleAnimation(entity, ANIM_TO_HEALTHY)
           if (plantPos) {
             Transform.getMutable(wateringSoundEntity).position = plantPos
@@ -793,7 +796,14 @@ export function setupWateringSystem(): void {
             if (plantPos) triggerSparkle(plantPos)
           }, ANIM_TRANSITION_MS)
         } else {
+          // State recovery on join — snap drop hidden immediately, no fade
           Animator.playSingleAnimation(entity, ANIM_HEALTHY_STATE)
+          const ds = dropMap.get(entity)
+          if (ds) {
+            Transform.getMutable(ds.entity).scale = { x: 0.001, y: 0.001, z: 0.001 }
+            ds.fade   = 'hidden'
+            ds.fadeMs = 0
+          }
         }
       }
     } else {
