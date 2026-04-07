@@ -12,6 +12,8 @@ export const room = registerMessages({
   waterPlant:       Schemas.Map({ plantId: Schemas.String }),
   /** Sent on join so the server can map address → display name for the leaderboard. */
   registerPlayer:   Schemas.Map({ displayName: Schemas.String }),
+  /** Test-panel only — triggers bloom on the server so all clients sync correctly. */
+  forceBloom:       Schemas.Map({}),
 
   // ── Server → specific client ──────────────────────────────
   /** Sent on player join and after each successful watering. */

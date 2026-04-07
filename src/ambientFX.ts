@@ -18,8 +18,7 @@ import {
   BillboardMode,
 } from '@dcl/sdk/ecs'
 import { Color4, Quaternion } from '@dcl/sdk/math'
-
-const SPARKLE_SRC = 'assets/scene/Images/sparkle.png'
+import { BLOOM_CENTER, SPARKLE_SRC, GARDEN_BOUNDS } from './shared/config'
 
 function rnd(min: number, max: number) { return min + Math.random() * (max - min) }
 
@@ -47,8 +46,8 @@ const motes: Mote[] = []
 function setupMotes() {
   for (let i = 0; i < MOTE_COUNT; i++) {
     const ent   = engine.addEntity()
-    const baseX = rnd(3, 14)
-    const z     = rnd(3, 22)
+    const baseX = rnd(GARDEN_BOUNDS.xMin, GARDEN_BOUNDS.xMax)
+    const z     = rnd(GARDEN_BOUNDS.zMin, GARDEN_BOUNDS.zMax)
     const y     = rnd(MOTE_Y_MIN, MOTE_Y_MAX)
     const sc    = rnd(0.04, 0.10)
     Transform.create(ent, { position: { x: baseX, y, z }, scale: { x: sc, y: sc, z: sc } })
@@ -75,7 +74,6 @@ const SHOCK_COUNT   = 3
 const SHOCK_DUR_MS  = 1400
 const SHOCK_STAGGER = 280
 const SHOCK_R_MAX   = 12
-const SHOCK_POS     = { x: 6.75, y: 2, z: 24 }
 
 interface ShockRing {
   entity:  Entity
@@ -90,7 +88,7 @@ function setupShockwaves() {
   for (let i = 0; i < SHOCK_COUNT; i++) {
     const ent = engine.addEntity()
     Transform.create(ent, {
-      position: SHOCK_POS,
+      position: BLOOM_CENTER,
       rotation: Quaternion.fromEulerDegrees(90, 0, 0),
       scale:    { x: 0.001, y: 0.001, z: 0.001 },
     })
@@ -153,7 +151,7 @@ function setupFireflies() {
     const ent  = engine.addEntity()
     const warm = rnd(0, 1)
     Transform.create(ent, {
-      position: { x: rnd(3, 14), y: -100, z: rnd(3, 22) },  // hidden until bloom
+      position: { x: rnd(GARDEN_BOUNDS.xMin, GARDEN_BOUNDS.xMax), y: -100, z: rnd(GARDEN_BOUNDS.zMin, GARDEN_BOUNDS.zMax) },  // hidden until bloom
       scale:    { x: FF_SCALE, y: FF_SCALE, z: FF_SCALE },
     })
     MeshRenderer.setSphere(ent)
@@ -164,7 +162,7 @@ function setupFireflies() {
     })
     fireflies.push({
       entity: ent,
-      bx: rnd(3, 14), by: rnd(0.8, 2.5), bz: rnd(3, 22),
+      bx: rnd(GARDEN_BOUNDS.xMin, GARDEN_BOUNDS.xMax), by: rnd(0.8, 2.5), bz: rnd(GARDEN_BOUNDS.zMin, GARDEN_BOUNDS.zMax),
       fx: rnd(0.15, 0.45), fy: rnd(0.25, 0.60), fz: rnd(0.15, 0.45),
       px: rnd(0, Math.PI * 2), py: rnd(0, Math.PI * 2), pz: rnd(0, Math.PI * 2),
       ax: rnd(0.6, 1.5), ay: rnd(0.2, 0.5), az: rnd(0.6, 1.5),

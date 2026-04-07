@@ -323,6 +323,11 @@ export async function server(): Promise<void> {
     }
   })
 
+  // ── Message: forceBloom ─────────────────────────────────────
+  onRoomMessage<Record<string, never>>('forceBloom', async (_data, _address) => {
+    triggerBloom()
+  })
+
   // ── Message: registerPlayer ──────────────────────────────────
   onRoomMessage<{ displayName: string }>('registerPlayer', async (data, address) => {
     const entry = leaderboard.get(address)

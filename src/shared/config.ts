@@ -10,6 +10,14 @@ export const WATERED_EXPIRY_MS  = 6 * 60 * 60 * 1000   // 6 hours
 /** How long after bloom triggers before the server resets all plants. */
 export const BLOOM_RESET_DELAY_MS = 60_000              // 1 minute
 
+// ── Scene-wide spatial / asset constants ─────────────────────
+/** World-space centre of the Bloom model — used for sound, sparkles, shockwaves. */
+export const BLOOM_CENTER = { x: 6.75, y: 2, z: 24 } as const
+/** Shared sparkle texture used by all particle / FX systems. */
+export const SPARKLE_SRC  = 'assets/scene/Images/sparkle.png'
+/** Garden walkable area bounds — used for ambient FX spawning. */
+export const GARDEN_BOUNDS = { xMin: 3, xMax: 14, zMin: 3, zMax: 22 } as const
+
 export const PLANT_NAMES: string[] = [
   'Plant_1',  'Plant_2',  'Plant_3',  'Plant_4',
   'Plant_5',  'Plant_6',  'Plant_7',  'Plant_8',

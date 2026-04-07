@@ -12,6 +12,7 @@ import {
 } from '@dcl/sdk/ecs'
 import { startPetalRain, startPetalSettle } from './petalSystem'
 import { showToast } from './notifications'
+import { BLOOM_CENTER } from './shared/config'
 
 // ---------------------------------------------------------------
 // Configuration
@@ -169,7 +170,7 @@ export function setupBloomSystem(opts: {
 
   // Ambient background track — plays from scene load, fades out during bloom
   ambientSoundEntity = engine.addEntity()
-  Transform.create(ambientSoundEntity, { position: { x: 6.75, y: 2, z: 24 } })
+  Transform.create(ambientSoundEntity, { position: BLOOM_CENTER })
   AudioSource.create(ambientSoundEntity, {
     audioClipUrl: 'assets/scene/Sounds/AmbientSound.mp3',
     playing: true, loop: true, volume: AMBIENT_MAX_VOLUME, pitch: 1,
@@ -178,7 +179,7 @@ export function setupBloomSystem(opts: {
   // Bloom music — silent until triggered; Transform at scene centre avoids
   // DCL applying 3-D positional distance/Doppler effects
   bloomSoundEntity = engine.addEntity()
-  Transform.create(bloomSoundEntity, { position: { x: 6.75, y: 2, z: 24 } })
+  Transform.create(bloomSoundEntity, { position: BLOOM_CENTER })
   AudioSource.create(bloomSoundEntity, {
     audioClipUrl: 'assets/scene/Sounds/MagicSound.mp3',
     playing: false, loop: true, volume: 1, pitch: 1,

@@ -340,7 +340,7 @@ function onDailyLimitReached() {
   updateProgressText()
 }
 
-export function resetDailyLimit() {
+export function resetDailyLimit(): void {
   playerWateredToday = 0
   dailyLimitReached  = false
   hideDailyLimit()
@@ -496,7 +496,7 @@ function waterPlant(entity: Entity, plantId: string) {
   scheduleExpiry(entity, now, expiryMs)
 }
 
-export function resetAllPlants() {
+export function resetAllPlants(): void {
   endBloom()
   endBloomSparkles()
   stopFireflies()
@@ -594,7 +594,7 @@ function setScale(entity: Entity, s: number): void {
   }
 }
 
-export function setupWateringSystem() {
+export function setupWateringSystem(): void {
   // ── Percentage text (entity "wateringPercentage" in Creator Hub) ──
   percentageEntity = engine.getEntityOrNullByName('wateringPercentage') ?? engine.addEntity()
   setScale(percentageEntity, SCALE_PCT_LABEL)
@@ -887,8 +887,5 @@ export function getWateringStatus() {
 
 export function forceTriggerBloom(): void {
   if (isBloomActive()) return
-  triggerBloomEvent()
-  showPersistent(formatBloomCountdown(runtimeTestMode))
-  startBloomLabelUpdater()
-  updateSceneAssets()
+  room.send('forceBloom', {})
 }

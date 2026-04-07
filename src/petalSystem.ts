@@ -3,13 +3,13 @@
 // =============================================================
 
 import { engine, Entity, GltfContainer, Transform } from '@dcl/sdk/ecs'
+import { BLOOM_CENTER } from './shared/config'
 
 // ---------------------------------------------------------------
 // Configuration
 // ---------------------------------------------------------------
 
 const PETAL_COUNT        = 50
-const PETAL_CENTER       = { x: 6.75, z: 24 }
 const PETAL_SPAWN_RADIUS = 7
 const PETAL_HEIGHT_MAX   = 9      // max spawn height (m)
 const PETAL_HEIGHT_MIN   = 1      // min spawn height (m)
@@ -50,9 +50,9 @@ function randomizePetal(p: PetalState) {
   const angle  = Math.random() * Math.PI * 2
   const radius = Math.random() * PETAL_SPAWN_RADIUS
   p.pos = {
-    x: PETAL_CENTER.x + Math.cos(angle) * radius,
+    x: BLOOM_CENTER.x + Math.cos(angle) * radius,
     y: PETAL_HEIGHT_MIN + Math.random() * (PETAL_HEIGHT_MAX - PETAL_HEIGHT_MIN),
-    z: PETAL_CENTER.z + Math.sin(angle) * radius,
+    z: BLOOM_CENTER.z + Math.sin(angle) * radius,
   }
   p.vel = {
     x: (Math.random() - 0.5) * PETAL_DRIFT_MAX * 2,

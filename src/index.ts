@@ -1,4 +1,3 @@
-import {} from '@dcl/sdk/math'
 import { isServer } from '@dcl/sdk/network'
 import { setupNotifications } from './notifications'
 import { setupWateringSystem } from './wateringSystem'

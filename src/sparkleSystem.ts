@@ -20,8 +20,7 @@ import {
   BillboardMode,
 } from '@dcl/sdk/ecs'
 import { Color4 } from '@dcl/sdk/math'
-
-const SPARKLE_SRC = 'assets/scene/Images/sparkle.png'
+import { BLOOM_CENTER, SPARKLE_SRC } from './shared/config'
 
 // ---------------------------------------------------------------
 // Shared helper — create one sparkle entity (plane + material)
@@ -141,17 +140,15 @@ export function sparkleSystem(dt: number): void {
 // SECTION 2 — Bloom orbit sparkles
 // =============================================================
 
-// Bloom model world position
-const BLOOM_CENTER_X = 6.75
-const BLOOM_CENTER_Z = 24
-
 const BLOOM_POOL_SIZE    = 72   // 6 plants × 12 sparkles
 const BLOOM_BURST_COUNT  = 12   // sparkles per plant at bloom
 const BLOOM_SPARKLE_SIZE = 0.28
 
 // Travel from plant to orbit entry point
-const TRAVEL_DUR_BASE  = 1_600  // ms base travel duration
-const TRAVEL_DUR_VARY  = 600    // ms random variation
+const TRAVEL_DUR_BASE    = 1_600  // ms base travel duration
+const TRAVEL_DUR_VARY    = 600    // ms random variation
+const TRAVEL_ARC_HEIGHT  = 0.6    // m — peak of the arc above the straight-line path
+const TRAVEL_POP_IN_FRAC = 0.25   // fraction of travel during which sparkle pops in
 
 // Orbit parameters
 const ORBIT_RADIUS_MIN = 1.0    // m
@@ -287,9 +284,9 @@ export function triggerBloomSparkles(
 
       // Orbit entry point (where travel ends)
       s.travelTarget = {
-        x: BLOOM_CENTER_X + Math.cos(s.orbitAngle) * s.orbitRadius,
+        x: BLOOM_CENTER.x + Math.cos(s.orbitAngle) * s.orbitRadius,
         y: s.orbitBaseY,
-        z: BLOOM_CENTER_Z + Math.sin(s.orbitAngle) * s.orbitRadius,
+        z: BLOOM_CENTER.z + Math.sin(s.orbitAngle) * s.orbitRadius,
       }
 
       // Burst start — slight random offset from plant so they look ejected
@@ -336,9 +333,9 @@ export function triggerWateringTribute(
     s.orbitRadius = 0.25 + Math.random() * 0.35
     s.orbitBaseY  = 1.0  + Math.random() * 1.5
     s.travelTarget = {
-      x: BLOOM_CENTER_X + Math.cos(s.orbitAngle) * s.orbitRadius,
+      x: BLOOM_CENTER.x + Math.cos(s.orbitAngle) * s.orbitRadius,
       y: s.orbitBaseY,
-      z: BLOOM_CENTER_Z + Math.sin(s.orbitAngle) * s.orbitRadius,
+      z: BLOOM_CENTER.z + Math.sin(s.orbitAngle) * s.orbitRadius,
     }
 
     // Burst slightly offset from plant base
@@ -402,11 +399,11 @@ export function bloomSparkleSystem(dt: number): void {
       const t    = smoothstep(rawT)
 
       // Lerp position with a gentle vertical arc (sin arch above the straight line)
-      const arc = Math.sin(rawT * Math.PI) * 0.6   // peaks in the middle
+      const arc = Math.sin(rawT * Math.PI) * TRAVEL_ARC_HEIGHT   // peaks in the middle
       const x   = s.startPos.x + (s.travelTarget.x - s.startPos.x) * t
       const y   = s.startPos.y + (s.travelTarget.y - s.startPos.y) * t + arc
       const z   = s.startPos.z + (s.travelTarget.z - s.startPos.z) * t
-      s.scale   = BLOOM_SPARKLE_SIZE * Math.min(rawT / 0.25, 1)  // pop in over first 25%
+      s.scale   = BLOOM_SPARKLE_SIZE * Math.min(rawT / TRAVEL_POP_IN_FRAC, 1)  // pop in over first 25%
 
       s.pos       = { x, y, z }
       tf.position = { x, y, z }
@@ -431,9 +428,9 @@ export function bloomSparkleSystem(dt: number): void {
       s.orbitAngle += s.orbitSpeed * dt
       s.bobPhase   += s.bobSpeed   * dt
 
-      const x = BLOOM_CENTER_X + Math.cos(s.orbitAngle) * s.orbitRadius
+      const x = BLOOM_CENTER.x + Math.cos(s.orbitAngle) * s.orbitRadius
       const y = s.orbitBaseY   + Math.sin(s.bobPhase)   * s.bobAmp
-      const z = BLOOM_CENTER_Z + Math.sin(s.orbitAngle) * s.orbitRadius
+      const z = BLOOM_CENTER.z + Math.sin(s.orbitAngle) * s.orbitRadius
       s.scale = BLOOM_SPARKLE_SIZE
       s.pos   = { x, y, z }
 
