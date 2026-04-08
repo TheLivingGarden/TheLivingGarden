@@ -335,9 +335,9 @@
             },
             "rotation": {
               "x": 0,
-              "y": 0,
+              "y": 0.5,
               "z": 0,
-              "w": 1
+              "w": 0.8660253882408142
             },
             "parent": 533
           }
@@ -377,9 +377,9 @@
             },
             "rotation": {
               "x": 0,
-              "y": 0,
+              "y": 0.6087614297866821,
               "z": 0,
-              "w": 1
+              "w": 0.7933533191680908
             },
             "parent": 533
           }
@@ -419,9 +419,9 @@
             },
             "rotation": {
               "x": 0,
-              "y": 0,
+              "y": -0.6087614297866821,
               "z": 0,
-              "w": 1
+              "w": 0.7933533191680908
             },
             "parent": 533
           }
@@ -440,9 +440,9 @@
             },
             "rotation": {
               "x": 0,
-              "y": 0,
+              "y": 0.5,
               "z": 0,
-              "w": 1
+              "w": 0.8660253882408142
             },
             "parent": 533
           }
@@ -461,9 +461,9 @@
             },
             "rotation": {
               "x": 0,
-              "y": 0,
+              "y": -0.258819043636322,
               "z": 0,
-              "w": 1
+              "w": 0.9659258127212524
             },
             "parent": 533
           }
@@ -482,9 +482,9 @@
             },
             "rotation": {
               "x": 0,
-              "y": 0,
+              "y": -0.5,
               "z": 0,
-              "w": 1
+              "w": 0.8660253882408142
             },
             "parent": 533
           }
@@ -503,9 +503,9 @@
             },
             "rotation": {
               "x": 0,
-              "y": 0,
+              "y": -0.5,
               "z": 0,
-              "w": 1
+              "w": 0.8660253882408142
             },
             "parent": 533
           }
@@ -587,9 +587,9 @@
             },
             "rotation": {
               "x": 0,
-              "y": 0,
+              "y": -0.6087614297866821,
               "z": 0,
-              "w": 1
+              "w": 0.7933533191680908
             },
             "parent": 533
           }
@@ -597,9 +597,9 @@
         "536": {
           "json": {
             "position": {
-              "x": 14.75,
-              "y": 0.5165706276893616,
-              "z": 2.499999761581421
+              "x": 14.46583080291748,
+              "y": 0.35936659574508667,
+              "z": 1.9705668687820435
             },
             "scale": {
               "x": 1,
@@ -629,9 +629,9 @@
             },
             "rotation": {
               "x": 0,
-              "y": 0,
+              "y": 0.9914448857307434,
               "z": 0,
-              "w": 1
+              "w": 0.13052618503570557
             },
             "parent": 533
           }
@@ -639,9 +639,9 @@
         "538": {
           "json": {
             "position": {
-              "x": 9.574594497680664,
-              "y": 0.32985618710517883,
-              "z": 1.999999761581421
+              "x": 9.059849739074707,
+              "y": 0.309503972530365,
+              "z": 1.7163242101669312
             },
             "scale": {
               "x": 1,
@@ -660,9 +660,9 @@
         "539": {
           "json": {
             "position": {
-              "x": 14.5,
+              "x": 13.875825881958008,
               "y": 0.24950972199440002,
-              "z": 15.750000953674316
+              "z": 14.250000953674316
             },
             "scale": {
               "x": 1,
@@ -681,9 +681,9 @@
         "540": {
           "json": {
             "position": {
-              "x": 1.0925027132034302,
-              "y": 0.33189788460731506,
-              "z": 2.752530813217163
+              "x": 2.816927909851074,
+              "y": 0.24254579842090607,
+              "z": 2.002530813217163
             },
             "scale": {
               "x": 1,
@@ -713,9 +713,9 @@
             },
             "rotation": {
               "x": 0,
-              "y": 0,
+              "y": 0.3826834261417389,
               "z": 0,
-              "w": 1
+              "w": 0.9238795042037964
             },
             "parent": 533
           }
@@ -734,9 +734,9 @@
             },
             "rotation": {
               "x": 0,
-              "y": 0,
+              "y": -0.7933533191680908,
               "z": 0,
-              "w": 1
+              "w": 0.6087614297866821
             },
             "parent": 533
           }
@@ -765,9 +765,9 @@
         "544": {
           "json": {
             "position": {
-              "x": 14.25,
+              "x": 14.01589584350586,
               "y": 0.24950972199440002,
-              "z": 32.37348937988281
+              "z": 33.47984313964844
             },
             "scale": {
               "x": 1,
@@ -786,9 +786,9 @@
         "545": {
           "json": {
             "position": {
-              "x": 14.25,
+              "x": 14.445467948913574,
               "y": 0.24950972199440002,
-              "z": 45.5
+              "z": 45.88532638549805
             },
             "scale": {
               "x": 1,
@@ -807,9 +807,9 @@
         "546": {
           "json": {
             "position": {
-              "x": 9.802480697631836,
+              "x": 9.19970417022705,
               "y": 0.42783012986183167,
-              "z": 45.25
+              "z": 46.39243698120117
             },
             "scale": {
               "x": 1,
@@ -828,9 +828,9 @@
         "547": {
           "json": {
             "position": {
-              "x": 1.5000003576278687,
-              "y": 0.42783012986183167,
-              "z": 46
+              "x": 2.7598092555999756,
+              "y": 0.3515729606151581,
+              "z": 45.95064163208008
             },
             "scale": {
               "x": 1,
@@ -1559,6 +1559,27 @@
             },
             "parent": 0
           }
+        },
+        "584": {
+          "json": {
+            "position": {
+              "x": 8,
+              "y": 12,
+              "z": 24
+            },
+            "scale": {
+              "x": 10,
+              "y": 10,
+              "z": 10
+            },
+            "rotation": {
+              "x": 0.7041000127792358,
+              "y": 0,
+              "z": 0,
+              "w": 0.710099995136261
+            },
+            "parent": 0
+          }
         }
       }
     },
@@ -1704,7 +1725,7 @@
           "json": {
             "states": [
               {
-                "clip": "HealthyState",
+                "clip": "Play",
                 "playing": false,
                 "weight": 1,
                 "speed": 1,
@@ -1712,7 +1733,7 @@
                 "shouldReset": false
               },
               {
-                "clip": "DroopyState",
+                "clip": "CloseIdle",
                 "playing": false,
                 "weight": 1,
                 "speed": 1,
@@ -1720,7 +1741,7 @@
                 "shouldReset": false
               },
               {
-                "clip": "DroopyToHealthy",
+                "clip": "OpenIdle",
                 "playing": false,
                 "weight": 1,
                 "speed": 1,
@@ -1728,7 +1749,15 @@
                 "shouldReset": false
               },
               {
-                "clip": "HealthyToDroopy",
+                "clip": "Open",
+                "playing": false,
+                "weight": 1,
+                "speed": 1,
+                "loop": false,
+                "shouldReset": false
+              },
+              {
+                "clip": "Close",
                 "playing": false,
                 "weight": 1,
                 "speed": 1,
@@ -1742,7 +1771,7 @@
           "json": {
             "states": [
               {
-                "clip": "HealthyState",
+                "clip": "Play",
                 "playing": false,
                 "weight": 1,
                 "speed": 1,
@@ -1750,7 +1779,7 @@
                 "shouldReset": false
               },
               {
-                "clip": "DroopyState",
+                "clip": "CloseIdle",
                 "playing": false,
                 "weight": 1,
                 "speed": 1,
@@ -1758,7 +1787,7 @@
                 "shouldReset": false
               },
               {
-                "clip": "DroopyToHealthy",
+                "clip": "OpenIdle",
                 "playing": false,
                 "weight": 1,
                 "speed": 1,
@@ -1766,7 +1795,15 @@
                 "shouldReset": false
               },
               {
-                "clip": "HealthyToDroopy",
+                "clip": "Open",
+                "playing": false,
+                "weight": 1,
+                "speed": 1,
+                "loop": false,
+                "shouldReset": false
+              },
+              {
+                "clip": "Close",
                 "playing": false,
                 "weight": 1,
                 "speed": 1,
@@ -1818,7 +1855,7 @@
           "json": {
             "states": [
               {
-                "clip": "HealthyState",
+                "clip": "Play",
                 "playing": false,
                 "weight": 1,
                 "speed": 1,
@@ -1826,7 +1863,7 @@
                 "shouldReset": false
               },
               {
-                "clip": "DroopyState",
+                "clip": "CloseIdle",
                 "playing": false,
                 "weight": 1,
                 "speed": 1,
@@ -1834,7 +1871,7 @@
                 "shouldReset": false
               },
               {
-                "clip": "DroopyToHealthy",
+                "clip": "OpenIdle",
                 "playing": false,
                 "weight": 1,
                 "speed": 1,
@@ -1842,7 +1879,15 @@
                 "shouldReset": false
               },
               {
-                "clip": "HealthyToDroopy",
+                "clip": "Open",
+                "playing": false,
+                "weight": 1,
+                "speed": 1,
+                "loop": false,
+                "shouldReset": false
+              },
+              {
+                "clip": "Close",
                 "playing": false,
                 "weight": 1,
                 "speed": 1,
@@ -1856,7 +1901,7 @@
           "json": {
             "states": [
               {
-                "clip": "HealthyState",
+                "clip": "Play",
                 "playing": false,
                 "weight": 1,
                 "speed": 1,
@@ -1864,7 +1909,7 @@
                 "shouldReset": false
               },
               {
-                "clip": "DroopyState",
+                "clip": "CloseIdle",
                 "playing": false,
                 "weight": 1,
                 "speed": 1,
@@ -1872,7 +1917,7 @@
                 "shouldReset": false
               },
               {
-                "clip": "DroopyToHealthy",
+                "clip": "OpenIdle",
                 "playing": false,
                 "weight": 1,
                 "speed": 1,
@@ -1880,7 +1925,15 @@
                 "shouldReset": false
               },
               {
-                "clip": "HealthyToDroopy",
+                "clip": "Open",
+                "playing": false,
+                "weight": 1,
+                "speed": 1,
+                "loop": false,
+                "shouldReset": false
+              },
+              {
+                "clip": "Close",
                 "playing": false,
                 "weight": 1,
                 "speed": 1,
@@ -1894,7 +1947,7 @@
           "json": {
             "states": [
               {
-                "clip": "HealthyState",
+                "clip": "Play",
                 "playing": false,
                 "weight": 1,
                 "speed": 1,
@@ -1902,7 +1955,7 @@
                 "shouldReset": false
               },
               {
-                "clip": "DroopyState",
+                "clip": "CloseIdle",
                 "playing": false,
                 "weight": 1,
                 "speed": 1,
@@ -1910,7 +1963,7 @@
                 "shouldReset": false
               },
               {
-                "clip": "DroopyToHealthy",
+                "clip": "OpenIdle",
                 "playing": false,
                 "weight": 1,
                 "speed": 1,
@@ -1918,7 +1971,15 @@
                 "shouldReset": false
               },
               {
-                "clip": "HealthyToDroopy",
+                "clip": "Open",
+                "playing": false,
+                "weight": 1,
+                "speed": 1,
+                "loop": false,
+                "shouldReset": false
+              },
+              {
+                "clip": "Close",
                 "playing": false,
                 "weight": 1,
                 "speed": 1,
@@ -1932,7 +1993,7 @@
           "json": {
             "states": [
               {
-                "clip": "HealthyState",
+                "clip": "Play",
                 "playing": false,
                 "weight": 1,
                 "speed": 1,
@@ -1940,7 +2001,7 @@
                 "shouldReset": false
               },
               {
-                "clip": "DroopyState",
+                "clip": "CloseIdle",
                 "playing": false,
                 "weight": 1,
                 "speed": 1,
@@ -1948,7 +2009,7 @@
                 "shouldReset": false
               },
               {
-                "clip": "DroopyToHealthy",
+                "clip": "OpenIdle",
                 "playing": false,
                 "weight": 1,
                 "speed": 1,
@@ -1956,7 +2017,15 @@
                 "shouldReset": false
               },
               {
-                "clip": "HealthyToDroopy",
+                "clip": "Open",
+                "playing": false,
+                "weight": 1,
+                "speed": 1,
+                "loop": false,
+                "shouldReset": false
+              },
+              {
+                "clip": "Close",
                 "playing": false,
                 "weight": 1,
                 "speed": 1,
@@ -1970,7 +2039,7 @@
           "json": {
             "states": [
               {
-                "clip": "HealthyState",
+                "clip": "Play",
                 "playing": false,
                 "weight": 1,
                 "speed": 1,
@@ -1978,7 +2047,7 @@
                 "shouldReset": false
               },
               {
-                "clip": "DroopyState",
+                "clip": "CloseIdle",
                 "playing": false,
                 "weight": 1,
                 "speed": 1,
@@ -1986,7 +2055,7 @@
                 "shouldReset": false
               },
               {
-                "clip": "DroopyToHealthy",
+                "clip": "OpenIdle",
                 "playing": false,
                 "weight": 1,
                 "speed": 1,
@@ -1994,7 +2063,15 @@
                 "shouldReset": false
               },
               {
-                "clip": "HealthyToDroopy",
+                "clip": "Open",
+                "playing": false,
+                "weight": 1,
+                "speed": 1,
+                "loop": false,
+                "shouldReset": false
+              },
+              {
+                "clip": "Close",
                 "playing": false,
                 "weight": 1,
                 "speed": 1,
@@ -2060,7 +2137,7 @@
           "json": {
             "states": [
               {
-                "clip": "HealthyState",
+                "clip": "Play",
                 "playing": false,
                 "weight": 1,
                 "speed": 1,
@@ -2068,7 +2145,7 @@
                 "shouldReset": false
               },
               {
-                "clip": "DroopyState",
+                "clip": "CloseIdle",
                 "playing": false,
                 "weight": 1,
                 "speed": 1,
@@ -2076,7 +2153,7 @@
                 "shouldReset": false
               },
               {
-                "clip": "DroopyToHealthy",
+                "clip": "OpenIdle",
                 "playing": false,
                 "weight": 1,
                 "speed": 1,
@@ -2084,7 +2161,15 @@
                 "shouldReset": false
               },
               {
-                "clip": "HealthyToDroopy",
+                "clip": "Open",
+                "playing": false,
+                "weight": 1,
+                "speed": 1,
+                "loop": false,
+                "shouldReset": false
+              },
+              {
+                "clip": "Close",
                 "playing": false,
                 "weight": 1,
                 "speed": 1,
@@ -2098,7 +2183,7 @@
           "json": {
             "states": [
               {
-                "clip": "HealthyState",
+                "clip": "Play",
                 "playing": false,
                 "weight": 1,
                 "speed": 1,
@@ -2106,7 +2191,7 @@
                 "shouldReset": false
               },
               {
-                "clip": "DroopyState",
+                "clip": "CloseIdle",
                 "playing": false,
                 "weight": 1,
                 "speed": 1,
@@ -2114,7 +2199,7 @@
                 "shouldReset": false
               },
               {
-                "clip": "DroopyToHealthy",
+                "clip": "OpenIdle",
                 "playing": false,
                 "weight": 1,
                 "speed": 1,
@@ -2122,7 +2207,15 @@
                 "shouldReset": false
               },
               {
-                "clip": "HealthyToDroopy",
+                "clip": "Open",
+                "playing": false,
+                "weight": 1,
+                "speed": 1,
+                "loop": false,
+                "shouldReset": false
+              },
+              {
+                "clip": "Close",
                 "playing": false,
                 "weight": 1,
                 "speed": 1,
@@ -2136,7 +2229,7 @@
           "json": {
             "states": [
               {
-                "clip": "HealthyState",
+                "clip": "Play",
                 "playing": false,
                 "weight": 1,
                 "speed": 1,
@@ -2144,7 +2237,7 @@
                 "shouldReset": false
               },
               {
-                "clip": "DroopyState",
+                "clip": "CloseIdle",
                 "playing": false,
                 "weight": 1,
                 "speed": 1,
@@ -2152,7 +2245,7 @@
                 "shouldReset": false
               },
               {
-                "clip": "DroopyToHealthy",
+                "clip": "OpenIdle",
                 "playing": false,
                 "weight": 1,
                 "speed": 1,
@@ -2160,7 +2253,15 @@
                 "shouldReset": false
               },
               {
-                "clip": "HealthyToDroopy",
+                "clip": "Open",
+                "playing": false,
+                "weight": 1,
+                "speed": 1,
+                "loop": false,
+                "shouldReset": false
+              },
+              {
+                "clip": "Close",
                 "playing": false,
                 "weight": 1,
                 "speed": 1,
@@ -2174,7 +2275,7 @@
           "json": {
             "states": [
               {
-                "clip": "HealthyState",
+                "clip": "Play",
                 "playing": false,
                 "weight": 1,
                 "speed": 1,
@@ -2182,7 +2283,7 @@
                 "shouldReset": false
               },
               {
-                "clip": "DroopyState",
+                "clip": "CloseIdle",
                 "playing": false,
                 "weight": 1,
                 "speed": 1,
@@ -2190,7 +2291,7 @@
                 "shouldReset": false
               },
               {
-                "clip": "DroopyToHealthy",
+                "clip": "OpenIdle",
                 "playing": false,
                 "weight": 1,
                 "speed": 1,
@@ -2198,7 +2299,15 @@
                 "shouldReset": false
               },
               {
-                "clip": "HealthyToDroopy",
+                "clip": "Open",
+                "playing": false,
+                "weight": 1,
+                "speed": 1,
+                "loop": false,
+                "shouldReset": false
+              },
+              {
+                "clip": "Close",
                 "playing": false,
                 "weight": 1,
                 "speed": 1,
@@ -2212,7 +2321,7 @@
           "json": {
             "states": [
               {
-                "clip": "HealthyState",
+                "clip": "Play",
                 "playing": false,
                 "weight": 1,
                 "speed": 1,
@@ -2220,7 +2329,7 @@
                 "shouldReset": false
               },
               {
-                "clip": "DroopyToHealthy",
+                "clip": "CloseIdle",
                 "playing": false,
                 "weight": 1,
                 "speed": 1,
@@ -2228,7 +2337,7 @@
                 "shouldReset": false
               },
               {
-                "clip": "HealthyToDroopy",
+                "clip": "OpenIdle",
                 "playing": false,
                 "weight": 1,
                 "speed": 1,
@@ -2236,7 +2345,15 @@
                 "shouldReset": false
               },
               {
-                "clip": "DroopyState",
+                "clip": "Open",
+                "playing": false,
+                "weight": 1,
+                "speed": 1,
+                "loop": false,
+                "shouldReset": false
+              },
+              {
+                "clip": "Close",
                 "playing": false,
                 "weight": 1,
                 "speed": 1,
@@ -2250,7 +2367,7 @@
           "json": {
             "states": [
               {
-                "clip": "HealthyState",
+                "clip": "Play",
                 "playing": false,
                 "weight": 1,
                 "speed": 1,
@@ -2258,7 +2375,7 @@
                 "shouldReset": false
               },
               {
-                "clip": "DroopyToHealthy",
+                "clip": "CloseIdle",
                 "playing": false,
                 "weight": 1,
                 "speed": 1,
@@ -2266,7 +2383,7 @@
                 "shouldReset": false
               },
               {
-                "clip": "HealthyToDroopy",
+                "clip": "OpenIdle",
                 "playing": false,
                 "weight": 1,
                 "speed": 1,
@@ -2274,7 +2391,15 @@
                 "shouldReset": false
               },
               {
-                "clip": "DroopyState",
+                "clip": "Open",
+                "playing": false,
+                "weight": 1,
+                "speed": 1,
+                "loop": false,
+                "shouldReset": false
+              },
+              {
+                "clip": "Close",
                 "playing": false,
                 "weight": 1,
                 "speed": 1,
@@ -2288,7 +2413,7 @@
           "json": {
             "states": [
               {
-                "clip": "HealthyState",
+                "clip": "Play",
                 "playing": false,
                 "weight": 1,
                 "speed": 1,
@@ -2296,7 +2421,7 @@
                 "shouldReset": false
               },
               {
-                "clip": "DroopyState",
+                "clip": "CloseIdle",
                 "playing": false,
                 "weight": 1,
                 "speed": 1,
@@ -2304,7 +2429,7 @@
                 "shouldReset": false
               },
               {
-                "clip": "DroopyToHealthy",
+                "clip": "OpenIdle",
                 "playing": false,
                 "weight": 1,
                 "speed": 1,
@@ -2312,7 +2437,15 @@
                 "shouldReset": false
               },
               {
-                "clip": "HealthyToDroopy",
+                "clip": "Open",
+                "playing": false,
+                "weight": 1,
+                "speed": 1,
+                "loop": false,
+                "shouldReset": false
+              },
+              {
+                "clip": "Close",
                 "playing": false,
                 "weight": 1,
                 "speed": 1,
@@ -2326,7 +2459,7 @@
           "json": {
             "states": [
               {
-                "clip": "HealthyState",
+                "clip": "Play",
                 "playing": false,
                 "weight": 1,
                 "speed": 1,
@@ -2334,7 +2467,7 @@
                 "shouldReset": false
               },
               {
-                "clip": "DroopyState",
+                "clip": "CloseIdle",
                 "playing": false,
                 "weight": 1,
                 "speed": 1,
@@ -2342,7 +2475,7 @@
                 "shouldReset": false
               },
               {
-                "clip": "DroopyToHealthy",
+                "clip": "OpenIdle",
                 "playing": false,
                 "weight": 1,
                 "speed": 1,
@@ -2350,7 +2483,15 @@
                 "shouldReset": false
               },
               {
-                "clip": "HealthyToDroopy",
+                "clip": "Open",
+                "playing": false,
+                "weight": 1,
+                "speed": 1,
+                "loop": false,
+                "shouldReset": false
+              },
+              {
+                "clip": "Close",
                 "playing": false,
                 "weight": 1,
                 "speed": 1,
@@ -2364,7 +2505,7 @@
           "json": {
             "states": [
               {
-                "clip": "HealthyState",
+                "clip": "Play",
                 "playing": false,
                 "weight": 1,
                 "speed": 1,
@@ -2372,7 +2513,7 @@
                 "shouldReset": false
               },
               {
-                "clip": "DroopyToHealthy",
+                "clip": "CloseIdle",
                 "playing": false,
                 "weight": 1,
                 "speed": 1,
@@ -2380,7 +2521,7 @@
                 "shouldReset": false
               },
               {
-                "clip": "HealthyToDroopy",
+                "clip": "OpenIdle",
                 "playing": false,
                 "weight": 1,
                 "speed": 1,
@@ -2388,7 +2529,15 @@
                 "shouldReset": false
               },
               {
-                "clip": "DroopyState",
+                "clip": "Open",
+                "playing": false,
+                "weight": 1,
+                "speed": 1,
+                "loop": false,
+                "shouldReset": false
+              },
+              {
+                "clip": "Close",
                 "playing": false,
                 "weight": 1,
                 "speed": 1,
@@ -2402,7 +2551,7 @@
           "json": {
             "states": [
               {
-                "clip": "HealthyState",
+                "clip": "Play",
                 "playing": false,
                 "weight": 1,
                 "speed": 1,
@@ -2410,7 +2559,7 @@
                 "shouldReset": false
               },
               {
-                "clip": "DroopyToHealthy",
+                "clip": "CloseIdle",
                 "playing": false,
                 "weight": 1,
                 "speed": 1,
@@ -2418,7 +2567,7 @@
                 "shouldReset": false
               },
               {
-                "clip": "HealthyToDroopy",
+                "clip": "OpenIdle",
                 "playing": false,
                 "weight": 1,
                 "speed": 1,
@@ -2426,7 +2575,15 @@
                 "shouldReset": false
               },
               {
-                "clip": "DroopyState",
+                "clip": "Open",
+                "playing": false,
+                "weight": 1,
+                "speed": 1,
+                "loop": false,
+                "shouldReset": false
+              },
+              {
+                "clip": "Close",
                 "playing": false,
                 "weight": 1,
                 "speed": 1,
@@ -2440,7 +2597,7 @@
           "json": {
             "states": [
               {
-                "clip": "HealthyState",
+                "clip": "Play",
                 "playing": false,
                 "weight": 1,
                 "speed": 1,
@@ -2448,7 +2605,7 @@
                 "shouldReset": false
               },
               {
-                "clip": "DroopyToHealthy",
+                "clip": "CloseIdle",
                 "playing": false,
                 "weight": 1,
                 "speed": 1,
@@ -2456,7 +2613,7 @@
                 "shouldReset": false
               },
               {
-                "clip": "HealthyToDroopy",
+                "clip": "OpenIdle",
                 "playing": false,
                 "weight": 1,
                 "speed": 1,
@@ -2464,7 +2621,15 @@
                 "shouldReset": false
               },
               {
-                "clip": "DroopyState",
+                "clip": "Open",
+                "playing": false,
+                "weight": 1,
+                "speed": 1,
+                "loop": false,
+                "shouldReset": false
+              },
+              {
+                "clip": "Close",
                 "playing": false,
                 "weight": 1,
                 "speed": 1,
@@ -2478,7 +2643,7 @@
           "json": {
             "states": [
               {
-                "clip": "HealthyState",
+                "clip": "Play",
                 "playing": false,
                 "weight": 1,
                 "speed": 1,
@@ -2486,7 +2651,7 @@
                 "shouldReset": false
               },
               {
-                "clip": "DroopyToHealthy",
+                "clip": "CloseIdle",
                 "playing": false,
                 "weight": 1,
                 "speed": 1,
@@ -2494,7 +2659,7 @@
                 "shouldReset": false
               },
               {
-                "clip": "HealthyToDroopy",
+                "clip": "OpenIdle",
                 "playing": false,
                 "weight": 1,
                 "speed": 1,
@@ -2502,7 +2667,15 @@
                 "shouldReset": false
               },
               {
-                "clip": "DroopyState",
+                "clip": "Open",
+                "playing": false,
+                "weight": 1,
+                "speed": 1,
+                "loop": false,
+                "shouldReset": false
+              },
+              {
+                "clip": "Close",
                 "playing": false,
                 "weight": 1,
                 "speed": 1,
@@ -4157,6 +4330,11 @@
           "json": {
             "value": "lamppost.glb_4"
           }
+        },
+        "584": {
+          "json": {
+            "value": "Spotlight"
+          }
         }
       }
     },
@@ -4496,6 +4674,37 @@
       }
     },
     {
+      "name": "core::LightSource",
+      "jsonSchema": {
+        "type": "object",
+        "properties": {},
+        "serializationType": "protocol-buffer",
+        "protocolBuffer": "PBLightSource"
+      },
+      "data": {
+        "584": {
+          "json": {
+            "active": true,
+            "color": {
+              "r": 1,
+              "g": 0.6470588445663452,
+              "b": 0
+            },
+            "intensity": 16000,
+            "range": -1,
+            "shadow": true,
+            "type": {
+              "$case": "spot",
+              "spot": {
+                "innerAngle": 30,
+                "outerAngle": 40
+              }
+            }
+          }
+        }
+      }
+    },
+    {
       "name": "inspector::Selection",
       "jsonSchema": {
         "type": "object",
@@ -4508,9 +4717,9 @@
         "serializationType": "map"
       },
       "data": {
-        "0": {
+        "544": {
           "json": {
-            "gizmo": 0
+            "gizmo": 1
           }
         }
       }
@@ -4596,7 +4805,8 @@
                   580,
                   581,
                   582,
-                  583
+                  583,
+                  584
                 ]
               },
               {
@@ -4609,6 +4819,7 @@
               },
               {
                 "entity": 533,
+                "open": true,
                 "children": [
                   535,
                   536,
@@ -4922,6 +5133,10 @@
               {
                 "entity": 583,
                 "children": []
+              },
+              {
+                "entity": 584,
+                "children": []
               }
             ]
           }
@@ -5159,6 +5374,9 @@
           "json": {}
         },
         "583": {
+          "json": {}
+        },
+        "584": {
           "json": {}
         }
       }
@@ -6097,6 +6315,98 @@
               "text": "Configure the sit spot's hover text and actions. Players can click to sit here. The spot tracks whether it's free or taken and shows a message when occupied."
             },
             "version": 1
+          }
+        },
+        "584": {
+          "json": {
+            "isBasicViewEnabled": true,
+            "componentName": "",
+            "fields": [],
+            "assetId": "87c829b3-8e8d-4fcb-9f43-85d3aa9084f6",
+            "label": "Light Settings",
+            "sections": [
+              {
+                "id": "light-settings",
+                "items": [
+                  {
+                    "component": "core::LightSource",
+                    "widget": "ColorField",
+                    "label": "Color",
+                    "type": "Color3",
+                    "path": "color",
+                    "props": {
+                      "basic": true
+                    },
+                    "transform": {
+                      "in": {
+                        "steps": [
+                          {
+                            "op": "toHex"
+                          }
+                        ]
+                      },
+                      "out": {
+                        "steps": [
+                          {
+                            "op": "toColor3"
+                          }
+                        ]
+                      }
+                    }
+                  },
+                  {
+                    "component": "core::LightSource",
+                    "widget": "RangeField",
+                    "label": "Intensity",
+                    "path": "intensity",
+                    "constraints": {
+                      "max": 300000,
+                      "step": 1,
+                      "default": "16000"
+                    }
+                  },
+                  {
+                    "component": "core::LightSource",
+                    "widget": "RangeField",
+                    "label": "Inner Angle",
+                    "path": "type.spot.innerAngle",
+                    "constraints": {
+                      "max": 180,
+                      "step": 1,
+                      "default": "30"
+                    }
+                  },
+                  {
+                    "component": "core::LightSource",
+                    "widget": "RangeField",
+                    "label": "Outer Angle",
+                    "path": "type.spot.outerAngle",
+                    "constraints": {
+                      "max": 180,
+                      "step": 1,
+                      "default": "40"
+                    }
+                  }
+                ],
+                "columns": 1
+              },
+              {
+                "id": "shadow-mask",
+                "items": [
+                  {
+                    "component": "core::LightSource",
+                    "widget": "FileUploadField",
+                    "label": "Shadow Mask Texture",
+                    "path": "shadowMaskTexture.tex.texture.src",
+                    "props": {}
+                  }
+                ]
+              }
+            ],
+            "helpTooltip": {
+              "text": "A spotlight that can be used to illuminate a scene."
+            },
+            "version": 2
           }
         }
       }
@@ -7545,6 +7855,23 @@
               }
             ]
           }
+        },
+        "584": {
+          "json": {
+            "id": 29,
+            "value": [
+              {
+                "name": "Turn On",
+                "type": "lights_on",
+                "jsonPayload": "{}"
+              },
+              {
+                "name": "Turn Off",
+                "type": "lights_off",
+                "jsonPayload": "{}"
+              }
+            ]
+          }
         }
       }
     },
@@ -7568,7 +7895,7 @@
         "0": {
           "json": {
             "id": 0,
-            "value": 28
+            "value": 29
           }
         }
       }
@@ -8679,6 +9006,11 @@
         "573": {
           "json": {
             "src": "assets/asset-packs/sit_spot/sitting_pose_collider.glb"
+          }
+        },
+        "584": {
+          "json": {
+            "src": "assets/asset-packs/spotlight/spotlight.glb"
           }
         }
       }

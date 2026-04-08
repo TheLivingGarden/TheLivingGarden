@@ -58,6 +58,7 @@ export enum EntityNames {
   Sit_Spot_7 = "Sit Spot_7",
   Sit_Spot_8 = "Sit Spot_8",
   Sit_Spot_9 = "Sit Spot_9",
+  Spotlight = "Spotlight",
   TrellisLights_1_High_glb = "TrellisLights_1_High.glb",
   TrellisLights_1_Low_glb = "TrellisLights_1_Low.glb",
   TrellisLights_1_Mid_glb = "TrellisLights_1_Mid.glb",

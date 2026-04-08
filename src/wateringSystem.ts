@@ -27,6 +27,8 @@ import {
   InputAction,
   Transform,
   VisibilityComponent,
+  Tween,
+  EasingFunction,
   timers,
 } from '@dcl/sdk/ecs'
 import { getPlayer }              from '@dcl/sdk/players'
@@ -108,7 +110,7 @@ const FONT_PCT_LABEL   = 6    // Image_2–5 + wateringPercentage entity
 const FONT_BLOOM_LABEL = 2.5  // Image_6–9 bloom countdown
 const FONT_BLOOM_CTR   = 1.5  // centerTextBloom entity
 // TextShape has no emissiveIntensity — colour only.
-const TEXT_LABEL_COLOR = { r: 0.96, g: 0.92, b: 0.80, a: 1 }  // warm cream — matches GLB text
+const TEXT_LABEL_COLOR = { r: 1.0, g: 0.78, b: 0.5, a: 1 }  // gold/amber
 const SCALE_PCT_LABEL   = 0.6   // uniform scale applied to Image_2–5 + wateringPercentage
 const SCALE_BLOOM_LABEL = 1.4   // uniform scale applied to Image_6–9
 
@@ -116,7 +118,6 @@ const SCALE_BLOOM_LABEL = 1.4   // uniform scale applied to Image_6–9
 const WELCOME_DELAY_MS        = 1_500    // wait for server sync before first welcome toast
 const TOAST_WATERED_MS        = 2_500    // "Plant Watered! X%" duration
 const TOAST_WELCOME_MS        = 4_000    // "X% of Plants Watered" duration
-const TOAST_CONNECTING_MS     = 1_500    // "Connecting…" fallback
 const BLOOM_LABEL_TICK_MS     = 60_000   // re-check bloom countdown every 60 s
 const LIVE_WATER_THRESHOLD_MS = 10_000   // plantStateUpdate < 10 s old = live water by another player
 const LIMIT_DEBOUNCE_MS       = 5_000    // min gap between daily-limit toast notifications
@@ -170,15 +171,27 @@ let emoteActive   = false
 let emoteGen      = 0
 let emoteStartPos: { x: number; y: number; z: number } | null = null
 
-type DropFade = 'in' | 'out' | 'visible' | 'hidden'
-interface DropState { entity: Entity; fade: DropFade; fadeMs: number }
-const dropMap = new Map<Entity, DropState>()
+/** plant entity → its drop GLB entity */
+const dropMap = new Map<Entity, Entity>()
 
 function setDropFade(plantEntity: Entity, direction: 'in' | 'out') {
-  const s = dropMap.get(plantEntity)
-  if (!s) return
-  s.fade   = direction
-  s.fadeMs = 0
+  const drop = dropMap.get(plantEntity)
+  if (!drop) return
+  if (direction === 'in') {
+    Tween.setScale(drop,
+      { x: 0.001, y: 0.001, z: 0.001 },
+      { x: 1,     y: 1,     z: 1     },
+      DROP_FADE_MS,
+      EasingFunction.EF_EASEOUTBACK,
+    )
+  } else {
+    Tween.setScale(drop,
+      { x: 1,     y: 1,     z: 1     },
+      { x: 0.001, y: 0.001, z: 0.001 },
+      DROP_FADE_MS,
+      EasingFunction.EF_EASEINBACK,
+    )
+  }
 }
 
 // ---------------------------------------------------------------
@@ -196,23 +209,6 @@ function emoteCleanupSystem() {
   emoteActive   = false
   emoteStartPos = null
   movePlayerTo({ newRelativePosition: pos })
-}
-
-// ---------------------------------------------------------------
-// Drop-fade system
-// ---------------------------------------------------------------
-
-function dropFadeSystem(dt: number) {
-  for (const [, s] of dropMap) {
-    if (s.fade !== 'in' && s.fade !== 'out') continue
-    s.fadeMs += dt * 1000
-    const t  = Math.min(s.fadeMs / DROP_FADE_MS, 1)
-    const te = t * t * (3 - 2 * t)
-    const sc = s.fade === 'in' ? te : 1 - te
-    const v  = Math.max(sc, 0.001)
-    Transform.getMutable(s.entity).scale = { x: v, y: v, z: v }
-    if (t >= 1) s.fade = s.fade === 'in' ? 'visible' : 'hidden'
-  }
 }
 
 // ---------------------------------------------------------------
@@ -434,7 +430,6 @@ function scheduleExpiry(entity: Entity, sessionTimestamp: number, delayMs: numbe
 function waterPlant(entity: Entity, plantId: string) {
   if (isBloomActive()) return
   if (emoteActive)     return
-  if (!roomReady && !runtimeTestMode) { showToast('Connecting...', TOAST_CONNECTING_MS); return }
 
   const pd = PlantData.getMutable(entity)
   if (pd.isWatered) return
@@ -580,7 +575,7 @@ function setupPlant(plantName: string) {
   Transform.create(drop, { position: { x: 0, y: WATER_DROP_Y, z: 0 }, scale: { x: 1, y: 1, z: 1 }, parent: entity })
   GltfContainer.create(drop, { src: WATER_DROP_SRC })
   Billboard.create(drop, { billboardMode: BillboardMode.BM_Y })
-  dropMap.set(entity, { entity: drop, fade: 'visible', fadeMs: 0 })
+  dropMap.set(entity, drop)
 }
 
 // ---------------------------------------------------------------
@@ -693,22 +688,26 @@ export function setupWateringSystem(): void {
   engine.addSystem(emoteCleanupSystem)
   engine.addSystem(musicFadeSystem)
   engine.addSystem(resetAnimSystem)
-  engine.addSystem(dropFadeSystem)
   engine.addSystem(petalParticleSystem)
   engine.addSystem(sparkleSystem)
   engine.addSystem(bloomSparkleSystem)
   engine.addSystem(ambientFXSystem)
 
-  room.onReady(() => {
-    console.log('[Client] Connected to room')
-    roomReady = true
-    const lp = getPlayer()
-    room.send('registerPlayer', { displayName: lp?.name ?? lp?.userId ?? 'unknown' })
+  // Diagnostic: log when the SDK's internal room-ready atom fires
+  room.onReady((isReady) => {
+    console.log(`[Client] room.onReady fired: isReady=${isReady}`)
   })
 
   // ── Server message handlers ──────────────────────────────────
 
   room.onMessage('playerDailyState', (data) => {
+    // First message from the server proves the room is functional — register the player now
+    if (!roomReady) {
+      roomReady = true
+      console.log('[Client] Room confirmed via playerDailyState')
+      const lp = getPlayer()
+      room.send('registerPlayer', { displayName: lp?.name ?? lp?.userId ?? 'unknown' })
+    }
     playerWateredToday = data.wateredToday
     if (!initialLoadDone) {
       initialLoadDone = true
@@ -798,11 +797,10 @@ export function setupWateringSystem(): void {
         } else {
           // State recovery on join — snap drop hidden immediately, no fade
           Animator.playSingleAnimation(entity, ANIM_HEALTHY_STATE)
-          const ds = dropMap.get(entity)
-          if (ds) {
-            Transform.getMutable(ds.entity).scale = { x: 0.001, y: 0.001, z: 0.001 }
-            ds.fade   = 'hidden'
-            ds.fadeMs = 0
+          const drop = dropMap.get(entity)
+          if (drop) {
+            Tween.deleteFrom(drop)
+            Transform.getMutable(drop).scale = { x: 0.001, y: 0.001, z: 0.001 }
           }
         }
       }
@@ -897,5 +895,10 @@ export function getWateringStatus() {
 
 export function forceTriggerBloom(): void {
   if (isBloomActive()) return
-  room.send('forceBloom', {})
+  if (room.isReady()) {
+    room.send('forceBloom', {})
+  } else {
+    // Local fallback — room not connected yet (common in local preview)
+    triggerBloomEvent()
+  }
 }

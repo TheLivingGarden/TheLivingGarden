@@ -200,6 +200,7 @@ export function setupBloomSystem(opts: {
     console.log('[BloomSystem] Bloom entity not found')
   }
 
+
   console.log('[BloomSystem] ready')
 }
 

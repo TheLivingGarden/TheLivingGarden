@@ -18,7 +18,7 @@ const PETAL_FALL_MAX     = 1.0    // m/s max fall speed
 const PETAL_DRIFT_MAX    = 0.3    // m/s max horizontal drift
 const PETAL_LIFE_MIN_MS  = 3_000
 const PETAL_LIFE_MAX_MS  = 7_000
-const PETAL_SCALE        = 0.5
+const PETAL_SCALE        = 1.5
 const PETAL_REST_MS      = 2_000  // time resting on ground before shrinking
 const PETAL_SHRINK_MS    = 600    // duration of scale-to-zero shrink
 
