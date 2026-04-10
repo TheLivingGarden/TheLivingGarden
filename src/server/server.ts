@@ -27,9 +27,12 @@ import {
 // State
 // ---------------------------------------------------------------
 
-const plantEntities = new Map<string, Entity>()   // plantId → entity
-const knownPlayers  = new Set<Entity>()           // entities seen this session
-let   bloomActive   = false
+const plantEntities  = new Map<string, Entity>()   // plantId → entity
+const knownPlayers   = new Set<Entity>()           // entities seen this session
+const testOverrides  = new Set<string>()           // addresses with daily-limit bypass (test panel)
+const syncRateLimits = new Map<string, number>()   // address → last requestFullSync ms
+const SYNC_RATE_MS   = 5_000                       // min ms between full syncs per player
+let   bloomActive    = false
 
 // ── Leaderboard ──────────────────────────────────────────────
 interface LeaderboardEntry { displayName: string; total: number }
@@ -134,9 +137,13 @@ function broadcastLeaderboard(to?: string[]): void {
 function dailyKey(date: string): string { return `daily:${date}` }
 
 async function getPlayerDailyCount(address: string): Promise<number> {
-  const today = new Date().toISOString().slice(0, 10)
-  const raw   = await Storage.player.get<string>(address, dailyKey(today))
-  return raw ? parseInt(raw) : 0
+  try {
+    const today = new Date().toISOString().slice(0, 10)
+    const raw   = await Storage.player.get<string>(address, dailyKey(today))
+    return raw ? parseInt(raw) : 0
+  } catch {
+    return 0  // new player — no storage entry yet (Storage.player.get throws 404)
+  }
 }
 
 async function incrementPlayerDailyCount(address: string): Promise<number> {
@@ -196,7 +203,7 @@ function scheduleExpiry(
     executeTask(async () => {
       if (bloomActive) return  // bloom reset will clear everything
       const ps = PlantSync.getOrNull(entity)
-      if (!ps || !ps.isWatered || ps.wateredAt !== sessionTimestamp) return
+      if (!ps || !ps.isWatered || Number(ps.wateredAt) !== sessionTimestamp) return
 
       const expired = PlantSync.getMutable(entity)
       expired.isWatered = false
@@ -206,6 +213,38 @@ function scheduleExpiry(
       console.log(`[Server] Plant expired: ${plantId}`)
     })
   }, delayMs)
+}
+
+// ---------------------------------------------------------------
+// Scheduled bloom check — fires at every 6am and 6pm UTC
+// ---------------------------------------------------------------
+
+function msUntilNextBloomWindow(): number {
+  // TEMPORARY: test window at 00:10 Madrid (CEST = UTC+2 → 22:10 UTC)
+  const now      = Date.now()
+  const d        = new Date(now)
+  const y        = d.getUTCFullYear()
+  const mo       = d.getUTCMonth()
+  const day      = d.getUTCDate()
+  const today    = Date.UTC(y, mo, day,     22, 10, 0, 0)
+  const tomorrow = Date.UTC(y, mo, day + 1, 22, 10, 0, 0)
+  const ms       = today - now
+  return ms > 500 ? ms : tomorrow - now
+}
+
+function scheduleBloomCheck(): void {
+  const delay    = msUntilNextBloomWindow()
+  const windowAt = new Date(Date.now() + delay).toISOString()
+  console.log(`[Server] Next bloom window: ${windowAt} (in ${Math.round(delay / 60_000)} min)`)
+
+  setTimeout(() => {
+    executeTask(async () => {
+      const count = getWateredCount()
+      console.log(`[Server] Bloom window reached — health ${count}/${BLOOM_THRESHOLD}`)
+      if (!bloomActive && count >= BLOOM_THRESHOLD) triggerBloom()
+      scheduleBloomCheck()  // always reschedule for the next window
+    })
+  }, delay)
 }
 
 // ---------------------------------------------------------------
@@ -225,7 +264,7 @@ function playerJoinSystem(): void {
       for (const [plantId, plantEntity] of plantEntities) {
         const ps = PlantSync.getOrNull(plantEntity)
         if (!ps) continue
-        room.send('plantStateUpdate', { plantId, isWatered: ps.isWatered, wateredAt: ps.wateredAt }, { to: [address] })
+        room.send('plantStateUpdate', { plantId, isWatered: ps.isWatered, wateredAt: Number(ps.wateredAt) }, { to: [address] })
       }
 
       broadcastLeaderboard([address])
@@ -301,9 +340,9 @@ export async function server(): Promise<void> {
         return
       }
 
-      // Reject if daily limit reached
+      // Reject if daily limit reached (test-panel override bypasses this)
       const todayCount = await getPlayerDailyCount(playerAddress)
-      if (todayCount >= DAILY_WATER_LIMIT) {
+      if (!testOverrides.has(playerAddress) && todayCount >= DAILY_WATER_LIMIT) {
         room.send('waterRejected', { plantId, reason: 'daily_limit' }, { to: [playerAddress] })
         return
       }
@@ -343,6 +382,38 @@ export async function server(): Promise<void> {
     triggerBloom()
   })
 
+  // ── Message: requestFullSync ─────────────────────────────────
+  onRoomMessage<Record<string, never>>('requestFullSync', async (_data, address) => {
+    const now      = Date.now()
+    const lastSync = syncRateLimits.get(address) ?? 0
+    if (now - lastSync < SYNC_RATE_MS) {
+      console.log(`[Server] requestFullSync rate-limited for ${address}`)
+      return
+    }
+    syncRateLimits.set(address, now)
+    const wateredToday = await getPlayerDailyCount(address)
+    room.send('playerDailyState', { wateredToday, dailyLimit: DAILY_WATER_LIMIT }, { to: [address] })
+    for (const [plantId, plantEntity] of plantEntities) {
+      const ps = PlantSync.getOrNull(plantEntity)
+      if (!ps) continue
+      room.send('plantStateUpdate', { plantId, isWatered: ps.isWatered, wateredAt: Number(ps.wateredAt) }, { to: [address] })
+    }
+    broadcastLeaderboard([address])
+    if (bloomActive) room.send('bloomTriggered', {}, { to: [address] })
+    console.log(`[Server] Full sync sent to ${address} (${wateredToday}/${DAILY_WATER_LIMIT} today, ${getWateredCount()}/${BLOOM_THRESHOLD} watered)`)
+  })
+
+  // ── Message: setTestOverride ─────────────────────────────────
+  onRoomMessage<{ enabled: boolean }>('setTestOverride', async (data, address) => {
+    if (data.enabled) {
+      testOverrides.add(address)
+      console.log(`[Server] Test override ENABLED for ${address}`)
+    } else {
+      testOverrides.delete(address)
+      console.log(`[Server] Test override DISABLED for ${address}`)
+    }
+  })
+
   // ── Message: registerPlayer ──────────────────────────────────
   onRoomMessage<{ displayName: string }>('registerPlayer', async (data, address) => {
     const entry = leaderboard.get(address)
@@ -358,6 +429,9 @@ export async function server(): Promise<void> {
 
   // Player join detection — runs every frame, lightweight
   engine.addSystem(playerJoinSystem)
+
+  // Schedule bloom checks at every 6am/6pm UTC window
+  scheduleBloomCheck()
 
   console.log('[Server] Ready')
 }

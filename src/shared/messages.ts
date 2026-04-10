@@ -14,6 +14,10 @@ export const room = registerMessages({
   registerPlayer:   Schemas.Map({ displayName: Schemas.String }),
   /** Test-panel only — triggers bloom on the server so all clients sync correctly. */
   forceBloom:       Schemas.Map({}),
+  /** Test-panel only — tells the server to bypass the daily limit for this player. */
+  setTestOverride:  Schemas.Map({ enabled: Schemas.Boolean }),
+  /** Sent on room.onReady so the server re-sends full state even after a client reload. */
+  requestFullSync:  Schemas.Map({}),
 
   // ── Server → specific client ──────────────────────────────
   /** Sent on player join and after each successful watering. */

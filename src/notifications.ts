@@ -17,20 +17,28 @@ export { setupUi as setupNotifications } from './ui'
 // Message formatters
 // ---------------------------------------------------------------
 
-/** Bloom countdown — returns only the time remaining (h and min). */
+/** Bloom countdown — returns time remaining with seconds (e.g. "2h 14m 07s").
+ *  TEMPORARY: test window at 00:10 Madrid (CEST = UTC+2 → 22:10 UTC).
+ *  Returns "0s" once the window has passed (server will fire bloomTriggered). */
 export function formatBloomCountdown(testMode: boolean): string {
   if (testMode) return 'Soon...'
-  const now   = new Date()
-  const at6am = new Date(now); at6am.setUTCHours(6,  0, 0, 0)
-  const at6pm = new Date(now); at6pm.setUTCHours(18, 0, 0, 0)
-  let next: Date
-  if      (now < at6am) next = at6am
-  else if (now < at6pm) next = at6pm
-  else { next = new Date(at6am); next.setUTCDate(next.getUTCDate() + 1) }
-  const ms = next.getTime() - Date.now()
+  const now      = Date.now()
+  const d        = new Date(now)
+  const y        = d.getUTCFullYear()
+  const mo       = d.getUTCMonth()
+  const day      = d.getUTCDate()
+  const today    = Date.UTC(y, mo, day,     22, 10, 0, 0)
+  const tomorrow = Date.UTC(y, mo, day + 1, 22, 10, 0, 0)
+  const target   = today > now ? today : tomorrow
+  const ms      = target - now
+  if (ms <= 0) return '0s'
   const h  = Math.floor(ms / 3_600_000)
   const m  = Math.floor((ms % 3_600_000) / 60_000)
-  return `${h}h ${m}m`
+  const s  = Math.floor((ms % 60_000) / 1_000)
+  const ss = String(s).padStart(2, '0')
+  if (h > 0) return `${h}h ${m}m ${ss}s`
+  if (m > 0) return `${m}m ${ss}s`
+  return `${ss}s`
 }
 
 /** Toast copy — shown when the player hits their daily watering limit. */

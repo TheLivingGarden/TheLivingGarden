@@ -120,7 +120,7 @@ const SCALE_BLOOM_LABEL = 1.4   // uniform scale applied to Image_6–9
 const WELCOME_DELAY_MS        = 1_500    // wait for server sync before first welcome toast
 const TOAST_WATERED_MS        = 2_500    // "Plant Watered! X%" duration
 const TOAST_WELCOME_MS        = 4_000    // "X% of Plants Watered" duration
-const BLOOM_LABEL_TICK_MS     = 60_000   // re-check bloom countdown every 60 s
+const BLOOM_LABEL_TICK_MS     = 1_000    // re-check bloom countdown every 1 s (seconds visible)
 const LIVE_WATER_THRESHOLD_MS = 10_000   // plantStateUpdate < 10 s old = live water by another player
 const LIMIT_DEBOUNCE_MS       = 5_000    // min gap between daily-limit toast notifications
 
@@ -168,7 +168,9 @@ let lastLimitNotificationMs = 0
 let initialLoadDone         = false
 let roomReady               = false
 
-let emoteActive = false
+let emoteActive          = false
+let lastSyncRequestMs    = 0
+const SYNC_REQUEST_MIN_MS = 5_000   // don't flood server with requestFullSync on rapid reloads
 
 /** plant entity → its drop GLB entity */
 const dropMap = new Map<Entity, Entity>()
@@ -256,8 +258,33 @@ function clearBloomLabels() {
   for (const e of bloomLabels) TextShape.getMutable(e).text = ''
 }
 
+// ── Pre-bloom ticker — counts down while health >= threshold, bloom not yet active ──
+let preBloomTickerGen = 0
+
+function startPreBloomTicker(): void {
+  if (runtimeTestMode) return
+  const myGen = ++preBloomTickerGen
+  function tick() {
+    if (preBloomTickerGen !== myGen) return        // cancelled (threshold dropped or bloom started)
+    if (isBloomActive()) return                    // bloom took over — bloom updater handles text
+    if (computeWateredCount() < BLOOM_THRESHOLD) return  // fell below threshold
+    const countdown = formatBloomCountdown(false)
+    setBloomLabelText(countdown)
+    updateBannerCountdown(countdown)
+    // When countdown hits 0 server is about to fire bloomTriggered — keep ticking until it does
+    timers.setTimeout(tick, BLOOM_LABEL_TICK_MS)
+  }
+  timers.setTimeout(tick, BLOOM_LABEL_TICK_MS)
+}
+
+function stopPreBloomTicker(): void {
+  preBloomTickerGen++   // invalidates any running chain
+}
+
+// ── Bloom-active updater — runs for the ~60 s the bloom animation is live ──
 function startBloomLabelUpdater() {
   if (runtimeTestMode) { setBloomLabelText('All plants watered!\nBloom starting soon...'); return }
+  stopPreBloomTicker()   // pre-bloom ticker no longer needed
   setBloomLabelText(formatBloomCountdown(false))
   updateBannerCountdown(formatBloomCountdown(false))
   function tick() {
@@ -294,8 +321,12 @@ function updateProgressText() {
   // Banner state: idle below threshold, countdown at/above threshold (unless bloom active)
   if (!isBloomActive()) {
     if (count >= BLOOM_THRESHOLD) {
-      showBannerCountdown(formatBloomCountdown(runtimeTestMode))
+      const countdown = formatBloomCountdown(runtimeTestMode)
+      showBannerCountdown(countdown)
+      setBloomLabelText(countdown)
+      startPreBloomTicker()   // keeps banner + 3D labels ticking every second
     } else {
+      stopPreBloomTicker()
       showBannerIdle()
     }
   }
@@ -722,12 +753,29 @@ export function setupWateringSystem(): void {
   engine.addSystem(bloomSparkleSystem)
   engine.addSystem(ambientFXSystem)
 
-  // Diagnostic: log when the SDK's internal room-ready atom fires
+  // On every room connection (including reloads) request a full state dump from the server.
+  // This ensures the client re-syncs even when the server's playerJoinSystem doesn't detect
+  // a new entity (e.g. quick reloads where the ECS entity version doesn't change).
   room.onReady((isReady) => {
     console.log(`[Client] room.onReady fired: isReady=${isReady}`)
+    if (!isReady) return
+    const now = Date.now()
+    if (now - lastSyncRequestMs < SYNC_REQUEST_MIN_MS) {
+      console.log('[Client] requestFullSync skipped — rate limited')
+      return
+    }
+    lastSyncRequestMs = now
+    // Reset init flags so playerDailyState handler re-runs welcome flow on reload
+    roomReady       = false
+    initialLoadDone = false
+    room.send('requestFullSync', {})
   })
 
   // ── Server message handlers ──────────────────────────────────
+  // Clear any handlers from a previous setup call (DCL can re-run setup on scene reload).
+  // Without this, each reload stacks another copy of every handler, causing N sounds,
+  // N animations, and N ripples per broadcast — a reliable crash path.
+  room.clear()
 
   room.onMessage('playerDailyState', (data) => {
     // First message from the server proves the room is functional — register the player now
@@ -785,6 +833,7 @@ export function setupWateringSystem(): void {
   })
 
   room.onMessage('bloomReset', () => {
+    stopPreBloomTicker()
     resetAllPlants()
     clearBloomLabels()
     setGroundLightsBloom(false)
@@ -877,6 +926,13 @@ export function setupWateringSystem(): void {
 
 export function setOverrideDailyLimit(val: boolean): void {
   overrideDailyLimit = val
+  room.send('setTestOverride', { enabled: val })
+  // Re-enable plant clicks that were disabled when the daily limit was hit
+  if (val && dailyLimitReached) {
+    for (const [entity] of plantRegistry) {
+      if (!PlantData.get(entity).isWatered) enablePlantClick(entity)
+    }
+  }
   updateProgressText()
 }
 
