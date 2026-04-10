@@ -85,6 +85,21 @@ const LABEL_FONT_SIZE_THRESHOLD = 1.5
 // Positive = further right, negative = overlap the bar
 const LABEL_OFFSET_M            = 0.2
 
+// ── Tween ─────────────────────────────────────────────────────────
+// Speed in ratio-units per second. 0.6 ≈ full bar fills in ~1.7 s.
+const TWEEN_SPEED = 0.6
+
+// ── Sparkles ──────────────────────────────────────────────────────
+const SPARK_COUNT    = 6      // particles per update
+const SPARK_LIFETIME = 0.85   // seconds
+const SPARK_RISE     = 1.6    // upward speed m/s
+const SPARK_SPREAD   = 0.35   // max lateral speed m/s
+const SPARK_SIZE     = 0.065  // initial cube size (metres)
+// Warm golden glow — looks like sunlit water droplets
+const SPARK_ALBEDO   = Color4.create(1.0, 0.92, 0.45, 1)
+const SPARK_EMISSIVE = { r: 1.0, g: 0.88, b: 0.3 }
+const SPARK_EMISSION = 3.5
+
 // ===============================================================
 //                  end of config
 // ===============================================================
@@ -117,15 +132,29 @@ const BLOOM_RATIO = BLOOM_THRESHOLD / TOTAL_PLANTS
 // ---------------------------------------------------------------
 
 interface Bar {
-  fill:       Entity
-  lastRatio:  number
-  fillScaleX: number
-  fillScaleZ: number
-  fillFrontZ: number
-  minFillH:   number
+  fill:         Entity
+  targetRatio:  number   // where the bar should end up
+  displayRatio: number   // currently rendered (lerps toward targetRatio)
+  fillScaleX:   number
+  fillScaleZ:   number
+  fillFrontZ:   number
+  minFillH:     number
+  worldX:       number   // world-space bar centre X
+  worldY:       number   // world-space bar centre Y (lifted)
+  worldZ:       number   // world-space bar centre Z
+  barHeight:    number   // world height of bar (metres)
 }
 
-const bars: Bar[] = []
+interface Spark {
+  entity: Entity
+  x: number; y: number; z: number
+  vx: number; vy: number; vz: number
+  life:    number   // remaining seconds
+  maxLife: number
+}
+
+const bars:   Bar[]   = []
+const sparks: Spark[] = []
 
 // ---------------------------------------------------------------
 // Helpers
@@ -138,6 +167,41 @@ function quatRightX(qx: number, qy: number, qz: number, qw: number): number {
 /** World-space +X (right) Z component from quaternion. */
 function quatRightZ(qx: number, qy: number, qz: number, qw: number): number {
   return 2 * (qx * qz - qy * qw)
+}
+
+/** Spawn sparkle particles at the fill tip of a bar. */
+function spawnSparks(bar: Bar): void {
+  const tipY = bar.worldY + (bar.targetRatio - 0.5) * bar.barHeight
+  for (let i = 0; i < SPARK_COUNT; i++) {
+    const angle = Math.random() * Math.PI * 2
+    const speed = Math.random() * SPARK_SPREAD
+    const e = engine.addEntity()
+    Transform.create(e, {
+      position: {
+        x: bar.worldX + Math.cos(angle) * speed * 0.1,
+        y: tipY,
+        z: bar.worldZ + Math.sin(angle) * speed * 0.1,
+      },
+      scale: { x: SPARK_SIZE, y: SPARK_SIZE, z: SPARK_SIZE },
+    })
+    MeshRenderer.setBox(e)
+    Material.setPbrMaterial(e, {
+      albedoColor:       SPARK_ALBEDO,
+      emissiveColor:     SPARK_EMISSIVE,
+      emissiveIntensity: SPARK_EMISSION,
+    })
+    sparks.push({
+      entity: e,
+      x: bar.worldX + Math.cos(angle) * speed * 0.1,
+      y: tipY,
+      z: bar.worldZ + Math.sin(angle) * speed * 0.1,
+      vx: Math.cos(angle) * speed,
+      vy: SPARK_RISE * (0.7 + Math.random() * 0.6),
+      vz: Math.sin(angle) * speed,
+      life:    SPARK_LIFETIME,
+      maxLife: SPARK_LIFETIME,
+    })
+  }
 }
 
 // ---------------------------------------------------------------
@@ -171,14 +235,12 @@ export function setupProgressBars(): void {
     })
 
     // ── Precompute local-space fill geometry ───────────────────────
-    // Fill depth is capped to MAX_FILL_DEPTH_M so a square-cross-section
-    // placeholder (sz ≈ sx) doesn't produce a thick brick-shaped fill.
     const fillWorldDepth = Math.min(sz - 2 * FILL_INSET, MAX_FILL_DEPTH_M)
     const fillScaleX     = (sx - 2 * FILL_INSET) / sx
     const fillScaleZ     = Math.max(0.05, fillWorldDepth / sz)
-    const fillFrontZ     = 0.5 + 0.005 / sz   // 5 mm proud of front face (local Z)
-    const tickFrontZ     = 0.5 + 0.010 / sz   // ticks slightly further out
-    const minFillH       = 0.001 / sy          // 1 mm minimum visible fill
+    const fillFrontZ     = 0.5 + 0.005 / sz
+    const tickFrontZ     = 0.5 + 0.010 / sz
+    const minFillH       = 0.001 / sy
 
     // ── Fill — child of background, grows from bottom upward ───────
     const fill = engine.addEntity()
@@ -193,7 +255,19 @@ export function setupProgressBars(): void {
       emissiveColor:     FILL_RED_COLOR,
       emissiveIntensity: FILL_EMISSION,
     })
-    bars.push({ fill, lastRatio: -1, fillScaleX, fillScaleZ, fillFrontZ, minFillH })
+    bars.push({
+      fill,
+      targetRatio:  0,
+      displayRatio: 0,
+      fillScaleX,
+      fillScaleZ,
+      fillFrontZ,
+      minFillH,
+      worldX:    px,
+      worldY:    py,
+      worldZ:    pz,
+      barHeight: sy,
+    })
 
     // ── Marker ticks — children of background ─────────────────────
     const tickWorldDepth = Math.min(sz, MAX_TICK_DEPTH_M)
@@ -201,9 +275,9 @@ export function setupProgressBars(): void {
     const rz = quatRightZ(qx, qy, qz, qw)
 
     for (const m of MARKERS) {
-      const localY     = m.ratio - 0.5              // -0.5 = bottom, +0.5 = top
+      const localY     = m.ratio - 0.5
       const tickThickL = (m.isThreshold ? TICK_THICK_THRESHOLD_M : TICK_THICK_NORMAL_M) / sy
-      const tickWideL  = (sx + 0.06) / sx           // slightly wider than bar
+      const tickWideL  = (sx + 0.06) / sx
       const tickDeepL  = tickWorldDepth / sz
 
       const color    = m.isThreshold ? COLOR_THRESHOLD : COLOR_MARKER
@@ -222,10 +296,6 @@ export function setupProgressBars(): void {
         emissiveIntensity: m.isThreshold ? THRESHOLD_EMISSION : MARKER_EMISSION,
       })
 
-      // ── Label — world-space, rotated to match the bar's facing ───
-      // Not parented (avoids TextShape distortion from non-uniform parent scale).
-      // The label inherits the bar's Y rotation so it faces the same direction
-      // as the bar's front face instead of defaulting to global +Z.
       const labelDist = sx * 0.5 + LABEL_OFFSET_M
       const labelX    = px + rx * labelDist
       const labelY    = py + (m.ratio - 0.5) * sy
@@ -234,7 +304,7 @@ export function setupProgressBars(): void {
       const label = engine.addEntity()
       Transform.create(label, {
         position: { x: labelX, y: labelY, z: labelZ },
-        rotation: quat,   // same Y rotation as the bar → text faces bar front
+        rotation: quat,
       })
       TextShape.create(label, {
         text:      m.label,
@@ -243,6 +313,45 @@ export function setupProgressBars(): void {
       })
     }
   }
+
+  // ── Tween + sparkle system ──────────────────────────────────────
+  engine.addSystem((dt: number) => {
+    // Tween fills toward their target ratios
+    for (const bar of bars) {
+      if (bar.displayRatio === bar.targetRatio) continue
+      const diff = bar.targetRatio - bar.displayRatio
+      const step = TWEEN_SPEED * dt
+      bar.displayRatio = Math.abs(diff) <= step
+        ? bar.targetRatio
+        : bar.displayRatio + Math.sign(diff) * step
+
+      const fillH   = Math.max(bar.minFillH, bar.displayRatio)
+      const centreY = -0.5 + fillH / 2
+      const tf = Transform.getMutable(bar.fill)
+      tf.position = { x: 0, y: centreY,       z: bar.fillFrontZ }
+      tf.scale    = { x: bar.fillScaleX, y: fillH, z: bar.fillScaleZ }
+    }
+
+    // Animate and expire sparkle particles
+    for (let i = sparks.length - 1; i >= 0; i--) {
+      const s = sparks[i]
+      s.life -= dt
+      if (s.life <= 0) {
+        engine.removeEntity(s.entity)
+        sparks.splice(i, 1)
+        continue
+      }
+      s.x += s.vx * dt
+      s.y += s.vy * dt
+      s.z += s.vz * dt
+      s.vy -= 2.5 * dt   // gentle gravity pull
+      const progress = s.life / s.maxLife
+      const sc = SPARK_SIZE * progress
+      const tf = Transform.getMutable(s.entity)
+      tf.position = { x: s.x, y: s.y, z: s.z }
+      tf.scale    = { x: sc, y: sc, z: sc }
+    }
+  })
 
   console.log(`[ProgressBars] ${bars.length} bars ready`)
 }
@@ -260,20 +369,19 @@ export function updateProgressBars(wateredCount: number, total: number): void {
   const emissive = isGreen ? FILL_GREEN_COLOR  : isOrange ? FILL_ORANGE_COLOR  : FILL_RED_COLOR
 
   for (const bar of bars) {
-    if (bar.lastRatio === ratio) continue
-    bar.lastRatio = ratio
+    if (bar.targetRatio === ratio) continue
 
-    const fillH   = Math.max(bar.minFillH, ratio)
-    const centreY = -0.5 + fillH / 2
+    const increased = ratio > bar.targetRatio
+    bar.targetRatio = ratio
 
-    const tf = Transform.getMutable(bar.fill)
-    tf.position = { x: 0, y: centreY,       z: bar.fillFrontZ }
-    tf.scale    = { x: bar.fillScaleX, y: fillH, z: bar.fillScaleZ }
-
+    // Update fill colour immediately so it matches the new state
     Material.setPbrMaterial(bar.fill, {
       albedoColor:       albedo,
       emissiveColor:     emissive,
       emissiveIntensity: FILL_EMISSION,
     })
+
+    // Sparkles only when the bar is going up
+    if (increased) spawnSparks(bar)
   }
 }

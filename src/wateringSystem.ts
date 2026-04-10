@@ -38,6 +38,7 @@ import { setupBloomSystem, triggerBloomEvent, endBloom, isBloomActive, musicFade
 import { setupSparkleSystem, triggerSparkle, triggerWateringTribute, sparkleSystem, triggerBloomSparkles, endBloomSparkles, bloomSparkleSystem } from './sparkleSystem'
 import { setupAmbientFX, triggerBloomShockwave, triggerGroundRipple, startFireflies, stopFireflies, ambientFXSystem } from './ambientFX'
 import { setupProgressBars, updateProgressBars }              from './progressBarsSystem'
+import { setupGroundLights, updateGroundLights, triggerGroundLightBurst, setGroundLightsBloom } from './groundLightSystem'
 import { setupLeaderboardBoards, updateLeaderboardDisplay }   from './leaderboardSystem'
 import { setupFairyLights, setFairyLightsBloom }             from './fairyLightSystem'
 import { showToast, showDailyLimit, hideDailyLimit, showPersistent, hidePersistent, formatBloomCountdown, formatDailyLimitMessage } from './notifications'
@@ -67,6 +68,10 @@ const ANIM_HEALTHY_STATE = 'OpenIdle'   // healthy idle loop
 // Note: no reverse transition clip — reset snaps directly to CloseIdle
 const ANIM_TRANSITION_MS = 6_000        // ms — duration of Play clip
 const ANIMATOR_INIT_DELAY_MS = 1000     // ms — defer Animator.create until GLBs load
+
+// ── Unhealthy Rose (shown while plant is not watered) ─────────
+const UNHEALTHY_ROSE_SRC  = 'assets/scene/Models/UnhealthyRose/UnhealthyRose.glb'
+const ANIM_UNHEALTHY_IDLE = 'CloseIdle'  // idle loop in UnhealthyRose.glb
 
 // ── Emote ─────────────────────────────────────────────────────
 const EMOTE_SRC       = 'assets/scene/Models/Emotes/WateringCan_emote.glb'
@@ -167,6 +172,18 @@ let emoteActive = false
 
 /** plant entity → its drop GLB entity */
 const dropMap = new Map<Entity, Entity>()
+
+/** plant entity → its UnhealthyRose entity */
+const roseMap = new Map<Entity, Entity>()
+
+function showRose(entity: Entity)  {
+  const r = roseMap.get(entity); if (r) VisibilityComponent.createOrReplace(r, { visible: true  })
+}
+function hideRose(entity: Entity)  {
+  const r = roseMap.get(entity); if (r) VisibilityComponent.createOrReplace(r, { visible: false })
+}
+function showPlant(entity: Entity) { VisibilityComponent.createOrReplace(entity, { visible: true  }) }
+function hidePlant(entity: Entity) { VisibilityComponent.createOrReplace(entity, { visible: false }) }
 
 function setDropFade(plantEntity: Entity, direction: 'in' | 'out') {
   const drop = dropMap.get(plantEntity)
@@ -269,13 +286,14 @@ function updateProgressText() {
   TextShape.getMutable(percentageEntity).text = pctStr
   for (const e of wateringLabels) TextShape.getMutable(e).text = pctStr
   updateProgressBars(count, TOTAL_PLANTS)
+  updateGroundLights(count)
   updateSceneAssets()
 }
 
 function showWelcomeProgress() {
   const count = computeWateredCount()
   const pct   = Math.round((count / TOTAL_PLANTS) * 100)
-  showToast(`${pct}% of Plants Watered`, TOAST_WELCOME_MS)
+  showToast(`Water the plants! ${pct}% watered`, TOAST_WELCOME_MS)
 }
 
 // ---------------------------------------------------------------
@@ -382,8 +400,9 @@ function scheduleExpiry(entity: Entity, sessionTimestamp: number, delayMs: numbe
     pd.wateredAt = 0
     updateProgressText()
 
-    // No reverse transition clip — snap directly to droopy idle
-    Animator.playSingleAnimation(entity, ANIM_DROOPY_STATE)
+    // Swap back to unhealthy rose
+    hidePlant(entity)
+    showRose(entity)
     enablePlantClick(entity)
     setDropFade(entity, 'in')
   }, delayMs)
@@ -419,17 +438,20 @@ function waterPlant(entity: Entity, plantId: string) {
   playClickSound()
   triggerWateringEmote(entity)
 
-  // t=WATER_FX_MS — sound + ripple
+  // t=WATER_FX_MS — sound + ripple + light burst
   timers.setTimeout(playWateringSound, WATER_FX_MS)
   timers.setTimeout(() => {
     const pos = Transform.getOrNull(entity)?.position
     if (pos) triggerGroundRipple(pos)
+    triggerGroundLightBurst()
   }, WATER_FX_MS)
 
-  // t=WATER_ANIM_MS — plant tips forward, animate to healthy
+  // t=WATER_ANIM_MS — swap rose→plant, animate to healthy
   timers.setTimeout(() => {
     const current = PlantData.get(entity)
     if (!current.isWatered || current.wateredAt !== now) return
+    hideRose(entity)
+    showPlant(entity)
     Animator.playSingleAnimation(entity, ANIM_TO_HEALTHY)
     playMagicFXSound()
     // t=WATER_ANIM_MS + ANIM_TRANSITION_MS — sparkles burst
@@ -486,7 +508,8 @@ function resetAnimSystem(dt: number) {
     const entity = reset.queue.shift()
     if (entity && !PlantData.get(entity).isWatered) {
       Animator.stopAllAnimations(entity, true)
-      Animator.playSingleAnimation(entity, ANIM_DROOPY_STATE, true)
+      hidePlant(entity)
+      showRose(entity)
       setDropFade(entity, 'in')
     }
     if (reset.queue.length === 0) {
@@ -516,6 +539,16 @@ function setupPlant(plantName: string) {
     GltfContainer.getMutable(entity).visibleMeshesCollisionMask =
       ColliderLayer.CL_PHYSICS | ColliderLayer.CL_POINTER
   }
+
+  // Spawn the UnhealthyRose model as a child — sits exactly on top of the plant
+  const roseEntity = engine.addEntity()
+  Transform.create(roseEntity, { parent: entity })
+  GltfContainer.create(roseEntity, { src: UNHEALTHY_ROSE_SRC })
+  roseMap.set(entity, roseEntity)
+
+  // Start hidden — animator init (deferred below) will set visibility correctly
+  hidePlant(entity)
+  hideRose(entity)
 
   let clickTarget:    Entity
   let clickboxEntity: Entity | null = null
@@ -602,6 +635,7 @@ export function setupWateringSystem(): void {
       triggerBloomShockwave()
       startFireflies()
       setFairyLightsBloom(true)
+      setGroundLightsBloom(true)
       const positions: Array<{ x: number; y: number; z: number }> = []
       for (const [entity] of plantRegistry) {
         const pos = Transform.getOrNull(entity)?.position
@@ -629,6 +663,9 @@ export function setupWateringSystem(): void {
     for (const name of PLANT_NAMES) {
       const entity = engine.getEntityOrNullByName(name)
       if (!entity) continue
+      const isWatered = PlantData.getOrNull(entity)?.isWatered ?? false
+
+      // demoPlant animator
       Animator.createOrReplace(entity, {
         states: [
           { clip: ANIM_DROOPY_STATE,  playing: false, loop: true  },
@@ -636,8 +673,25 @@ export function setupWateringSystem(): void {
           { clip: ANIM_HEALTHY_STATE, playing: false, loop: true  },
         ],
       })
-      const initAnim = PlantData.getOrNull(entity)?.isWatered ? ANIM_HEALTHY_STATE : ANIM_DROOPY_STATE
-      Animator.playSingleAnimation(entity, initAnim, true)
+      Animator.playSingleAnimation(entity, isWatered ? ANIM_HEALTHY_STATE : ANIM_DROOPY_STATE, true)
+
+      // UnhealthyRose animator
+      const roseEntity = roseMap.get(entity)
+      if (roseEntity) {
+        Animator.createOrReplace(roseEntity, {
+          states: [{ clip: ANIM_UNHEALTHY_IDLE, playing: false, loop: true }],
+        })
+        Animator.playSingleAnimation(roseEntity, ANIM_UNHEALTHY_IDLE, true)
+      }
+
+      // Set correct initial visibility
+      if (isWatered) {
+        showPlant(entity)
+        hideRose(entity)
+      } else {
+        hidePlant(entity)
+        showRose(entity)
+      }
     }
   }, ANIMATOR_INIT_DELAY_MS)
 
@@ -646,6 +700,7 @@ export function setupWateringSystem(): void {
   setupAmbientFX()
   setupFairyLights()
   setupProgressBars()
+  setupGroundLights()
 
   engine.addSystem(musicFadeSystem)
   engine.addSystem(resetAnimSystem)
@@ -719,6 +774,8 @@ export function setupWateringSystem(): void {
   room.onMessage('bloomReset', () => {
     resetAllPlants()
     clearBloomLabels()
+    setGroundLightsBloom(false)
+    updateGroundLights(0)   // reset circles to hidden
   })
 
   room.onMessage('leaderboardUpdate', (data) => {
@@ -743,8 +800,11 @@ export function setupWateringSystem(): void {
       if (!wasWatered) {
         const isLive = (Date.now() - data.wateredAt) < LIVE_WATER_THRESHOLD_MS
         if (isLive) {
+          hideRose(entity)
+          showPlant(entity)
           setDropFade(entity, 'out')
           Animator.playSingleAnimation(entity, ANIM_TO_HEALTHY)
+          triggerGroundLightBurst()
           if (plantPos) {
             Transform.getMutable(wateringSoundEntity).position = plantPos
             AudioSource.createOrReplace(wateringSoundEntity, { audioClipUrl: SND_WATERING, playing: true, loop: false, volume: VOL_WATERING, pitch: 1 })
@@ -756,7 +816,9 @@ export function setupWateringSystem(): void {
             if (plantPos) triggerSparkle(plantPos)
           }, ANIM_TRANSITION_MS)
         } else {
-          // State recovery on join — snap drop hidden immediately, no fade
+          // State recovery on join — snap to healthy immediately, no fade
+          hideRose(entity)
+          showPlant(entity)
           Animator.playSingleAnimation(entity, ANIM_HEALTHY_STATE)
           const drop = dropMap.get(entity)
           if (drop) {
@@ -771,8 +833,9 @@ export function setupWateringSystem(): void {
       enablePlantClick(entity)
 
       if (wasWatered) {
+        hidePlant(entity)
+        showRose(entity)
         setDropFade(entity, 'in')
-        Animator.playSingleAnimation(entity, ANIM_DROOPY_STATE)
       }
     }
 
