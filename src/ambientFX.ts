@@ -88,7 +88,7 @@ function setupShockwaves() {
   for (let i = 0; i < SHOCK_COUNT; i++) {
     const ent = engine.addEntity()
     Transform.create(ent, {
-      position: BLOOM_CENTER,
+      position:   { x: BLOOM_CENTER.x, y: BLOOM_CENTER.y +2, z: BLOOM_CENTER.z},
       rotation: Quaternion.fromEulerDegrees(90, 0, 0),
       scale:    { x: 0.001, y: 0.001, z: 0.001 },
     })
@@ -177,7 +177,7 @@ function setupFireflies() {
 // Entity is removed once the animation completes.
 // =============================================================
 
-const RIPPLE_DUR_MS = 700
+const RIPPLE_DUR_MS = 1700
 const RIPPLE_R_MAX  = 4.5   // world-unit radius
 
 interface ActiveRipple { entity: Entity; elapsed: number }
@@ -186,7 +186,7 @@ const activeRipples: ActiveRipple[] = []
 export function triggerGroundRipple(pos: { x: number; y: number; z: number }): void {
   const ent = engine.addEntity()
   Transform.create(ent, {
-    position: { x: pos.x, y: 0.08, z: pos.z },
+    position: { x: pos.x, y: pos.y +0.5, z: pos.z },
     rotation: Quaternion.fromEulerDegrees(90, 0, 0),
     scale:    { x: 0.001, y: 0.001, z: 0.001 },
   })

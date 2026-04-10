@@ -59,13 +59,17 @@ function patchVec4Colors(filePath) {
   const bufferViews  = gltf.bufferViews  || []
   const meshes       = gltf.meshes       || []
 
-  // Collect all accessor indices used as VEC4 COLOR_0
+  // Collect all accessor indices used as VEC4 COLOR_N (any vertex colour set)
+  // Babylon.js sets hasVertexAlpha=true for *any* COLOR_N accessor that is VEC4,
+  // not just COLOR_0.  Secondary colour sets (COLOR_1, COLOR_2 …) exported by
+  // Blender as RGBA are equally crash-causing on NullEngine.
   const vec4Indices = new Set()
   for (const mesh of meshes) {
     for (const prim of (mesh.primitives || [])) {
-      const idx = (prim.attributes || {}).COLOR_0
-      if (idx !== undefined && accessors[idx] && accessors[idx].type === 'VEC4') {
-        vec4Indices.add(idx)
+      for (const [attr, idx] of Object.entries(prim.attributes || {})) {
+        if (/^COLOR_\d+$/.test(attr) && accessors[idx] && accessors[idx].type === 'VEC4') {
+          vec4Indices.add(idx)
+        }
       }
     }
   }
@@ -149,6 +153,104 @@ function patchVec4Colors(filePath) {
   return vec4Indices.size
 }
 
+// ── Strip _collider meshes ────────────────────────────────────────────────────
+//
+// WHY: DCL's production hammurabi-server (worker-bundle.cjs) calls setColliderMask()
+// for every mesh whose name ends with '_collider'. That function assigns a GridMaterial
+// with opacity=0, which sets needAlphaBlending()=true in Babylon.js → mesh enters
+// _renderTransparentSorted → NullEngine has no compiled shader → _effect is undefined
+// → setMatrix() crash → server never reaches room.onReady() → clients hang forever.
+//
+// The local server is protected by hammurabi.mjs which patches UniformBuffer to guard
+// _currentEffect at runtime.  Production has no such guard.
+//
+// Fix: remove all _collider meshes (and the nodes that reference them) from the GLB
+// before deploy.  The production server never sees them, never assigns opacity=0.
+// Physics/pointer collision for plants is handled by visibleMeshesCollisionMask in
+// wateringSystem.ts; bean-bag/pot walk-through is an acceptable trade-off.
+
+function stripColliderMeshes(filePath) {
+  const glb = readGlb(filePath)
+  if (!glb || !glb.jsonData) return 0
+
+  const gltf = glb.jsonData
+
+  const meshes   = gltf.meshes   || []
+  const nodes    = gltf.nodes    || []
+
+  // Find indices of meshes whose name ends with _collider (case-insensitive)
+  const removedMeshIndices = new Set()
+  for (let i = 0; i < meshes.length; i++) {
+    if (meshes[i].name && /_collider$/i.test(meshes[i].name)) {
+      removedMeshIndices.add(i)
+    }
+  }
+
+  if (removedMeshIndices.size === 0) return 0
+
+  // Build a remapping of old mesh index → new mesh index after removal
+  const meshRemap = new Map()
+  let newIdx = 0
+  for (let i = 0; i < meshes.length; i++) {
+    if (!removedMeshIndices.has(i)) {
+      meshRemap.set(i, newIdx++)
+    }
+  }
+
+  // Remove the collider meshes from the meshes array
+  gltf.meshes = meshes.filter((_, i) => !removedMeshIndices.has(i))
+
+  // Update node.mesh references: remap surviving references, delete removed ones
+  for (const node of nodes) {
+    if (node.mesh === undefined) continue
+    if (removedMeshIndices.has(node.mesh)) {
+      delete node.mesh
+    } else {
+      node.mesh = meshRemap.get(node.mesh)
+    }
+  }
+
+  // Rebuild GLB with patched JSON (BIN chunk unchanged — we only remove JSON refs,
+  // the binary data for stripped accessors stays in the buffer but is unreferenced
+  // and ignored by all loaders).
+  const jsonStr    = JSON.stringify(gltf, null, 0)
+  const jsonBuf    = Buffer.from(jsonStr, 'utf8')
+  const jsonPadLen = (4 - (jsonBuf.length % 4)) % 4
+  const jsonPadded = jsonPadLen ? Buffer.concat([jsonBuf, Buffer.alloc(jsonPadLen, 0x20)]) : jsonBuf
+
+  const binPadded = glb.binData
+    ? (() => {
+        const pad = (4 - (glb.binData.length % 4)) % 4
+        return pad ? Buffer.concat([glb.binData, Buffer.alloc(pad)]) : glb.binData
+      })()
+    : null
+
+  const jsonChunkTotal = 8 + jsonPadded.length
+  const binChunkTotal  = binPadded ? 8 + binPadded.length : 0
+  const totalLen       = 12 + jsonChunkTotal + binChunkTotal
+
+  const header = Buffer.allocUnsafe(12)
+  header.writeUInt32LE(0x46546C67, 0)
+  header.writeUInt32LE(2, 4)
+  header.writeUInt32LE(totalLen, 8)
+
+  const jsonHeader = Buffer.allocUnsafe(8)
+  jsonHeader.writeUInt32LE(jsonPadded.length, 0)
+  jsonHeader.writeUInt32LE(0x4E4F534A, 4)
+
+  const parts = [header, jsonHeader, jsonPadded]
+
+  if (binPadded) {
+    const binHeader = Buffer.allocUnsafe(8)
+    binHeader.writeUInt32LE(binPadded.length, 0)
+    binHeader.writeUInt32LE(0x004E4942, 4)
+    parts.push(binHeader, binPadded)
+  }
+
+  fs.writeFileSync(filePath, Buffer.concat(parts))
+  return removedMeshIndices.size
+}
+
 // ── Main ─────────────────────────────────────────────────────────────────────
 
 function findGlbs(dir, results = []) {
@@ -161,23 +263,34 @@ function findGlbs(dir, results = []) {
 }
 
 const glbs = findGlbs(ASSETS_DIR)
-let totalPatched = 0
-let filesPatched = 0
+let totalVec4    = 0
+let filesVec4    = 0
+let totalStripped = 0
+let filesStripped = 0
 
-console.log(`[patch-glbs] Scanning ${glbs.length} GLB(s) for VEC4 vertex colors...`)
+console.log(`[patch-glbs] Scanning ${glbs.length} GLB(s) for VEC4 vertex colors and _collider meshes...`)
 
 for (const glb of glbs) {
-  const count = patchVec4Colors(glb)
-  if (count > 0) {
-    const rel = path.relative(__dirname, glb)
-    console.log(`[patch-glbs] ✅ Patched ${count} accessor(s) in ${rel}`)
-    totalPatched += count
-    filesPatched++
+  const rel = path.relative(__dirname, glb)
+
+  const vec4Count = patchVec4Colors(glb)
+  if (vec4Count > 0) {
+    console.log(`[patch-glbs] ✅ VEC4→VEC3: ${vec4Count} accessor(s) in ${rel}`)
+    totalVec4 += vec4Count
+    filesVec4++
+  }
+
+  const stripCount = stripColliderMeshes(glb)
+  if (stripCount > 0) {
+    console.log(`[patch-glbs] ✅ Stripped ${stripCount} _collider mesh(es) from ${rel}`)
+    totalStripped += stripCount
+    filesStripped++
   }
 }
 
-if (filesPatched === 0) {
+if (filesVec4 === 0 && filesStripped === 0) {
   console.log('[patch-glbs] All GLBs already clean — nothing to patch.')
 } else {
-  console.log(`[patch-glbs] Done. Patched ${totalPatched} VEC4 accessor(s) across ${filesPatched} file(s).`)
+  if (filesVec4    > 0) console.log(`[patch-glbs] VEC4 done:    ${totalVec4} accessor(s) across ${filesVec4} file(s).`)
+  if (filesStripped > 0) console.log(`[patch-glbs] Collider done: ${totalStripped} mesh(es) stripped across ${filesStripped} file(s).`)
 }

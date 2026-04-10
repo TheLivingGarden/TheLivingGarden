@@ -1559,27 +1559,6 @@
             },
             "parent": 0
           }
-        },
-        "584": {
-          "json": {
-            "position": {
-              "x": 8,
-              "y": 12,
-              "z": 24
-            },
-            "scale": {
-              "x": 10,
-              "y": 10,
-              "z": 10
-            },
-            "rotation": {
-              "x": 0.7041000127792358,
-              "y": 0,
-              "z": 0,
-              "w": 0.710099995136261
-            },
-            "parent": 0
-          }
         }
       }
     },
@@ -4330,11 +4309,6 @@
           "json": {
             "value": "lamppost.glb_4"
           }
-        },
-        "584": {
-          "json": {
-            "value": "Spotlight"
-          }
         }
       }
     },
@@ -4674,37 +4648,6 @@
       }
     },
     {
-      "name": "core::LightSource",
-      "jsonSchema": {
-        "type": "object",
-        "properties": {},
-        "serializationType": "protocol-buffer",
-        "protocolBuffer": "PBLightSource"
-      },
-      "data": {
-        "584": {
-          "json": {
-            "active": true,
-            "color": {
-              "r": 1,
-              "g": 0.6470588445663452,
-              "b": 0
-            },
-            "intensity": 16000,
-            "range": -1,
-            "shadow": true,
-            "type": {
-              "$case": "spot",
-              "spot": {
-                "innerAngle": 30,
-                "outerAngle": 40
-              }
-            }
-          }
-        }
-      }
-    },
-    {
       "name": "inspector::Selection",
       "jsonSchema": {
         "type": "object",
@@ -4717,9 +4660,9 @@
         "serializationType": "map"
       },
       "data": {
-        "544": {
+        "0": {
           "json": {
-            "gizmo": 1
+            "gizmo": 0
           }
         }
       }
@@ -4805,8 +4748,7 @@
                   580,
                   581,
                   582,
-                  583,
-                  584
+                  583
                 ]
               },
               {
@@ -5133,10 +5075,6 @@
               {
                 "entity": 583,
                 "children": []
-              },
-              {
-                "entity": 584,
-                "children": []
               }
             ]
           }
@@ -5374,9 +5312,6 @@
           "json": {}
         },
         "583": {
-          "json": {}
-        },
-        "584": {
           "json": {}
         }
       }
@@ -6315,98 +6250,6 @@
               "text": "Configure the sit spot's hover text and actions. Players can click to sit here. The spot tracks whether it's free or taken and shows a message when occupied."
             },
             "version": 1
-          }
-        },
-        "584": {
-          "json": {
-            "isBasicViewEnabled": true,
-            "componentName": "",
-            "fields": [],
-            "assetId": "87c829b3-8e8d-4fcb-9f43-85d3aa9084f6",
-            "label": "Light Settings",
-            "sections": [
-              {
-                "id": "light-settings",
-                "items": [
-                  {
-                    "component": "core::LightSource",
-                    "widget": "ColorField",
-                    "label": "Color",
-                    "type": "Color3",
-                    "path": "color",
-                    "props": {
-                      "basic": true
-                    },
-                    "transform": {
-                      "in": {
-                        "steps": [
-                          {
-                            "op": "toHex"
-                          }
-                        ]
-                      },
-                      "out": {
-                        "steps": [
-                          {
-                            "op": "toColor3"
-                          }
-                        ]
-                      }
-                    }
-                  },
-                  {
-                    "component": "core::LightSource",
-                    "widget": "RangeField",
-                    "label": "Intensity",
-                    "path": "intensity",
-                    "constraints": {
-                      "max": 300000,
-                      "step": 1,
-                      "default": "16000"
-                    }
-                  },
-                  {
-                    "component": "core::LightSource",
-                    "widget": "RangeField",
-                    "label": "Inner Angle",
-                    "path": "type.spot.innerAngle",
-                    "constraints": {
-                      "max": 180,
-                      "step": 1,
-                      "default": "30"
-                    }
-                  },
-                  {
-                    "component": "core::LightSource",
-                    "widget": "RangeField",
-                    "label": "Outer Angle",
-                    "path": "type.spot.outerAngle",
-                    "constraints": {
-                      "max": 180,
-                      "step": 1,
-                      "default": "40"
-                    }
-                  }
-                ],
-                "columns": 1
-              },
-              {
-                "id": "shadow-mask",
-                "items": [
-                  {
-                    "component": "core::LightSource",
-                    "widget": "FileUploadField",
-                    "label": "Shadow Mask Texture",
-                    "path": "shadowMaskTexture.tex.texture.src",
-                    "props": {}
-                  }
-                ]
-              }
-            ],
-            "helpTooltip": {
-              "text": "A spotlight that can be used to illuminate a scene."
-            },
-            "version": 2
           }
         }
       }
@@ -7855,23 +7698,6 @@
               }
             ]
           }
-        },
-        "584": {
-          "json": {
-            "id": 29,
-            "value": [
-              {
-                "name": "Turn On",
-                "type": "lights_on",
-                "jsonPayload": "{}"
-              },
-              {
-                "name": "Turn Off",
-                "type": "lights_off",
-                "jsonPayload": "{}"
-              }
-            ]
-          }
         }
       }
     },
@@ -9006,11 +8832,6 @@
         "573": {
           "json": {
             "src": "assets/asset-packs/sit_spot/sitting_pose_collider.glb"
-          }
-        },
-        "584": {
-          "json": {
-            "src": "assets/asset-packs/spotlight/spotlight.glb"
           }
         }
       }

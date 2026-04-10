@@ -352,6 +352,7 @@ export async function server(): Promise<void> {
       leaderboard.set(address, { displayName: data.displayName, total: 0 })
     }
     await saveLeaderboard()
+    broadcastLeaderboard([address])
     console.log(`[Server] Registered player: ${data.displayName} (${address})`)
   })
 

@@ -15,6 +15,7 @@
     "check-glb": "node check-glb.cjs"
   },
   "devDependencies": {
+    "@dcl/gltf-validator-ts": "^1.0.19",
     "@dcl/hammurabi-server": "^1.0.0-22765994716.commit-c1fbbed",
     "@dcl/js-runtime": "7.21.1-22918726402.commit-ee210ee",
     "@dcl/sdk": "^7.21.1-22918726402.commit-ee210ee"

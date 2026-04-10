@@ -69,25 +69,22 @@ const ANIM_TRANSITION_MS = 6_000        // ms — duration of Play clip
 const ANIMATOR_INIT_DELAY_MS = 1000     // ms — defer Animator.create until GLBs load
 
 // ── Emote ─────────────────────────────────────────────────────
-const EMOTE_SRC            = 'assets/scene/Models/Emotes/WateringCan_emote.glb'
-const EMOTE_DELAY_MS       = 400    // ms before emote fires after click
-const EMOTE_DURATION_MS    = 1500   // ms — when in the emote the plant responds
-const EMOTE_TOTAL_MS       = 2933   // ms — full clip length (keeps emoteActive locked)
-const EMOTE_MOVE_THRESHOLD = 0.4    // metres — cancel emote if player moves this far
-const WATER_DISTANCE       = 1.5    // metres — how close player steps to the plant
+const EMOTE_SRC       = 'assets/scene/Models/Emotes/WateringCan_emote.glb'
+const EMOTE_TOTAL_MS  = 2933   // ms — full clip length (keeps emoteActive locked)
+const WATER_DISTANCE  = 2    // metres — how close player steps to the plant
 
 // ── Watering choreography milestones ─────────────────────────
-// t=0          click lands — emote starts moving player
-// t=WATER_FX   watering sound + ground ripple fire
-// t=WATER_ANIM plant tips forward — animate to healthy + magic FX
-// t=WATER_ANIM + ANIM_TRANSITION_MS — sparkles burst, tribute travels to centre
-const WATER_FX_MS   = EMOTE_DELAY_MS    // 400 ms
-const WATER_ANIM_MS = EMOTE_DURATION_MS // 1500 ms
+// t=0           click — player steps to plant, emote fires
+// t=WATER_FX    watering sound + ground ripple
+// t=WATER_ANIM  plant tips forward, magic FX
+// t=WATER_ANIM + ANIM_TRANSITION_MS — sparkles burst
+const WATER_FX_MS   = 400
+const WATER_ANIM_MS = 1500
 
 // ── Water drop prop ───────────────────────────────────────────
 const WATER_DROP_SRC = 'assets/scene/Models/waterDrop/waterDrop.glb'
 const WATER_DROP_Y   = 0.8   // local Y above plant pivot
-const DROP_FADE_MS   = 800   // ms for scale-in / scale-out tween
+const DROP_FADE_MS   = 1600   // ms for scale-in / scale-out tween
 
 // ── Sounds ────────────────────────────────────────────────────
 const SND_HOVER    = 'assets/scene/Sounds/hover.mp3'
@@ -121,7 +118,6 @@ const TOAST_WELCOME_MS        = 4_000    // "X% of Plants Watered" duration
 const BLOOM_LABEL_TICK_MS     = 60_000   // re-check bloom countdown every 60 s
 const LIVE_WATER_THRESHOLD_MS = 10_000   // plantStateUpdate < 10 s old = live water by another player
 const LIMIT_DEBOUNCE_MS       = 5_000    // min gap between daily-limit toast notifications
-const EMOTE_RESET_DELAY_MS    = 500      // emote state cleanup on hot-reload
 
 // ── Expiry ────────────────────────────────────────────────────
 const EXPIRY_PROD_MS = 6 * 60 * 60 * 1_000   // 6 hours
@@ -167,9 +163,7 @@ let lastLimitNotificationMs = 0
 let initialLoadDone         = false
 let roomReady               = false
 
-let emoteActive   = false
-let emoteGen      = 0
-let emoteStartPos: { x: number; y: number; z: number } | null = null
+let emoteActive = false
 
 /** plant entity → its drop GLB entity */
 const dropMap = new Map<Entity, Entity>()
@@ -194,22 +188,6 @@ function setDropFade(plantEntity: Entity, direction: 'in' | 'out') {
   }
 }
 
-// ---------------------------------------------------------------
-// Emote cleanup — dismisses the prop GLB if player moves mid-emote
-// ---------------------------------------------------------------
-
-function emoteCleanupSystem() {
-  if (!emoteActive || !emoteStartPos) return
-  const pos = Transform.getOrNull(engine.PlayerEntity)?.position
-  if (!pos) return
-  const dx = pos.x - emoteStartPos.x
-  const dz = pos.z - emoteStartPos.z
-  if (Math.sqrt(dx * dx + dz * dz) < EMOTE_MOVE_THRESHOLD) return
-  ++emoteGen
-  emoteActive   = false
-  emoteStartPos = null
-  movePlayerTo({ newRelativePosition: pos })
-}
 
 // ---------------------------------------------------------------
 // Reset animation state machine
@@ -385,25 +363,9 @@ function triggerWateringEmote(plantEntity: Entity) {
     })
   }
 
-  emoteActive   = true
-  emoteStartPos = null   // don't check position yet — player is mid-move
-  const gen     = ++emoteGen
-
-  // Fire emote once player has arrived; capture position only now so the
-  // cleanup system doesn't cancel due to movement from the teleport itself.
-  timers.setTimeout(() => {
-    if (emoteGen !== gen) return
-    triggerSceneEmote({ src: EMOTE_SRC, loop: false })
-    emoteStartPos = Transform.getOrNull(engine.PlayerEntity)?.position ?? null
-  }, EMOTE_DELAY_MS)
-
-  timers.setTimeout(() => {
-    if (emoteGen !== gen) return
-    emoteActive   = false
-    emoteStartPos = null
-    const pos = Transform.getOrNull(engine.PlayerEntity)?.position
-    if (pos) movePlayerTo({ newRelativePosition: pos })
-  }, EMOTE_DELAY_MS + EMOTE_TOTAL_MS)
+  emoteActive = true
+  triggerSceneEmote({ src: EMOTE_SRC, loop: false })
+  timers.setTimeout(() => { emoteActive = false }, EMOTE_TOTAL_MS)
 }
 
 // ---------------------------------------------------------------
@@ -685,7 +647,6 @@ export function setupWateringSystem(): void {
   setupFairyLights()
   setupProgressBars()
 
-  engine.addSystem(emoteCleanupSystem)
   engine.addSystem(musicFadeSystem)
   engine.addSystem(resetAnimSystem)
   engine.addSystem(petalParticleSystem)
@@ -818,12 +779,6 @@ export function setupWateringSystem(): void {
     updateProgressText()
     console.log(`[Client] plantStateUpdate ${data.plantId} → ${data.isWatered ? 'watered' : 'droopy'}`)
   })
-
-  // Reset emote state that may have persisted across hot-reloads
-  timers.setTimeout(() => {
-    const pos = Transform.getOrNull(engine.PlayerEntity)?.position
-    if (pos) movePlayerTo({ newRelativePosition: pos, avatarTarget: pos })
-  }, EMOTE_RESET_DELAY_MS)
 
   const localPlayer = getPlayer()
   const playerId    = localPlayer?.userId ?? 'unknown'

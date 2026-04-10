@@ -55,9 +55,9 @@ const SPARKLE_SIZE = 0.22  // world-space diameter at peak (m)
 const SPEED_MIN    = 1.8   // m/s
 const SPEED_MAX    = 4.2   // m/s
 const GRAVITY      = 5.0   // m/s²
-const LIFE_BASE_MS = 550
+const LIFE_BASE_MS = 1550
 const LIFE_VARY_MS = 250
-const SPAWN_Y      = 0.6   // metres above plant base
+const SPAWN_Y      = 2   // metres above plant base
 // Scale curve breakpoints (0–1 fraction of lifetime)
 const POP_IN   = 0.25
 const HOLD_END = 0.55
