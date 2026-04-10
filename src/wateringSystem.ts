@@ -41,7 +41,7 @@ import { setupProgressBars, updateProgressBars }              from './progressBa
 import { setupGroundLights, updateGroundLights, triggerGroundLightBurst, setGroundLightsBloom } from './groundLightSystem'
 import { setupLeaderboardBoards, updateLeaderboardDisplay }   from './leaderboardSystem'
 import { setupFairyLights, setFairyLightsBloom }             from './fairyLightSystem'
-import { showToast, showDailyLimit, hideDailyLimit, showPersistent, hidePersistent, formatBloomCountdown, formatDailyLimitMessage } from './notifications'
+import { showToast, showDailyLimit, hideDailyLimit, showPersistent, hidePersistent, showBannerIdle, showBannerCountdown, updateBannerCountdown, showBannerBloom, updateBannerHealth, formatBloomCountdown, formatDailyLimitMessage } from './notifications'
 import { movePlayerTo, triggerSceneEmote }  from '~system/RestrictedActions'
 import { room }                             from './shared/messages'
 import { TOTAL_PLANTS, BLOOM_THRESHOLD, DAILY_WATER_LIMIT, PLANT_NAMES } from './shared/config'
@@ -98,8 +98,8 @@ const SND_WATERING = 'assets/scene/Sounds/watering.mp3'
 const SND_MAGIC    = 'assets/scene/Sounds/MagicFX.mp3'
 const VOL_HOVER    = 0.7
 const VOL_CLICK    = 0.9
-const VOL_WATERING = 1.0
-const VOL_MAGIC    = 1.0
+const VOL_WATERING = 0.7
+const VOL_MAGIC    = 0.9
 const SND_INIT_POS = { x: 8, y: 1, z: 8 }   // initial transform — overwritten on play
 const MAGIC_SOUND_CLEANUP_MS = 8_000          // remove one-shot entity after this many ms
 
@@ -259,9 +259,12 @@ function clearBloomLabels() {
 function startBloomLabelUpdater() {
   if (runtimeTestMode) { setBloomLabelText('All plants watered!\nBloom starting soon...'); return }
   setBloomLabelText(formatBloomCountdown(false))
+  updateBannerCountdown(formatBloomCountdown(false))
   function tick() {
     if (!isBloomActive()) return
-    setBloomLabelText(formatBloomCountdown(false))
+    const countdown = formatBloomCountdown(false)
+    setBloomLabelText(countdown)
+    updateBannerCountdown(countdown)
     timers.setTimeout(tick, BLOOM_LABEL_TICK_MS)
   }
   timers.setTimeout(tick, BLOOM_LABEL_TICK_MS)
@@ -287,6 +290,15 @@ function updateProgressText() {
   for (const e of wateringLabels) TextShape.getMutable(e).text = pctStr
   updateProgressBars(count, TOTAL_PLANTS)
   updateGroundLights(count)
+  updateBannerHealth(count / TOTAL_PLANTS)
+  // Banner state: idle below threshold, countdown at/above threshold (unless bloom active)
+  if (!isBloomActive()) {
+    if (count >= BLOOM_THRESHOLD) {
+      showBannerCountdown(formatBloomCountdown(runtimeTestMode))
+    } else {
+      showBannerIdle()
+    }
+  }
   updateSceneAssets()
 }
 
@@ -632,6 +644,7 @@ export function setupWateringSystem(): void {
       // Switch the persistent pill from "Bloom in Xh Ym" → active bloom message.
       // Don't hide it — it must survive any daily-limit pill that may be stacked above it.
       showPersistent(NOTIFY_BLOOM_ACTIVE)
+      showBannerBloom()
       triggerBloomShockwave()
       startFireflies()
       setFairyLightsBloom(true)
@@ -776,6 +789,8 @@ export function setupWateringSystem(): void {
     clearBloomLabels()
     setGroundLightsBloom(false)
     updateGroundLights(0)   // reset circles to hidden
+    showBannerIdle()
+    updateBannerHealth(0)
   })
 
   room.onMessage('leaderboardUpdate', (data) => {

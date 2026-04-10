@@ -33,9 +33,9 @@ const LB_WORLD_Y = 2.41    // raise / lower all boards together
 
 const LB_BOARDS = [
   // Board 1 — south face (faces into the scene)
-  { position: { x: 12.73, y: LB_WORLD_Y, z:  0.3 }, rotation: { x: 0, y: 180, z: 0 } },
+  { position: { x: 12.73, y: LB_WORLD_Y, z:  0.4 }, rotation: { x: 0, y: 180, z: 0 } },
   // Board 2 — north face
-  { position: { x: 12.73, y: LB_WORLD_Y, z: 47.7 }, rotation: { x: 0, y: 0,   z: 0 } },
+  { position: { x: 12.73, y: LB_WORLD_Y, z: 47.6 }, rotation: { x: 0, y: 0,   z: 0 } },
 ]
 
 // ── Rows ─────────────────────────────────────────────────────

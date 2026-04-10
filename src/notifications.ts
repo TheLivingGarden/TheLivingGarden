@@ -7,7 +7,10 @@
 // message formatting so wateringSystem.ts stays focused on gameplay.
 // =============================================================
 
-export { showToast, showDailyLimit, hideDailyLimit, showPersistent, hidePersistent } from './ui'
+export {
+  showToast, showDailyLimit, hideDailyLimit, showPersistent, hidePersistent,
+  showBannerIdle, showBannerCountdown, updateBannerCountdown, showBannerBloom, updateBannerHealth,
+} from './ui'
 export { setupUi as setupNotifications } from './ui'
 
 // ---------------------------------------------------------------

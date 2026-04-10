@@ -90,11 +90,13 @@ const LABEL_OFFSET_M            = 0.2
 const TWEEN_SPEED = 0.6
 
 // ── Sparkles ──────────────────────────────────────────────────────
-const SPARK_COUNT    = 6      // particles per update
-const SPARK_LIFETIME = 0.85   // seconds
-const SPARK_RISE     = 1.6    // upward speed m/s
-const SPARK_SPREAD   = 0.35   // max lateral speed m/s
-const SPARK_SIZE     = 0.065  // initial cube size (metres)
+const SPARK_COUNT       = 6      // particles spawned per burst
+const SPARK_LIFETIME    = 0.85   // seconds
+const SPARK_RISE        = 1.6    // upward speed m/s
+const SPARK_SPREAD      = 0.35   // max lateral speed m/s
+const SPARK_SIZE        = 0.065  // initial cube size (metres)
+const SPARK_MAX_LIVE    = 30     // hard cap on total live spark entities
+const SPARK_COOLDOWN_MS = 800    // minimum ms between bursts per bar
 // Warm golden glow — looks like sunlit water droplets
 const SPARK_ALBEDO   = Color4.create(1.0, 0.92, 0.45, 1)
 const SPARK_EMISSIVE = { r: 1.0, g: 0.88, b: 0.3 }
@@ -143,6 +145,7 @@ interface Bar {
   worldY:       number   // world-space bar centre Y (lifted)
   worldZ:       number   // world-space bar centre Z
   barHeight:    number   // world height of bar (metres)
+  lastSparkMs:  number   // timestamp of last spark burst — for cooldown
 }
 
 interface Spark {
@@ -171,8 +174,15 @@ function quatRightZ(qx: number, qy: number, qz: number, qw: number): number {
 
 /** Spawn sparkle particles at the fill tip of a bar. */
 function spawnSparks(bar: Bar): void {
+  const now = Date.now()
+  if (now - bar.lastSparkMs < SPARK_COOLDOWN_MS) return   // per-bar cooldown
+  if (sparks.length >= SPARK_MAX_LIVE) return              // global entity cap
+  bar.lastSparkMs = now
+
+  // Only spawn as many as the cap allows
+  const allowed = Math.min(SPARK_COUNT, SPARK_MAX_LIVE - sparks.length)
   const tipY = bar.worldY + (bar.targetRatio - 0.5) * bar.barHeight
-  for (let i = 0; i < SPARK_COUNT; i++) {
+  for (let i = 0; i < allowed; i++) {
     const angle = Math.random() * Math.PI * 2
     const speed = Math.random() * SPARK_SPREAD
     const e = engine.addEntity()
@@ -263,10 +273,11 @@ export function setupProgressBars(): void {
       fillScaleZ,
       fillFrontZ,
       minFillH,
-      worldX:    px,
-      worldY:    py,
-      worldZ:    pz,
-      barHeight: sy,
+      worldX:      px,
+      worldY:      py,
+      worldZ:      pz,
+      barHeight:   sy,
+      lastSparkMs: 0,
     })
 
     // ── Marker ticks — children of background ─────────────────────

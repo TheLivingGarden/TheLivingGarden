@@ -1812,6 +1812,90 @@
             "parent": 0
           }
         },
+        "596": {
+          "json": {
+            "position": {
+              "x": 8,
+              "y": 0,
+              "z": 24
+            },
+            "rotation": {
+              "x": 0,
+              "y": 0,
+              "z": 0,
+              "w": 1
+            },
+            "scale": {
+              "x": 1,
+              "y": 1,
+              "z": 1
+            },
+            "parent": 0
+          }
+        },
+        "597": {
+          "json": {
+            "position": {
+              "x": 8,
+              "y": 0,
+              "z": 24
+            },
+            "rotation": {
+              "x": 0,
+              "y": 0,
+              "z": 0,
+              "w": 1
+            },
+            "scale": {
+              "x": 1,
+              "y": 1,
+              "z": 1
+            },
+            "parent": 0
+          }
+        },
+        "598": {
+          "json": {
+            "position": {
+              "x": 8,
+              "y": 0,
+              "z": 24
+            },
+            "rotation": {
+              "x": 0,
+              "y": 0,
+              "z": 0,
+              "w": 1
+            },
+            "scale": {
+              "x": 1,
+              "y": 1,
+              "z": 1
+            },
+            "parent": 0
+          }
+        },
+        "599": {
+          "json": {
+            "position": {
+              "x": 8,
+              "y": 0,
+              "z": 24
+            },
+            "rotation": {
+              "x": 0,
+              "y": 0,
+              "z": 0,
+              "w": 1
+            },
+            "scale": {
+              "x": 1,
+              "y": 1,
+              "z": 1
+            },
+            "parent": 0
+          }
+        },
         "600": {
           "json": {
             "position": {
@@ -3564,6 +3648,34 @@
             "invisibleMeshesCollisionMask": 3
           }
         },
+        "596": {
+          "json": {
+            "src": "assets/scene/Models/Circle1_Off/Circle1_Off.glb",
+            "visibleMeshesCollisionMask": 0,
+            "invisibleMeshesCollisionMask": 3
+          }
+        },
+        "597": {
+          "json": {
+            "src": "assets/scene/Models/Circle2_Off/Circle2_Off.glb",
+            "visibleMeshesCollisionMask": 0,
+            "invisibleMeshesCollisionMask": 3
+          }
+        },
+        "598": {
+          "json": {
+            "src": "assets/scene/Models/Circle3_Off/Circle3_Off.glb",
+            "visibleMeshesCollisionMask": 0,
+            "invisibleMeshesCollisionMask": 3
+          }
+        },
+        "599": {
+          "json": {
+            "src": "assets/scene/Models/GroundLights_Off/GroundLights_Off.glb",
+            "visibleMeshesCollisionMask": 0,
+            "invisibleMeshesCollisionMask": 3
+          }
+        },
         "600": {
           "json": {
             "src": "assets/scene/Models/lamppost_light_high/lamppost_light_high.glb",
@@ -5042,6 +5154,26 @@
             "value": "Circle3_Mid"
           }
         },
+        "596": {
+          "json": {
+            "value": "Circle1_Off.glb"
+          }
+        },
+        "597": {
+          "json": {
+            "value": "Circle2_Off.glb"
+          }
+        },
+        "598": {
+          "json": {
+            "value": "Circle3_Off.glb"
+          }
+        },
+        "599": {
+          "json": {
+            "value": "GroundLights_Off.glb"
+          }
+        },
         "600": {
           "json": {
             "value": "lamppost_light_high"
@@ -5452,7 +5584,7 @@
         "serializationType": "map"
       },
       "data": {
-        "0": {
+        "599": {
           "json": {
             "gizmo": 0
           }
@@ -5564,7 +5696,11 @@
                   608,
                   609,
                   610,
-                  611
+                  611,
+                  596,
+                  597,
+                  598,
+                  599
                 ]
               },
               {
@@ -5986,6 +6122,22 @@
               {
                 "entity": 611,
                 "children": []
+              },
+              {
+                "entity": 596,
+                "children": []
+              },
+              {
+                "entity": 597,
+                "children": []
+              },
+              {
+                "entity": 598,
+                "children": []
+              },
+              {
+                "entity": 599,
+                "children": []
               }
             ]
           }
@@ -6259,6 +6411,18 @@
           "json": {}
         },
         "595": {
+          "json": {}
+        },
+        "596": {
+          "json": {}
+        },
+        "597": {
+          "json": {}
+        },
+        "598": {
+          "json": {}
+        },
+        "599": {
           "json": {}
         },
         "600": {
