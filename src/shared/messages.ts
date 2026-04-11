@@ -27,7 +27,7 @@ export const room = registerMessages({
 
   // ── Server → all clients ──────────────────────────────────
   /** Broadcast when a plant's watered state changes (water or expiry). */
-  plantStateUpdate: Schemas.Map({ plantId: Schemas.String, isWatered: Schemas.Boolean, wateredAt: Schemas.Number }),
+  plantStateUpdate: Schemas.Map({ plantId: Schemas.String, isWatered: Schemas.Boolean, wateredAt: Schemas.Number, wateredBy: Schemas.String }),
   /** Broadcast when the bloom threshold is reached. */
   bloomTriggered:   Schemas.Map({}),
   /** Broadcast when the server resets all plants after bloom. */

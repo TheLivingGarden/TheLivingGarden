@@ -21,17 +21,20 @@ import {
   DAILY_WATER_LIMIT,
   WATERED_EXPIRY_MS,
   BLOOM_RESET_DELAY_MS,
+  BLOOM_UTC_HOUR,
+  BLOOM_UTC_MINUTE,
 } from '../shared/config'
 
 // ---------------------------------------------------------------
 // State
 // ---------------------------------------------------------------
 
-const plantEntities  = new Map<string, Entity>()   // plantId → entity
-const knownPlayers   = new Set<Entity>()           // entities seen this session
-const testOverrides  = new Set<string>()           // addresses with daily-limit bypass (test panel)
-const syncRateLimits = new Map<string, number>()   // address → last requestFullSync ms
-const SYNC_RATE_MS   = 5_000                       // min ms between full syncs per player
+const plantEntities   = new Map<string, Entity>()   // plantId → entity
+const knownPlayers    = new Set<Entity>()            // entities seen this session
+const playerAddresses = new Map<Entity, string>()    // entity → address (for disconnect cleanup)
+const testOverrides   = new Set<string>()            // addresses with daily-limit bypass (test panel)
+const syncRateLimits  = new Map<string, number>()    // address → last requestFullSync ms
+const SYNC_RATE_MS    = 5_000                        // min ms between full syncs per player
 let   bloomActive    = false
 
 // ── Leaderboard ──────────────────────────────────────────────
@@ -46,7 +49,11 @@ interface PlantRecord {
   plantId:   string
   isWatered: boolean
   wateredAt: number   // ms timestamp stored as number (not BigInt)
+  wateredBy: string   // display name of the player who watered it
 }
+
+// In-memory map of plantId → display name (kept in sync with PlantRecord)
+const wateredByMap = new Map<string, string>()
 
 async function loadPlantStates(): Promise<void> {
   const raw = await Storage.get<string>('plants')
@@ -67,6 +74,7 @@ async function loadPlantStates(): Promise<void> {
     const ps = PlantSync.getMutable(entity)
     ps.isWatered = true
     ps.wateredAt = rec.wateredAt
+    if (rec.wateredBy) wateredByMap.set(rec.plantId, rec.wateredBy)
     scheduleExpiry(rec.plantId, entity, rec.wateredAt, WATERED_EXPIRY_MS - elapsed)
     restored++
   }
@@ -78,7 +86,7 @@ async function savePlantStates(): Promise<void> {
   for (const [plantId, entity] of plantEntities) {
     const ps = PlantSync.getOrNull(entity)
     if (!ps) continue
-    records.push({ plantId, isWatered: ps.isWatered, wateredAt: Number(ps.wateredAt) })
+    records.push({ plantId, isWatered: ps.isWatered, wateredAt: Number(ps.wateredAt), wateredBy: wateredByMap.get(plantId) ?? '' })
   }
   await Storage.set('plants', JSON.stringify(records))
 }
@@ -181,7 +189,8 @@ async function resetGarden(): Promise<void> {
     const ps   = PlantSync.getMutable(entity)
     ps.isWatered = false
     ps.wateredAt = 0
-    room.send('plantStateUpdate', { plantId, isWatered: false, wateredAt: 0 })
+    wateredByMap.delete(plantId)
+    room.send('plantStateUpdate', { plantId, isWatered: false, wateredAt: 0, wateredBy: '' })
   }
 
   await savePlantStates()
@@ -208,8 +217,9 @@ function scheduleExpiry(
       const expired = PlantSync.getMutable(entity)
       expired.isWatered = false
       expired.wateredAt = 0
+      wateredByMap.delete(plantId)
       await savePlantStates()
-      room.send('plantStateUpdate', { plantId, isWatered: false, wateredAt: 0 })
+      room.send('plantStateUpdate', { plantId, isWatered: false, wateredAt: 0, wateredBy: '' })
       console.log(`[Server] Plant expired: ${plantId}`)
     })
   }, delayMs)
@@ -220,14 +230,14 @@ function scheduleExpiry(
 // ---------------------------------------------------------------
 
 function msUntilNextBloomWindow(): number {
-  // TEMPORARY: test window at 00:10 Madrid (CEST = UTC+2 → 22:10 UTC)
+  // 15:30 Madrid (CEST = UTC+2 → 13:30 UTC)
   const now      = Date.now()
   const d        = new Date(now)
   const y        = d.getUTCFullYear()
   const mo       = d.getUTCMonth()
   const day      = d.getUTCDate()
-  const today    = Date.UTC(y, mo, day,     22, 10, 0, 0)
-  const tomorrow = Date.UTC(y, mo, day + 1, 22, 10, 0, 0)
+  const today    = Date.UTC(y, mo, day,     BLOOM_UTC_HOUR, BLOOM_UTC_MINUTE, 0, 0)
+  const tomorrow = Date.UTC(y, mo, day + 1, BLOOM_UTC_HOUR, BLOOM_UTC_MINUTE, 0, 0)
   const ms       = today - now
   return ms > 500 ? ms : tomorrow - now
 }
@@ -252,10 +262,25 @@ function scheduleBloomCheck(): void {
 // ---------------------------------------------------------------
 
 function playerJoinSystem(): void {
+  // Detect disconnections — entities removed from the engine no longer have PlayerIdentityData
+  for (const entity of [...knownPlayers]) {
+    if (!PlayerIdentityData.getOrNull(entity)) {
+      const address = playerAddresses.get(entity)
+      knownPlayers.delete(entity)
+      playerAddresses.delete(entity)
+      if (address) {
+        syncRateLimits.delete(address)
+        testOverrides.delete(address)
+        console.log(`[Server] Player disconnected: ${address}`)
+      }
+    }
+  }
+
   for (const [entity, identity] of engine.getEntitiesWith(PlayerIdentityData)) {
     if (knownPlayers.has(entity)) continue
     knownPlayers.add(entity)
     const address = identity.address
+    playerAddresses.set(entity, address)
     executeTask(async () => {
       const wateredToday = await getPlayerDailyCount(address)
       room.send('playerDailyState', { wateredToday, dailyLimit: DAILY_WATER_LIMIT }, { to: [address] })
@@ -264,7 +289,7 @@ function playerJoinSystem(): void {
       for (const [plantId, plantEntity] of plantEntities) {
         const ps = PlantSync.getOrNull(plantEntity)
         if (!ps) continue
-        room.send('plantStateUpdate', { plantId, isWatered: ps.isWatered, wateredAt: Number(ps.wateredAt) }, { to: [address] })
+        room.send('plantStateUpdate', { plantId, isWatered: ps.isWatered, wateredAt: Number(ps.wateredAt), wateredBy: wateredByMap.get(plantId) ?? '' }, { to: [address] })
       }
 
       broadcastLeaderboard([address])
@@ -363,17 +388,17 @@ export async function server(): Promise<void> {
         leaderboard.set(playerAddress, { displayName: playerAddress.slice(0, 8) + '…', total: 1 })
       }
 
+      const displayName = leaderboard.get(playerAddress)?.displayName ?? playerAddress.slice(0, 8) + '…'
+      wateredByMap.set(plantId, displayName)
+
       await savePlantStates()
       await saveLeaderboard()
       scheduleExpiry(plantId, entity, now, WATERED_EXPIRY_MS)
 
       room.send('playerDailyState', { wateredToday: newCount, dailyLimit: DAILY_WATER_LIMIT }, { to: [playerAddress] })
-      room.send('plantStateUpdate', { plantId, isWatered: true, wateredAt: now })
+      room.send('plantStateUpdate', { plantId, isWatered: true, wateredAt: now, wateredBy: displayName })
       broadcastLeaderboard()
       console.log(`[Server] ${plantId} watered by ${playerAddress} (${newCount}/${DAILY_WATER_LIMIT} today, ${getWateredCount()}/${BLOOM_THRESHOLD} garden)`)
-
-      // Check bloom threshold
-      if (!bloomActive && getWateredCount() >= BLOOM_THRESHOLD) triggerBloom()
     }
   })
 
@@ -396,7 +421,7 @@ export async function server(): Promise<void> {
     for (const [plantId, plantEntity] of plantEntities) {
       const ps = PlantSync.getOrNull(plantEntity)
       if (!ps) continue
-      room.send('plantStateUpdate', { plantId, isWatered: ps.isWatered, wateredAt: Number(ps.wateredAt) }, { to: [address] })
+      room.send('plantStateUpdate', { plantId, isWatered: ps.isWatered, wateredAt: Number(ps.wateredAt), wateredBy: wateredByMap.get(plantId) ?? '' }, { to: [address] })
     }
     broadcastLeaderboard([address])
     if (bloomActive) room.send('bloomTriggered', {}, { to: [address] })

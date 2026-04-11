@@ -48,8 +48,7 @@ const W_BASE_LOW:  readonly [number, number, number] = [0.68, 0.26, 0.06]
 const W_BASE_MID:  readonly [number, number, number] = [0.14, 0.64, 0.22]
 const W_BASE_HIGH: readonly [number, number, number] = [0.05, 0.22, 0.73]
 const W_BURST:     readonly [number, number, number] = [0.28, 0.38, 0.34]
-const W_BLOOM:     readonly [number, number, number] = [0.08, 0.28, 0.64]
-
+const W_BLOOM:     readonly [number, number, number] = [0.0, 0.35, 0.65]
 // ── Group definitions ─────────────────────────────────────────
 // offName:    entity name for the Off variant (null = no Off model)
 // sets:       [lowName, midName, highName] — one entry per physical set
@@ -315,10 +314,13 @@ export function setGroundLightsBloom(active: boolean): void {
   for (const g of groups) {
     g.flickerMode = active ? 'bloom' : 'normal'
     g.gen++   // cancel any in-flight timer chain for this group
-    if (active) {
-      g.baseLevel = 2
-      applyLevel(g, 2)
-    }
+ if (active) {
+  g.baseLevel = 2
+  g.minLevel = 1 // 👈 prevent dropping below MID
+  applyLevel(g, 2)
+} else {
+  g.minLevel = -1 // reset when bloom ends
+}
     scheduleNext(g, rnd(active ? BLOOM_MIN_MS : NORMAL_MIN_MS, active ? BLOOM_MAX_MS : NORMAL_MAX_MS))
   }
 }

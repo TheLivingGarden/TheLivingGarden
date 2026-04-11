@@ -10,27 +10,32 @@
 export {
   showToast, showDailyLimit, hideDailyLimit, showPersistent, hidePersistent,
   showBannerIdle, showBannerCountdown, updateBannerCountdown, showBannerBloom, updateBannerHealth,
+  updatePlayerCount,
 } from './ui'
 export { setupUi as setupNotifications } from './ui'
+import { BLOOM_UTC_HOUR, BLOOM_UTC_MINUTE } from './shared/config'
 
 // ---------------------------------------------------------------
 // Message formatters
 // ---------------------------------------------------------------
 
-/** Bloom countdown — returns time remaining with seconds (e.g. "2h 14m 07s").
- *  TEMPORARY: test window at 00:10 Madrid (CEST = UTC+2 → 22:10 UTC).
- *  Returns "0s" once the window has passed (server will fire bloomTriggered). */
-export function formatBloomCountdown(testMode: boolean): string {
-  if (testMode) return 'Soon...'
+/** Raw ms until the next bloom window (driven by BLOOM_UTC_HOUR / BLOOM_UTC_MINUTE in shared/config.ts). */
+export function getMsUntilBloom(): number {
   const now      = Date.now()
   const d        = new Date(now)
   const y        = d.getUTCFullYear()
   const mo       = d.getUTCMonth()
   const day      = d.getUTCDate()
-  const today    = Date.UTC(y, mo, day,     22, 10, 0, 0)
-  const tomorrow = Date.UTC(y, mo, day + 1, 22, 10, 0, 0)
-  const target   = today > now ? today : tomorrow
-  const ms      = target - now
+  const today    = Date.UTC(y, mo, day,     BLOOM_UTC_HOUR, BLOOM_UTC_MINUTE, 0, 0)
+  const tomorrow = Date.UTC(y, mo, day + 1, BLOOM_UTC_HOUR, BLOOM_UTC_MINUTE, 0, 0)
+  return (today > now ? today : tomorrow) - now
+}
+
+/** Bloom countdown — returns time remaining with seconds (e.g. "2h 14m 07s").
+ *  Returns "0s" once the window has passed (server will fire bloomTriggered). */
+export function formatBloomCountdown(testMode: boolean): string {
+  if (testMode) return 'Soon...'
+  const ms = getMsUntilBloom()
   if (ms <= 0) return '0s'
   const h  = Math.floor(ms / 3_600_000)
   const m  = Math.floor((ms % 3_600_000) / 60_000)

@@ -109,10 +109,17 @@ export function setupPetalSystem(): void {
   console.log(`[Petals] Pool ready — ${PETAL_COUNT} instances from "${src}"`)
 }
 
-/** Start the petal rain (call when bloom triggers). */
+/** Start the petal rain (call when bloom triggers).
+ *  Safe to call while petals are already falling — in-flight petals are
+ *  left alone so they don't teleport. Only parked or grounded petals are
+ *  relaunched, giving each call an additive burst rather than a hard reset. */
 export function startPetalRain(): void {
-  petalActive = true
+  const wasActive = petalActive
+  petalSettling   = false
+  petalActive     = true
   for (const p of petalPool) {
+    // Leave airborne petals alone — they'll continue falling naturally
+    if (wasActive && !p.grounded && p.pos.y > 0) continue
     randomizePetal(p)
     p.lifetime = Math.random() * p.maxLifetime   // stagger so they don't all spawn at once
     const t = Transform.getMutable(p.entity)

@@ -20,6 +20,12 @@ const NORMAL_WEIGHTS = [0.08, 0.27, 0.65]   // [Low, Mid, High] probability
 const NORMAL_MIN_MS  = 350
 const NORMAL_MAX_MS  = 1_900
 
+// ── Pre-bloom flicker ─────────────────────────────────────────
+// Medium shimmer during the 5-min build-up — between normal and full bloom.
+const PREBOOM_WEIGHTS = [0.12, 0.30, 0.58]  // [Low, Mid, High] probability
+const PREBOOM_MIN_MS  = 180
+const PREBOOM_MAX_MS  = 900
+
 // ── Bloom flicker ─────────────────────────────────────────────
 // Faster and more dramatic — frequent dips give a magical twinkle.
 const BLOOM_WEIGHTS  = [0.22, 0.33, 0.45]   // [Low, Mid, High] probability
@@ -46,7 +52,8 @@ interface LightString {
 }
 
 const strings: LightString[] = []
-let bloomMode = false
+let bloomMode   = false
+let preboomMode = false
 
 // ── Helpers ───────────────────────────────────────────────────
 
@@ -73,9 +80,12 @@ function applyLevel(s: LightString, level: Level): void {
 
 function scheduleNext(s: LightString, delayMs: number): void {
   timers.setTimeout(() => {
-    const weights = bloomMode ? BLOOM_WEIGHTS : NORMAL_WEIGHTS
-    const minMs   = bloomMode ? BLOOM_MIN_MS  : NORMAL_MIN_MS
-    const maxMs   = bloomMode ? BLOOM_MAX_MS  : NORMAL_MAX_MS
+    const weights = bloomMode   ? BLOOM_WEIGHTS   :
+                    preboomMode ? PREBOOM_WEIGHTS  : NORMAL_WEIGHTS
+    const minMs   = bloomMode   ? BLOOM_MIN_MS    :
+                    preboomMode ? PREBOOM_MIN_MS   : NORMAL_MIN_MS
+    const maxMs   = bloomMode   ? BLOOM_MAX_MS    :
+                    preboomMode ? PREBOOM_MAX_MS   : NORMAL_MAX_MS
 
     // Re-roll once if we'd pick the same level — ensures a visible change each step
     let next = weightedPick(weights)
@@ -116,4 +126,10 @@ export function setupFairyLights(): void {
  *  Takes effect on each string's next scheduled timeout. */
 export function setFairyLightsBloom(active: boolean): void {
   bloomMode = active
+}
+
+/** Switch to pre-bloom shimmer (medium speed — build-up anticipation).
+ *  No-op while bloom is active; bloom takes priority. */
+export function setFairyLightsPreboom(active: boolean): void {
+  preboomMode = active
 }

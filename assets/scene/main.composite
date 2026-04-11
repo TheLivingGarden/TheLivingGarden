@@ -2147,6 +2147,48 @@
             },
             "parent": 0
           }
+        },
+        "612": {
+          "json": {
+            "position": {
+              "x": 12.779983520507812,
+              "y": 0.5,
+              "z": 47.5
+            },
+            "rotation": {
+              "x": 0,
+              "y": 0,
+              "z": 0,
+              "w": 1
+            },
+            "scale": {
+              "x": 1,
+              "y": 1,
+              "z": 1
+            },
+            "parent": 0
+          }
+        },
+        "613": {
+          "json": {
+            "position": {
+              "x": 12.779983520507812,
+              "y": 0.5,
+              "z": 0.6606136560440063
+            },
+            "rotation": {
+              "x": 0,
+              "y": 0,
+              "z": 0,
+              "w": 1
+            },
+            "scale": {
+              "x": 1,
+              "y": 1,
+              "z": 1
+            },
+            "parent": 0
+          }
         }
       }
     },
@@ -3251,6 +3293,50 @@
               }
             ]
           }
+        },
+        "612": {
+          "json": {
+            "states": [
+              {
+                "clip": "Action",
+                "playing": false,
+                "weight": 1,
+                "speed": 1,
+                "loop": false,
+                "shouldReset": false
+              },
+              {
+                "clip": "Main",
+                "playing": false,
+                "weight": 1,
+                "speed": 1,
+                "loop": false,
+                "shouldReset": false
+              }
+            ]
+          }
+        },
+        "613": {
+          "json": {
+            "states": [
+              {
+                "clip": "Action",
+                "playing": false,
+                "weight": 1,
+                "speed": 1,
+                "loop": false,
+                "shouldReset": false
+              },
+              {
+                "clip": "Main",
+                "playing": false,
+                "weight": 1,
+                "speed": 1,
+                "loop": false,
+                "shouldReset": false
+              }
+            ]
+          }
         }
       }
     },
@@ -3756,6 +3842,20 @@
         "611": {
           "json": {
             "src": "assets/scene/Models/lamppost_light_mid/lamppost_light_mid.glb",
+            "visibleMeshesCollisionMask": 0,
+            "invisibleMeshesCollisionMask": 3
+          }
+        },
+        "612": {
+          "json": {
+            "src": "assets/asset-packs/discord_button/discord.glb",
+            "visibleMeshesCollisionMask": 0,
+            "invisibleMeshesCollisionMask": 3
+          }
+        },
+        "613": {
+          "json": {
+            "src": "assets/asset-packs/discord_button/discord.glb",
             "visibleMeshesCollisionMask": 0,
             "invisibleMeshesCollisionMask": 3
           }
@@ -5233,6 +5333,16 @@
           "json": {
             "value": "lamppost_light_mid_4"
           }
+        },
+        "612": {
+          "json": {
+            "value": "Discord Button"
+          }
+        },
+        "613": {
+          "json": {
+            "value": "Discord Button_2"
+          }
         }
       }
     },
@@ -5584,7 +5694,7 @@
         "serializationType": "map"
       },
       "data": {
-        "0": {
+        "613": {
           "json": {
             "gizmo": 0
           }
@@ -5700,7 +5810,9 @@
                   596,
                   597,
                   598,
-                  599
+                  599,
+                  612,
+                  613
                 ]
               },
               {
@@ -6138,6 +6250,14 @@
               {
                 "entity": 599,
                 "children": []
+              },
+              {
+                "entity": 612,
+                "children": []
+              },
+              {
+                "entity": 613,
+                "children": []
               }
             ]
           }
@@ -6459,6 +6579,12 @@
           "json": {}
         },
         "611": {
+          "json": {}
+        },
+        "612": {
+          "json": {}
+        },
+        "613": {
           "json": {}
         }
       }
@@ -7397,6 +7523,60 @@
               "text": "Configure the sit spot's hover text and actions. Players can click to sit here. The spot tracks whether it's free or taken and shows a message when occupied."
             },
             "version": 1
+          }
+        },
+        "612": {
+          "json": {
+            "isBasicViewEnabled": true,
+            "componentName": "",
+            "fields": [],
+            "assetId": "ba1cc208-fd8a-4b5d-849c-8c5f02430af3",
+            "label": "Discord Link",
+            "sections": [
+              {
+                "id": "link",
+                "items": [
+                  {
+                    "component": "asset-packs::Actions",
+                    "widget": "TextField",
+                    "label": "Discord Link",
+                    "path": "url",
+                    "basicViewId": "open-link"
+                  }
+                ]
+              }
+            ],
+            "helpTooltip": {
+              "text": "Enter a Discord server URL to open when the item is clicked."
+            },
+            "version": 2
+          }
+        },
+        "613": {
+          "json": {
+            "isBasicViewEnabled": true,
+            "componentName": "",
+            "fields": [],
+            "assetId": "ba1cc208-fd8a-4b5d-849c-8c5f02430af3",
+            "label": "Discord Link",
+            "sections": [
+              {
+                "id": "link",
+                "items": [
+                  {
+                    "component": "asset-packs::Actions",
+                    "widget": "TextField",
+                    "label": "Discord Link",
+                    "path": "url",
+                    "basicViewId": "open-link"
+                  }
+                ]
+              }
+            ],
+            "helpTooltip": {
+              "text": "Enter a Discord server URL to open when the item is clicked."
+            },
+            "version": 2
           }
         }
       }
@@ -8845,6 +9025,34 @@
               }
             ]
           }
+        },
+        "612": {
+          "json": {
+            "id": 30,
+            "value": [
+              {
+                "name": "Open Link",
+                "type": "open_link",
+                "jsonPayload": "{\"url\":\"https://discord.gg/gn8hTCYVPJ\"}",
+                "allowedInBasicView": true,
+                "basicViewId": "open-link"
+              }
+            ]
+          }
+        },
+        "613": {
+          "json": {
+            "id": 31,
+            "value": [
+              {
+                "name": "Open Link",
+                "type": "open_link",
+                "jsonPayload": "{\"url\":\"https://discord.gg/gn8hTCYVPJ\"}",
+                "allowedInBasicView": true,
+                "basicViewId": "open-link"
+              }
+            ]
+          }
         }
       }
     },
@@ -8868,7 +9076,7 @@
         "0": {
           "json": {
             "id": 0,
-            "value": 29
+            "value": 31
           }
         }
       }
@@ -9733,6 +9941,38 @@
                   {
                     "id": 27,
                     "name": "Show text"
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        "612": {
+          "json": {
+            "value": [
+              {
+                "type": "on_click",
+                "conditions": [],
+                "actions": [
+                  {
+                    "id": 30,
+                    "name": "Open Link"
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        "613": {
+          "json": {
+            "value": [
+              {
+                "type": "on_click",
+                "conditions": [],
+                "actions": [
+                  {
+                    "id": 31,
+                    "name": "Open Link"
                   }
                 ]
               }

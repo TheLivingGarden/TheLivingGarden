@@ -33,6 +33,7 @@ type BannerState = 'idle' | 'countdown' | 'bloom'
 let bannerState:    BannerState = 'idle'
 let bannerCountdown = ''   // e.g. "3h 42m"
 let bannerHealth    = 0    // 0–1 — drives the right-hand side bar
+let playerCount     = 0
 
 // ---------------------------------------------------------------
 // Public API — bottom pills
@@ -82,6 +83,11 @@ export function updateBannerHealth(ratio: number): void {
   bannerHealth = Math.max(0, Math.min(1, ratio))
 }
 
+/** Update the player count label. */
+export function updatePlayerCount(n: number): void {
+  playerCount = n
+}
+
 // ---------------------------------------------------------------
 // Layout constants  (virtual canvas 1920 × 1080)
 // ---------------------------------------------------------------
@@ -91,18 +97,43 @@ const WHITE   = Color4.White()
 const GREY    = Color4.create(0.65, 0.65, 0.65, 1)
 
 // ── Bottom pills ──────────────────────────────────────────────
-const PILL_W       = 580
-const PILL_H_LG    = 72
-const PILL_H_SM    = 92
-const PILL_LEFT    = (1920 - PILL_W) / 2   // 670
+const PILL_W          = 580
+const PILL_H_LG       = 72
+const PILL_H_SM       = 92
+const PILL_LEFT       = (1920 - PILL_W) / 2   // 670
+const PILL_PAD_X      = 36   // horizontal padding inside toast + persistent pills
+const PERSIST_BOTTOM  = 90
+const PILL_STEP       = PILL_H_SM + 12   // vertical stride between stacked pills
 
-const PERSIST_BOTTOM = 90
-const PILL_STEP      = PILL_H_SM + 12
+// ── Toast ─────────────────────────────────────────────────────
+const TOAST_FONT_LG   = 24
+const TOAST_FONT_SM   = 18
+
+// ── Daily Limit pill ──────────────────────────────────────────
+const DAILY_FONT          = 18
+const DAILY_PAD_LEFT      = 28
+const DAILY_PAD_RIGHT     = 8
+const DAILY_DISMISS_SIZE  = 44   // dismiss button width & height
+const DAILY_DISMISS_FONT  = 22
+
+// ── Persistent pill ───────────────────────────────────────────
+const PERSIST_FONT    = 18
 
 // ── Top banner ────────────────────────────────────────────────
-const BANNER_W    = 700
-const BANNER_LEFT = (1920 - BANNER_W) / 2
-const BANNER_TOP  = 28
+const BANNER_W            = 700
+const BANNER_LEFT         = (1920 - BANNER_W) / 2
+const BANNER_TOP          = 28
+const BANNER_PAD_X        = 32   // horizontal padding inside banner
+
+const BANNER_H_SINGLE     = 52   // one line of text
+const BANNER_H_COUNTDOWN  = 80   // main line + countdown subtitle
+
+const BANNER_FONT_BLOOM     = 20
+const BANNER_FONT_COUNTDOWN = 19
+const BANNER_FONT_IDLE      = 16
+const BANNER_LINE1_H        = 32   // height of the main text row
+const BANNER_SUBTEXT_FONT   = 13
+const BANNER_SUBTEXT_H      = 22   // height of the countdown subtitle row
 
 // Banner text colours per state (background is always DARK)
 const TEXT_IDLE      = Color4.create(0.72, 0.80, 0.72, 1.00)  // muted sage
@@ -112,18 +143,23 @@ const TEXT_SUBTEXT   = Color4.create(0.65, 0.80, 0.65, 0.85)
 
 // ── Right-side vertical health bar ────────────────────────────
 const SIDE_W          = 40    // bar track width (px)
-const SIDE_H          = 280   // bar track height (px)
+const SIDE_H          = 420   // bar track height (px) — 1.5× original 280
 const SIDE_LABEL_H    = 26    // % label above the bar
+const SIDE_LABEL_FONT = 13
 const SIDE_GAP        = 6     // gap between label and bar
-const SIDE_TOTAL_H    = SIDE_LABEL_H + SIDE_GAP + SIDE_H
+const SIDE_FILL_MIN   = 2     // minimum fill height in px when health > 0
+const PLAYER_COUNT_H  = 22    // "X here" label above the health block
+const PLAYER_COUNT_FONT = 11
+const PLAYER_COUNT_GAP  = 6
+const SIDE_TOTAL_H    = PLAYER_COUNT_H + PLAYER_COUNT_GAP + SIDE_LABEL_H + SIDE_GAP + SIDE_H
 const SIDE_RIGHT_PAD  = 44    // distance from right edge
 const SIDE_LEFT       = 1920 - SIDE_RIGHT_PAD - SIDE_W
 const SIDE_TOP        = Math.round((1080 - SIDE_TOTAL_H) / 2)
 
 // Tick marks (match the 3D boards: 25%, 50%, 80%)
-const TICK_W          = SIDE_W + 10   // slightly wider than bar (overhangs 5px each side)
-const TICK_OFFSET_X   = -5            // nudge left to centre the overhang
-const TICK_H_NORMAL   = 2
+const TICK_W           = SIDE_W + 10   // slightly wider than bar (overhangs 5px each side)
+const TICK_OFFSET_X    = -5            // nudge left to centre the overhang
+const TICK_H_NORMAL    = 2
 const TICK_H_THRESHOLD = 3
 
 // Bar fill colours (same thresholds as 3D boards)
@@ -150,7 +186,7 @@ function bannerLine1(): string {
   return 'Water the plants to see the garden bloom'
 }
 function bannerFontSize(): number {
-  return bannerState === 'bloom' ? 20 : bannerState === 'countdown' ? 19 : 16
+  return bannerState === 'bloom' ? BANNER_FONT_BLOOM : bannerState === 'countdown' ? BANNER_FONT_COUNTDOWN : BANNER_FONT_IDLE
 }
 function bannerTextColor(): Color4 {
   if (bannerState === 'bloom')     return TEXT_BLOOM
@@ -176,11 +212,12 @@ function uiComponent() {
   const toastH      = toastLarge ? PILL_H_LG : PILL_H_SM
 
   const isCountdown = bannerState === 'countdown'
-  // Banner: single-line or two-line countdown, always compact
-  const bannerH     = isCountdown ? 80 : 52
+  const isBloom     = bannerState === 'bloom'
+  // Banner height: one line, two lines for countdown, or two lines when not bloom
+  const bannerH     = isCountdown ? BANNER_H_COUNTDOWN : BANNER_H_SINGLE
 
-  // Side bar fill — grows from bottom, minimum 2px when health > 0
-  const fillH       = bannerHealth > 0 ? Math.max(2, Math.round(bannerHealth * SIDE_H)) : 0
+  // Side bar fill — grows from bottom, minimum SIDE_FILL_MIN px when health > 0
+  const fillH       = bannerHealth > 0 ? Math.max(SIDE_FILL_MIN, Math.round(bannerHealth * SIDE_H)) : 0
   const fillTop     = SIDE_H - fillH   // top offset within track (bottom-anchored)
 
   // Tick positions (top offset from bar track top)
@@ -209,7 +246,7 @@ function uiComponent() {
           flexDirection:  'column',
           alignItems:     'center',
           justifyContent: 'center',
-          padding:        { left: 32, right: 32 },
+          padding:        { left: BANNER_PAD_X, right: BANNER_PAD_X },
         }}
         uiBackground={{ color: DARK }}
       >
@@ -218,15 +255,15 @@ function uiComponent() {
           fontSize={bannerFontSize()}
           color={bannerTextColor()}
           textAlign="middle-center"
-          uiTransform={{ width: '100%', height: 32 }}
+          uiTransform={{ width: '100%', height: BANNER_LINE1_H }}
         />
         {isCountdown && (
           <Label
             value="Keep garden health at or above 80%"
-            fontSize={13}
+            fontSize={BANNER_SUBTEXT_FONT}
             color={TEXT_SUBTEXT}
             textAlign="middle-center"
-            uiTransform={{ width: '100%', height: 22 }}
+            uiTransform={{ width: '100%', height: BANNER_SUBTEXT_H }}
           />
         )}
       </UiEntity>
@@ -244,10 +281,22 @@ function uiComponent() {
           alignItems:     'center',
         }}
       >
+        {/* Player count */}
+        <Label
+          value={playerCount === 1 ? '1 here' : `${playerCount} here`}
+          fontSize={PLAYER_COUNT_FONT}
+          color={GREY}
+          textAlign="middle-center"
+          uiTransform={{ width: SIDE_W, height: PLAYER_COUNT_H }}
+        />
+
+        {/* Spacer */}
+        <UiEntity uiTransform={{ width: SIDE_W, height: PLAYER_COUNT_GAP, flexShrink: 0 }} />
+
         {/* Percentage label */}
         <Label
           value={pctLabel}
-          fontSize={13}
+          fontSize={SIDE_LABEL_FONT}
           color={GREY}
           textAlign="middle-center"
           uiTransform={{ width: SIDE_W, height: SIDE_LABEL_H }}
@@ -324,13 +373,13 @@ function uiComponent() {
           height:         toastH,
           alignItems:     'center',
           justifyContent: 'center',
-          padding:        { left: 36, right: 36 },
+          padding:        { left: PILL_PAD_X, right: PILL_PAD_X },
         }}
         uiBackground={{ color: DARK }}
       >
         <Label
           value={toastText}
-          fontSize={toastLarge ? 24 : 18}
+          fontSize={toastLarge ? TOAST_FONT_LG : TOAST_FONT_SM}
           color={WHITE}
           textAlign="middle-center"
           uiTransform={{ width: '100%', height: '100%' }}
@@ -347,24 +396,24 @@ function uiComponent() {
           height:         PILL_H_SM,
           flexDirection:  'row',
           alignItems:     'center',
-          padding:        { left: 28, right: 8 },
+          padding:        { left: DAILY_PAD_LEFT, right: DAILY_PAD_RIGHT },
         }}
         uiBackground={{ color: DARK }}
       >
         <Label
           value={dailyLimitText}
-          fontSize={18}
+          fontSize={DAILY_FONT}
           color={WHITE}
           textAlign="middle-left"
           uiTransform={{ flexGrow: 1, height: '100%' }}
         />
         <UiEntity
-          uiTransform={{ width: 44, height: 44, alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}
+          uiTransform={{ width: DAILY_DISMISS_SIZE, height: DAILY_DISMISS_SIZE, alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}
           onMouseDown={hideDailyLimit}
         >
           <Label
             value="✕"
-            fontSize={22}
+            fontSize={DAILY_DISMISS_FONT}
             color={WHITE}
             textAlign="middle-center"
             uiTransform={{ width: '100%', height: '100%' }}
@@ -382,13 +431,13 @@ function uiComponent() {
           height:         PILL_H_SM,
           alignItems:     'center',
           justifyContent: 'center',
-          padding:        { left: 36, right: 36 },
+          padding:        { left: PILL_PAD_X, right: PILL_PAD_X },
         }}
         uiBackground={{ color: DARK }}
       >
         <Label
           value={persistText}
-          fontSize={18}
+          fontSize={PERSIST_FONT}
           color={WHITE}
           textAlign="middle-center"
           uiTransform={{ width: '100%', height: '100%' }}

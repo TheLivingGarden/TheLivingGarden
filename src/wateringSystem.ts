@@ -30,6 +30,7 @@ import {
   Tween,
   EasingFunction,
   timers,
+  PlayerIdentityData,
 } from '@dcl/sdk/ecs'
 import { getPlayer }              from '@dcl/sdk/players'
 import { onEnterSceneObservable } from '@dcl/sdk/observables'
@@ -41,7 +42,7 @@ import { setupProgressBars, updateProgressBars }              from './progressBa
 import { setupGroundLights, updateGroundLights, triggerGroundLightBurst, setGroundLightsBloom } from './groundLightSystem'
 import { setupLeaderboardBoards, updateLeaderboardDisplay }   from './leaderboardSystem'
 import { setupFairyLights, setFairyLightsBloom }             from './fairyLightSystem'
-import { showToast, showDailyLimit, hideDailyLimit, showPersistent, hidePersistent, showBannerIdle, showBannerCountdown, updateBannerCountdown, showBannerBloom, updateBannerHealth, formatBloomCountdown, formatDailyLimitMessage } from './notifications'
+import { showToast, showDailyLimit, hideDailyLimit, showPersistent, hidePersistent, showBannerIdle, showBannerCountdown, updateBannerCountdown, showBannerBloom, updateBannerHealth, updatePlayerCount, formatBloomCountdown, formatDailyLimitMessage } from './notifications'
 import { movePlayerTo, triggerSceneEmote }  from '~system/RestrictedActions'
 import { room }                             from './shared/messages'
 import { TOTAL_PLANTS, BLOOM_THRESHOLD, DAILY_WATER_LIMIT, PLANT_NAMES } from './shared/config'
@@ -108,11 +109,14 @@ const CLICKBOX_Y     = 1    // local Y offset above plant pivot
 const CLICKBOX_SCALE = { x: 1.5, y: 2, z: 1.5 }
 
 // ── In-world text labels ──────────────────────────────────────
-const FONT_PCT_LABEL   = 6    // Image_2–5 + wateringPercentage entity
-const FONT_BLOOM_LABEL = 2.5  // Image_6–9 bloom countdown
-const FONT_BLOOM_CTR   = 1.5  // centerTextBloom entity
+const FONT_PCT_LABEL      = 6    // Image_2–5 + wateringPercentage entity
+const FONT_BLOOM_LABEL    = 2.5  // Image_6–9 bloom countdown
+const FONT_BLOOM_CTR      = 1.5  // centerTextBloom entity
+const FONT_WATERED_BY     = 1.2  // "Watered by" label above each plant
+const WATERED_BY_Y        = 2.5  // local Y above plant pivot
 // TextShape has no emissiveIntensity — colour only.
-const TEXT_LABEL_COLOR = { r: 1.0, g: 0.78, b: 0.5, a: 1 }  // gold/amber
+const TEXT_LABEL_COLOR    = { r: 1.0, g: 0.78, b: 0.5, a: 1 }  // gold/amber
+const WATERED_BY_COLOR    = { r: 1.0, g: 0.95, b: 0.8, a: 1 }  // soft warm white
 const SCALE_PCT_LABEL   = 0.6   // uniform scale applied to Image_2–5 + wateringPercentage
 const SCALE_BLOOM_LABEL = 1.4   // uniform scale applied to Image_6–9
 
@@ -173,7 +177,9 @@ let lastSyncRequestMs    = 0
 const SYNC_REQUEST_MIN_MS = 5_000   // don't flood server with requestFullSync on rapid reloads
 
 /** plant entity → its drop GLB entity */
-const dropMap = new Map<Entity, Entity>()
+const dropMap           = new Map<Entity, Entity>()
+const wateredByLabelMap = new Map<Entity, Entity>()
+const wateredByNames    = new Map<Entity, string>()   // entity → display name
 
 /** plant entity → its UnhealthyRose entity */
 const roseMap = new Map<Entity, Entity>()
@@ -567,6 +573,24 @@ function resetAnimSystem(dt: number) {
 // Per-plant setup
 // ---------------------------------------------------------------
 
+function formatTimeAgo(wateredAtMs: number): string {
+  const elapsed = Date.now() - wateredAtMs
+  const minutes = Math.floor(elapsed / 60_000)
+  if (minutes < 1)  return 'just now'
+  if (minutes < 60) return `${minutes} min ago`
+  const hours = Math.floor(minutes / 60)
+  return `${hours}h ago`
+}
+
+function refreshWateredByLabels(): void {
+  for (const [entity, labelEntity] of wateredByLabelMap) {
+    const pd   = PlantData.getOrNull(entity)
+    const name = wateredByNames.get(entity)
+    if (!pd?.isWatered || !name) continue
+    TextShape.getMutable(labelEntity).text = `Watered by ${name}\n${formatTimeAgo(pd.wateredAt)}`
+  }
+}
+
 function setupPlant(plantName: string) {
   const entity = engine.getEntityOrNullByName(plantName)
   if (!entity) { console.log(`[WateringSystem] Entity not found: ${plantName}`); return }
@@ -614,6 +638,13 @@ function setupPlant(plantName: string) {
   GltfContainer.create(drop, { src: WATER_DROP_SRC })
   Billboard.create(drop, { billboardMode: BillboardMode.BM_Y })
   dropMap.set(entity, drop)
+
+  // "Watered by" label — hidden until plant is watered
+  const wateredByLabel = engine.addEntity()
+  Transform.create(wateredByLabel, { position: { x: 0, y: WATERED_BY_Y, z: 0 }, parent: entity })
+  TextShape.create(wateredByLabel, { text: '', fontSize: FONT_WATERED_BY, textColor: WATERED_BY_COLOR, textWrapping: false })
+  Billboard.create(wateredByLabel, { billboardMode: BillboardMode.BM_Y })
+  wateredByLabelMap.set(entity, wateredByLabel)
 }
 
 // ---------------------------------------------------------------
@@ -753,6 +784,26 @@ export function setupWateringSystem(): void {
   engine.addSystem(bloomSparkleSystem)
   engine.addSystem(ambientFXSystem)
 
+  // Player count — throttled, updates UI every 5 s
+  let playerCountTimer = 0
+  engine.addSystem((dt: number) => {
+    playerCountTimer += dt
+    if (playerCountTimer < 5) return
+    playerCountTimer = 0
+    let count = 0
+    for (const _ of engine.getEntitiesWith(PlayerIdentityData)) count++
+    updatePlayerCount(count)
+  })
+
+  // Refresh "X min ago" timestamps on watered-by labels every 30 s
+  let labelRefreshTimer = 0
+  engine.addSystem((dt: number) => {
+    labelRefreshTimer += dt
+    if (labelRefreshTimer < 30) return
+    labelRefreshTimer = 0
+    refreshWateredByLabels()
+  })
+
   // On every room connection (including reloads) request a full state dump from the server.
   // This ensures the client re-syncs even when the server's playerJoinSystem doesn't detect
   // a new entity (e.g. quick reloads where the ECS entity version doesn't change).
@@ -855,6 +906,19 @@ export function setupWateringSystem(): void {
 
     const wasWatered = local.isWatered
     const plantPos   = Transform.getOrNull(entity)?.position
+
+    // Update "Watered by" label
+    const wateredByLabel = wateredByLabelMap.get(entity)
+    if (data.isWatered && data.wateredBy) {
+      wateredByNames.set(entity, data.wateredBy)
+    } else {
+      wateredByNames.delete(entity)
+    }
+    if (wateredByLabel) {
+      TextShape.getMutable(wateredByLabel).text = data.isWatered && data.wateredBy
+        ? `Watered by ${data.wateredBy}\n${formatTimeAgo(data.wateredAt)}`
+        : ''
+    }
 
     if (data.isWatered) {
       PlantData.getMutable(entity).isWatered = true

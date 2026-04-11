@@ -18,6 +18,8 @@ export enum EntityNames {
   Circle3_Low = "Circle3_Low",
   Circle3_Mid = "Circle3_Mid",
   Circle3_Off_glb = "Circle3_Off.glb",
+  Discord_Button = "Discord Button",
+  Discord_Button_2 = "Discord Button_2",
   FairyLights = "FairyLights",
   FairyLights_1_High_glb = "FairyLights_1_High.glb",
   FairyLights_1_Low_glb = "FairyLights_1_Low.glb",
