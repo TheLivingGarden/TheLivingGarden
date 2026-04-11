@@ -64,7 +64,7 @@ export function hidePersistent(): void { persistVisible = false }
 // ---------------------------------------------------------------
 
 export function showBannerIdle(): void      { bannerState = 'idle'      }
-export function showBannerBloom(): void     { bannerState = 'bloom'     }
+export function showBannerBloom(): void     { bannerState = 'idle'      }
 
 export function showBannerCountdown(countdown: string): void {
   bannerState     = 'countdown'
@@ -148,10 +148,14 @@ const SIDE_LABEL_H    = 26    // % label above the bar
 const SIDE_LABEL_FONT = 13
 const SIDE_GAP        = 6     // gap between label and bar
 const SIDE_FILL_MIN   = 2     // minimum fill height in px when health > 0
-const PLAYER_COUNT_H  = 22    // "X here" label above the health block
+const PLAYER_COUNT_H    = 22
 const PLAYER_COUNT_FONT = 11
-const PLAYER_COUNT_GAP  = 6
-const SIDE_TOTAL_H    = PLAYER_COUNT_H + PLAYER_COUNT_GAP + SIDE_LABEL_H + SIDE_GAP + SIDE_H
+const GARDEN_TITLE_H    = 22
+const GARDEN_TITLE_FONT = 10
+const SIDE_PILL_PAD_Y   = 5   // vertical padding inside the dark pill
+const SIDE_PILL_GAP     = 6   // gap between pill and bar
+const SIDE_PILL_H       = PLAYER_COUNT_H + 4 + GARDEN_TITLE_H + 4 + SIDE_LABEL_H + SIDE_PILL_PAD_Y * 2
+const SIDE_TOTAL_H      = SIDE_PILL_H + SIDE_PILL_GAP + SIDE_H
 const SIDE_RIGHT_PAD  = 44    // distance from right edge
 const SIDE_LEFT       = 1920 - SIDE_RIGHT_PAD - SIDE_W
 const SIDE_TOP        = Math.round((1080 - SIDE_TOTAL_H) / 2)
@@ -281,29 +285,46 @@ function uiComponent() {
           alignItems:     'center',
         }}
       >
-        {/* Player count */}
-        <Label
-          value={playerCount === 1 ? '1 here' : `${playerCount} here`}
-          fontSize={PLAYER_COUNT_FONT}
-          color={GREY}
-          textAlign="middle-center"
-          uiTransform={{ width: SIDE_W, height: PLAYER_COUNT_H }}
-        />
+        {/* Dark pill — player count + title + % */}
+        <UiEntity
+          uiTransform={{
+            width:          SIDE_W,
+            height:         SIDE_PILL_H,
+            flexShrink:     0,
+            flexDirection:  'column',
+            alignItems:     'center',
+            justifyContent: 'center',
+            padding:        { top: SIDE_PILL_PAD_Y, bottom: SIDE_PILL_PAD_Y },
+          }}
+          uiBackground={{ color: DARK }}
+        >
+          <Label
+            value={playerCount === 1 ? '1 here' : `${playerCount} here`}
+            fontSize={PLAYER_COUNT_FONT}
+            color={GREY}
+            textAlign="middle-center"
+            uiTransform={{ width: SIDE_W, height: PLAYER_COUNT_H }}
+          />
+          <UiEntity uiTransform={{ width: SIDE_W, height: 4, flexShrink: 0 }} />
+          <Label
+            value="Garden Health"
+            fontSize={GARDEN_TITLE_FONT}
+            color={TEXT_IDLE}
+            textAlign="middle-center"
+            uiTransform={{ width: SIDE_W, height: GARDEN_TITLE_H }}
+          />
+          <UiEntity uiTransform={{ width: SIDE_W, height: 4, flexShrink: 0 }} />
+          <Label
+            value={pctLabel}
+            fontSize={SIDE_LABEL_FONT}
+            color={GREY}
+            textAlign="middle-center"
+            uiTransform={{ width: SIDE_W, height: SIDE_LABEL_H }}
+          />
+        </UiEntity>
 
-        {/* Spacer */}
-        <UiEntity uiTransform={{ width: SIDE_W, height: PLAYER_COUNT_GAP, flexShrink: 0 }} />
-
-        {/* Percentage label */}
-        <Label
-          value={pctLabel}
-          fontSize={SIDE_LABEL_FONT}
-          color={GREY}
-          textAlign="middle-center"
-          uiTransform={{ width: SIDE_W, height: SIDE_LABEL_H }}
-        />
-
-        {/* Spacer */}
-        <UiEntity uiTransform={{ width: SIDE_W, height: SIDE_GAP, flexShrink: 0 }} />
+        {/* Spacer between pill and bar */}
+        <UiEntity uiTransform={{ width: SIDE_W, height: SIDE_PILL_GAP, flexShrink: 0 }} />
 
         {/* Bar track */}
         <UiEntity

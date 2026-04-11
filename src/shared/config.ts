@@ -10,7 +10,7 @@ export const BLOOM_UTC_MINUTE =  5
 export const TOTAL_PLANTS       = 21
 export const BLOOM_THRESHOLD    = Math.ceil(TOTAL_PLANTS * 0.8)  // 17
 export const DAILY_WATER_LIMIT  = 8
-export const WATERED_EXPIRY_MS  = 6 * 60 * 60 * 1000   // 6 hours
+export const WATERED_EXPIRY_MS  = 30 * 60 * 1000        // 30 minutes
 /** How long after bloom triggers before the server resets all plants.
  *  Matches the 10-min visual bloom so the reset coincides with the post-bloom cooldown start. */
 export const BLOOM_RESET_DELAY_MS = 10 * 60_000         // 10 minutes

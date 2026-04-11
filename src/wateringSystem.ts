@@ -129,7 +129,7 @@ const LIVE_WATER_THRESHOLD_MS = 10_000   // plantStateUpdate < 10 s old = live w
 const LIMIT_DEBOUNCE_MS       = 5_000    // min gap between daily-limit toast notifications
 
 // ── Expiry ────────────────────────────────────────────────────
-const EXPIRY_PROD_MS = 6 * 60 * 60 * 1_000   // 6 hours
+const EXPIRY_PROD_MS = 30 * 60 * 1_000        // 30 minutes
 const EXPIRY_TEST_MS = 5 * 60 * 1_000        // 5 minutes (TEST_MODE)
 
 // ── Bloom notification text ───────────────────────────────────
@@ -495,7 +495,7 @@ function waterPlant(entity: Entity, plantId: string) {
     triggerGroundLightBurst()
   }, WATER_FX_MS)
 
-  // t=WATER_ANIM_MS — swap rose→plant, animate to healthy
+  // t=WATER_ANIM_MS — swap rose→plant, animate to healthy, sparkles burst on swap
   timers.setTimeout(() => {
     const current = PlantData.get(entity)
     if (!current.isWatered || current.wateredAt !== now) return
@@ -503,16 +503,16 @@ function waterPlant(entity: Entity, plantId: string) {
     showPlant(entity)
     Animator.playSingleAnimation(entity, ANIM_TO_HEALTHY)
     playMagicFXSound()
-    // t=WATER_ANIM_MS + ANIM_TRANSITION_MS — sparkles burst
+    const plantPos = Transform.getOrNull(entity)?.position
+    if (plantPos) {
+      triggerSparkle(plantPos)
+      timers.setTimeout(() => triggerWateringTribute(plantPos), 650)
+    }
+    // t=WATER_ANIM_MS + ANIM_TRANSITION_MS — switch to idle pose
     timers.setTimeout(() => {
       const latest = PlantData.get(entity)
       if (latest.isWatered && latest.wateredAt === now) {
         Animator.playSingleAnimation(entity, ANIM_HEALTHY_STATE)
-        const plantPos = Transform.getOrNull(entity)?.position
-        if (plantPos) {
-          triggerSparkle(plantPos)
-          timers.setTimeout(() => triggerWateringTribute(plantPos), 650)
-        }
       }
     }, ANIM_TRANSITION_MS)
   }, WATER_ANIM_MS)
@@ -705,7 +705,8 @@ export function setupWateringSystem(): void {
     onVisualBloom: () => {
       // Switch the persistent pill from "Bloom in Xh Ym" → active bloom message.
       // Don't hide it — it must survive any daily-limit pill that may be stacked above it.
-      showPersistent(NOTIFY_BLOOM_ACTIVE)
+      hidePersistent()
+      showDailyLimit(NOTIFY_BLOOM_ACTIVE)
       showBannerBloom()
       triggerBloomShockwave()
       startFireflies()
@@ -891,6 +892,7 @@ export function setupWateringSystem(): void {
     updateGroundLights(0)   // reset circles to hidden
     showBannerIdle()
     updateBannerHealth(0)
+    hideDailyLimit()
   })
 
   room.onMessage('leaderboardUpdate', (data) => {
