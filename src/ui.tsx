@@ -142,7 +142,7 @@ const TEXT_BLOOM     = Color4.create(1.00, 0.92, 0.35, 1.00)  // golden yellow
 const TEXT_SUBTEXT   = Color4.create(0.65, 0.80, 0.65, 0.85)
 
 // ── Right-side vertical health bar ────────────────────────────
-const SIDE_W          = 40    // bar track width (px)
+const SIDE_W          = 48    // bar track width (px)
 const SIDE_H          = 420   // bar track height (px) — 1.5× original 280
 const SIDE_LABEL_H    = 26    // % label above the bar
 const SIDE_LABEL_FONT = 13

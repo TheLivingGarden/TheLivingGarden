@@ -25,6 +25,8 @@ import {
   pointerEventsSystem,
   PointerEvents,
   InputAction,
+  PointerEventType,
+  inputSystem,
   Transform,
   VisibilityComponent,
   Tween,
@@ -35,14 +37,15 @@ import {
 import { getPlayer }              from '@dcl/sdk/players'
 import { onEnterSceneObservable } from '@dcl/sdk/observables'
 import { setupPetalSystem, petalParticleSystem }                                                                   from './petalSystem'
-import { setupBloomSystem, triggerBloomEvent, endBloom, isBloomActive, musicFadeSystem }                          from './bloomSystem'
+import { setupBloomSystem, triggerBloomEvent, endBloom, isBloomActive }                                           from './bloomSystem'
+import { startPreBloomEffects, startBloomPhases, startBloomCooldown, cancelPreBloom }                             from './bloomEvent'
 import { setupSparkleSystem, triggerSparkle, triggerWateringTribute, sparkleSystem, triggerBloomSparkles, endBloomSparkles, bloomSparkleSystem } from './sparkleSystem'
-import { setupAmbientFX, triggerBloomShockwave, triggerGroundRipple, startFireflies, stopFireflies, ambientFXSystem } from './ambientFX'
+import { setupAmbientFX, triggerGroundRipple, stopFireflies, ambientFXSystem }                                        from './ambientFX'
 import { setupProgressBars, updateProgressBars }              from './progressBarsSystem'
-import { setupGroundLights, updateGroundLights, triggerGroundLightBurst, setGroundLightsBloom } from './groundLightSystem'
+import { setupGroundLights, updateGroundLights, triggerGroundLightBurst }                       from './groundLightSystem'
 import { setupLeaderboardBoards, updateLeaderboardDisplay }   from './leaderboardSystem'
 import { setupFairyLights, setFairyLightsBloom }             from './fairyLightSystem'
-import { showToast, showDailyLimit, hideDailyLimit, showPersistent, hidePersistent, showBannerIdle, showBannerCountdown, updateBannerCountdown, showBannerBloom, updateBannerHealth, updatePlayerCount, formatBloomCountdown, formatDailyLimitMessage } from './notifications'
+import { showToast, showDailyLimit, hideDailyLimit, showPersistent, hidePersistent, showBannerIdle, showBannerCountdown, updateBannerCountdown, showBannerBloom, updateBannerHealth, updatePlayerCount, formatBloomCountdown, formatDailyLimitMessage, getMsUntilBloom } from './notifications'
 import { movePlayerTo, triggerSceneEmote }  from '~system/RestrictedActions'
 import { room }                             from './shared/messages'
 import { TOTAL_PLANTS, BLOOM_THRESHOLD, DAILY_WATER_LIMIT, PLANT_NAMES } from './shared/config'
@@ -172,6 +175,7 @@ let lastLimitNotificationMs = 0
 let initialLoadDone         = false
 let roomReady               = false
 
+let preBloomEffectsActive = false  // true once startPreBloomEffects has been called for this cycle
 let emoteActive          = false
 let lastSyncRequestMs    = 0
 const SYNC_REQUEST_MIN_MS = 5_000   // don't flood server with requestFullSync on rapid reloads
@@ -249,7 +253,7 @@ function updateSceneAssets() {
   setVisible(_centerTextProgress, !bloomMode)
   setVisible(percentageEntity, !bloomMode)
   for (const e of wateringLabels) setVisible(e, !bloomMode)
-  if (bloomMode) setBloomLabelText(formatBloomCountdown(runtimeTestMode))
+  if (bloomMode && !isBloomActive()) setBloomLabelText(formatBloomCountdown(runtimeTestMode))
 }
 
 // ---------------------------------------------------------------
@@ -260,8 +264,15 @@ function setBloomLabelText(text: string) {
   for (const e of bloomLabels) TextShape.getMutable(e).text = text
 }
 
+function setBloomLabelScale(s: number) {
+  for (const e of bloomLabels) setScale(e, s)
+}
+
 function clearBloomLabels() {
-  for (const e of bloomLabels) TextShape.getMutable(e).text = ''
+  for (const e of bloomLabels) {
+    TextShape.getMutable(e).text = ''
+    setScale(e, SCALE_BLOOM_LABEL)   // reset to normal size for next pre-bloom countdown
+  }
 }
 
 // ── Pre-bloom ticker — counts down while health >= threshold, bloom not yet active ──
@@ -287,21 +298,6 @@ function stopPreBloomTicker(): void {
   preBloomTickerGen++   // invalidates any running chain
 }
 
-// ── Bloom-active updater — runs for the ~60 s the bloom animation is live ──
-function startBloomLabelUpdater() {
-  if (runtimeTestMode) { setBloomLabelText('All plants watered!\nBloom starting soon...'); return }
-  stopPreBloomTicker()   // pre-bloom ticker no longer needed
-  setBloomLabelText(formatBloomCountdown(false))
-  updateBannerCountdown(formatBloomCountdown(false))
-  function tick() {
-    if (!isBloomActive()) return
-    const countdown = formatBloomCountdown(false)
-    setBloomLabelText(countdown)
-    updateBannerCountdown(countdown)
-    timers.setTimeout(tick, BLOOM_LABEL_TICK_MS)
-  }
-  timers.setTimeout(tick, BLOOM_LABEL_TICK_MS)
-}
 
 // ---------------------------------------------------------------
 // UI helpers
@@ -331,7 +327,16 @@ function updateProgressText() {
       showBannerCountdown(countdown)
       setBloomLabelText(countdown)
       startPreBloomTicker()   // keeps banner + 3D labels ticking every second
+      // Start pre-bloom FX once, when threshold is first crossed this cycle
+      if (!preBloomEffectsActive && !runtimeTestMode) {
+        preBloomEffectsActive = true
+        startPreBloomEffects(getMsUntilBloom())
+      }
     } else {
+      if (preBloomEffectsActive) {
+        preBloomEffectsActive = false
+        cancelPreBloom(true)   // threshold dropped — stop FX + fireflies
+      }
       stopPreBloomTicker()
       showBannerIdle()
     }
@@ -396,16 +401,17 @@ export function resetDailyLimit(): void {
 // Interaction sounds & emote
 // ---------------------------------------------------------------
 
-function playAtPlayer(soundEntity: Entity, audioClipUrl: string, volume: number) {
+function playAtPlayer(soundEntity: Entity) {
   const pos = Transform.getOrNull(engine.PlayerEntity)?.position ?? { x: 8, y: 1, z: 8 }
   Transform.getMutable(soundEntity).position = pos
-  AudioSource.createOrReplace(soundEntity, { audioClipUrl, playing: false, loop: false, volume, pitch: 1 })
+  // Reuse the existing AudioSource component — no recreation, just retrigger
+  AudioSource.getMutable(soundEntity).playing = false
   timers.setTimeout(() => { AudioSource.getMutable(soundEntity).playing = true }, 0)
 }
 
-function playHoverSound()    { playAtPlayer(hoverSoundEntity,    SND_HOVER,    VOL_HOVER)    }
-function playClickSound()    { playAtPlayer(clickSoundEntity,    SND_CLICK,    VOL_CLICK)    }
-function playWateringSound() { playAtPlayer(wateringSoundEntity, SND_WATERING, VOL_WATERING) }
+function playHoverSound()    { playAtPlayer(hoverSoundEntity)    }
+function playClickSound()    { playAtPlayer(clickSoundEntity)    }
+function playWateringSound() { playAtPlayer(wateringSoundEntity) }
 
 function playMagicFXSound() {
   const pos = Transform.getOrNull(engine.PlayerEntity)?.position ?? { x: 8, y: 1, z: 8 }
@@ -414,6 +420,20 @@ function playMagicFXSound() {
   AudioSource.create(ent, { audioClipUrl: SND_MAGIC, playing: true, loop: false, volume: VOL_MAGIC, pitch: 1 })
   timers.setTimeout(() => engine.removeEntity(ent), MAGIC_SOUND_CLEANUP_MS)
 }
+
+function stopWateringEmote() {
+  if (!emoteActive) return
+  emoteActive = false
+  triggerSceneEmote({ src: '', loop: false })
+}
+
+const EMOTE_STOP_ACTIONS = [
+  InputAction.IA_FORWARD,
+  InputAction.IA_BACKWARD,
+  InputAction.IA_LEFT,
+  InputAction.IA_RIGHT,
+  InputAction.IA_JUMP,
+] as const
 
 function triggerWateringEmote(plantEntity: Entity) {
   const plantPos  = Transform.getOrNull(plantEntity)?.position
@@ -431,8 +451,28 @@ function triggerWateringEmote(plantEntity: Entity) {
   }
 
   emoteActive = true
-  triggerSceneEmote({ src: EMOTE_SRC, loop: false })
-  timers.setTimeout(() => { emoteActive = false }, EMOTE_TOTAL_MS)
+
+  // Exit on any movement/jump key — matches creator's reference implementation
+  const systemName = `emote-watch-${Date.now()}`
+  engine.addSystem(() => {
+    if (!emoteActive) { engine.removeSystem(systemName); return }
+    for (const action of EMOTE_STOP_ACTIONS) {
+      if (inputSystem.isTriggered(action, PointerEventType.PET_DOWN)) {
+        engine.removeSystem(systemName)
+        stopWateringEmote()
+        return
+      }
+    }
+  }, undefined, systemName)
+
+  timers.setTimeout(() => {
+    if (!emoteActive) return
+    triggerSceneEmote({ src: EMOTE_SRC, loop: false })
+    timers.setTimeout(() => {
+      engine.removeSystem(systemName)
+      stopWateringEmote()
+    }, EMOTE_TOTAL_MS)
+  }, 200)
 }
 
 // ---------------------------------------------------------------
@@ -536,6 +576,14 @@ export function resetAllPlants(): void {
   stopFireflies()
   setFairyLightsBloom(false)
   hidePersistent()
+
+  dailyLimitReached = false
+
+  // Clear all "Watered by" labels
+  for (const [, labelEntity] of wateredByLabelMap) {
+    TextShape.getMutable(labelEntity).text = ''
+  }
+  wateredByNames.clear()
 
   reset.queue = []
   for (const [entity] of engine.getEntitiesWith(PlantData)) {
@@ -703,21 +751,25 @@ export function setupWateringSystem(): void {
     testMode:      TEST_MODE,
     onReset:       () => {},
     onVisualBloom: () => {
-      // Switch the persistent pill from "Bloom in Xh Ym" → active bloom message.
-      // Don't hide it — it must survive any daily-limit pill that may be stacked above it.
+      // UI updates
       hidePersistent()
       showDailyLimit(NOTIFY_BLOOM_ACTIVE)
       showBannerBloom()
-      triggerBloomShockwave()
-      startFireflies()
-      setFairyLightsBloom(true)
-      setGroundLightsBloom(true)
+      stopPreBloomTicker()
+      setBloomLabelScale(SCALE_BLOOM_LABEL * 0.6)
+      setBloomLabelText('Bloom Event\nThe Living Garden')
+      preBloomEffectsActive = false
+
+      // Bloom sparkles at each plant position (needs registry access — must stay here)
       const positions: Array<{ x: number; y: number; z: number }> = []
       for (const [entity] of plantRegistry) {
         const pos = Transform.getOrNull(entity)?.position
         if (pos) positions.push(pos)
       }
       triggerBloomSparkles(positions)
+
+      // All VFX, audio, petals, and lights driven by intensity system
+      startBloomPhases()
     },
   })
 
@@ -778,7 +830,6 @@ export function setupWateringSystem(): void {
   setupProgressBars()
   setupGroundLights()
 
-  engine.addSystem(musicFadeSystem)
   engine.addSystem(resetAnimSystem)
   engine.addSystem(petalParticleSystem)
   engine.addSystem(sparkleSystem)
@@ -876,20 +927,19 @@ export function setupWateringSystem(): void {
   })
 
   room.onMessage('bloomTriggered', () => {
+    stopWateringEmote()
     if (!isBloomActive()) {
       triggerBloomEvent()
-      showPersistent(formatBloomCountdown(runtimeTestMode))
-      startBloomLabelUpdater()
       updateSceneAssets()
     }
   })
 
   room.onMessage('bloomReset', () => {
     stopPreBloomTicker()
-    resetAllPlants()
+    preBloomEffectsActive = false
+    resetAllPlants()         // stops bloom, resets visuals + audio via endBloom()
+    startBloomCooldown()     // gradual 5-min wind-down of lights + audio
     clearBloomLabels()
-    setGroundLightsBloom(false)
-    updateGroundLights(0)   // reset circles to hidden
     showBannerIdle()
     updateBannerHealth(0)
     hideDailyLimit()
@@ -937,7 +987,7 @@ export function setupWateringSystem(): void {
           triggerGroundLightBurst()
           if (plantPos) {
             Transform.getMutable(wateringSoundEntity).position = plantPos
-            AudioSource.createOrReplace(wateringSoundEntity, { audioClipUrl: SND_WATERING, playing: true, loop: false, volume: VOL_WATERING, pitch: 1 })
+            AudioSource.getMutable(wateringSoundEntity).playing = true
             triggerGroundRipple(plantPos)
           }
           timers.setTimeout(() => {

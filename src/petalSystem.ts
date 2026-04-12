@@ -9,7 +9,7 @@ import { BLOOM_CENTER } from './shared/config'
 // Configuration
 // ---------------------------------------------------------------
 
-const PETAL_COUNT        = 50
+const PETAL_COUNT        = 20
 const PETAL_SPAWN_RADIUS = 7
 const PETAL_HEIGHT_MAX   = 9      // max spawn height (m)
 const PETAL_HEIGHT_MIN   = 1      // min spawn height (m)

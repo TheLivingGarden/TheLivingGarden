@@ -48,7 +48,9 @@ const W_BASE_LOW:  readonly [number, number, number] = [0.68, 0.26, 0.06]
 const W_BASE_MID:  readonly [number, number, number] = [0.14, 0.64, 0.22]
 const W_BASE_HIGH: readonly [number, number, number] = [0.05, 0.22, 0.73]
 const W_BURST:     readonly [number, number, number] = [0.28, 0.38, 0.34]
-const W_BLOOM:     readonly [number, number, number] = [0.0, 0.35, 0.65]
+const W_BLOOM:     readonly [number, number, number] = [0.00, 0.35, 0.65]  // intensity 2 — mostly High
+const W_BLOOM_MID: readonly [number, number, number] = [0.05, 0.60, 0.35]  // intensity 1 — mostly Mid
+const W_BLOOM_LOW: readonly [number, number, number] = [0.50, 0.40, 0.10]  // intensity 0 — mostly Low
 // ── Group definitions ─────────────────────────────────────────
 // offName:    entity name for the Off variant (null = no Off model)
 // sets:       [lowName, midName, highName] — one entry per physical set
@@ -141,7 +143,14 @@ function weightedPick(w: readonly [number, number, number]): number {
 
 function weightsFor(g: Group): readonly [number, number, number] {
   const mode = g.burstUntil > Date.now() ? 'burst' : g.flickerMode
-  if (mode === 'bloom')  return W_BLOOM
+  if (mode === 'bloom') {
+    // Lampposts use intensity-aware weights so brightness visually tracks bloomIntensity
+    if (g.id === 'lamppost') {
+      if (g.baseLevel === 0) return W_BLOOM_LOW
+      if (g.baseLevel === 1) return W_BLOOM_MID
+    }
+    return W_BLOOM
+  }
   if (mode === 'burst')  return W_BURST
   if (g.baseLevel === 1) return W_BASE_MID
   if (g.baseLevel === 2) return W_BASE_HIGH
@@ -157,13 +166,20 @@ function timingFor(g: Group): [number, number] {
 
 /** Show exactly one variant across all sets. level: -1=Off, 0=Low, 1=Mid, 2=High */
 function applyLevel(g: Group, level: number): void {
+  if (g.current === level) return   // nothing changed — skip all component writes
   g.current = level
   for (const s of g.sets) {
-    if (s.off)  VisibilityComponent.createOrReplace(s.off,  { visible: level === -1 })
-    if (s.low)  VisibilityComponent.createOrReplace(s.low,  { visible: level ===  0 })
-    if (s.mid)  VisibilityComponent.createOrReplace(s.mid,  { visible: level ===  1 })
-    if (s.high) VisibilityComponent.createOrReplace(s.high, { visible: level ===  2 })
+    if (s.off)  setVisible(s.off,  level === -1)
+    if (s.low)  setVisible(s.low,  level ===  0)
+    if (s.mid)  setVisible(s.mid,  level ===  1)
+    if (s.high) setVisible(s.high, level ===  2)
   }
+}
+
+function setVisible(entity: Entity, visible: boolean): void {
+  const cur = VisibilityComponent.getOrNull(entity)
+  if (cur?.visible === visible) return   // already correct — skip write
+  VisibilityComponent.createOrReplace(entity, { visible })
 }
 
 function scheduleNext(g: Group, delayMs: number): void {
@@ -302,6 +318,41 @@ export function triggerGroundLightBurst(): void {
     if (g.baseLevel === -1) continue   // don't burst Off groups
     g.burstUntil = until
   }
+}
+
+/**
+ * Drive the lamppost group to a specific brightness level (0=Low, 1=Mid, 2=High).
+ * Preserves the current flicker mode — safe to call at any time.
+ * Used for explicit resets (cancelPreBloom, cooldown).
+ */
+export function setLamppostLevel(level: 0|1|2): void {
+  const g = groups.find(g => g.id === 'lamppost')
+  if (!g) return
+  g.baseLevel   = level
+  g.minLevel    = level
+  g.flickerMode = 'normal'   // always return to normal flicker on explicit reset
+  applyLevel(g, level)
+  g.gen++
+  const [minMs, maxMs] = timingFor(g)
+  scheduleNext(g, rnd(minMs, maxMs))
+}
+
+/**
+ * Adjust lamppost brightness to match the current bloom intensity level.
+ *   0 → Low  (W_BLOOM_LOW  — mostly Low, occasional Mid)
+ *   1 → Mid  (W_BLOOM_MID  — mostly Mid, some High)
+ *   2 → High (W_BLOOM      — mostly High, bloom twinkle)
+ *
+ * Does NOT restart the flicker chain — just mutates baseLevel so that
+ * weightsFor() returns the appropriate set on the next natural tick.
+ * This keeps the existing chain smooth and avoids gen-bump interference.
+ */
+export function setLamppostBloomIntensity(level: 0|1|2): void {
+  const g = groups.find(g => g.id === 'lamppost')
+  if (!g) return
+  g.baseLevel = level
+  g.minLevel  = level
+  applyLevel(g, level)   // immediate visual snap to new brightness
 }
 
 /**

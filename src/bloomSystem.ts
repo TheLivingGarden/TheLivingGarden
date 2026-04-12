@@ -10,7 +10,7 @@ import {
   Transform,
   timers,
 } from '@dcl/sdk/ecs'
-import { startPetalRain, startPetalSettle } from './petalSystem'
+import { startPetalSettle } from './petalSystem'
 import { showToast } from './notifications'
 import { BLOOM_CENTER, BLOOM_UTC_HOUR, BLOOM_UTC_MINUTE } from './shared/config'
 
@@ -18,9 +18,7 @@ import { BLOOM_CENTER, BLOOM_UTC_HOUR, BLOOM_UTC_MINUTE } from './shared/config'
 // Configuration
 // ---------------------------------------------------------------
 
-const MUSIC_FADE_IN_MS         = 3_000
-const MUSIC_FADE_OUT_MS        = 6_000
-const AMBIENT_MAX_VOLUME       = 0.7
+const BASE_LOOP_VOLUME  = 0.7
 const TEST_MODE_BLOOM_DELAY_MS = 10_000
 
 const ANIM_IDLE      = 'CloseIdle'
@@ -35,13 +33,11 @@ const BLOOM_OPEN_POSE_HOLD_MS = 30 * 60 * 1_000
 // State
 // ---------------------------------------------------------------
 
-let bloomActive = false
-let bloomSoundEntity: Entity | null = null
-let ambientSoundEntity: Entity | null = null
+let bloomActive       = false
+let baseLoopEntity:   Entity | null = null   // continuous — plays always
+let pulseEntity:      Entity | null = null   // bloom layer 1 — silent until bloom
+let swellEntity:      Entity | null = null   // bloom layer 2 — silent until bloom
 let bloomModelEntity: Entity | null = null
-
-let musicFadeState: 'in' | 'out' | 'none' = 'none'
-let musicFadeMs = 0
 
 let testMode = false
 let customBloomHour: number | null = null
@@ -49,52 +45,7 @@ let customBloomHour: number | null = null
 let onResetCallback: () => void = () => {}
 let onVisualBloomCallback: () => void = () => {}
 
-let stopPetalCycle: (() => void) | null = null
-
-// ---------------------------------------------------------------
-// Petal Cycle (CINEMATIC)
-// ---------------------------------------------------------------
-
-function startPetalCycle() {
-  let active = true
-
-  function runCycle() {
-    if (!active) return
-
-    // 🌸 SPAWN
-    startPetalRain()
-
-    // ✨ FLOAT
-    const floatTime = 5000 + Math.random() * 2000
-
-    timers.setTimeout(() => {
-      if (!active) return
-
-      // 🍃 SETTLE (fall + fade)
-      startPetalSettle()
-
-      // ⏳ WAIT FOR CLEANUP
-      const settleTime = 5000 + Math.random() * 2000
-
-      timers.setTimeout(() => {
-        if (!active) return
-
-        // 🌑 GAP (breathing space)
-        const gap = 4000 + Math.random() * 4000
-
-        timers.setTimeout(runCycle, gap)
-
-      }, settleTime)
-
-    }, floatTime)
-  }
-
-  runCycle()
-
-  return () => {
-    active = false
-  }
-}
+// (petal cycle now driven by bloomEvent.ts intensity system)
 
 // ---------------------------------------------------------------
 // Time Logic
@@ -125,9 +76,6 @@ function launchVisualBloom() {
 
   onVisualBloomCallback()
 
-  // 🌸 start cinematic petals
-  stopPetalCycle = startPetalCycle()
-
   // 🎬 animation
   if (bloomModelEntity) {
     Animator.createOrReplace(bloomModelEntity, {
@@ -156,51 +104,9 @@ function launchVisualBloom() {
 // Music Fade System
 // ---------------------------------------------------------------
 
-export function musicFadeSystem(dt: number): void {
-  if (musicFadeState === 'none' || !bloomSoundEntity) return
-
-  musicFadeMs += dt * 1000
-
-  if (musicFadeState === 'in') {
-    const p = Math.min(musicFadeMs / MUSIC_FADE_IN_MS, 1)
-
-    AudioSource.getMutable(bloomSoundEntity).volume = p * p
-
-    if (ambientSoundEntity) {
-      const r = 1 - p
-      AudioSource.getMutable(ambientSoundEntity).volume = AMBIENT_MAX_VOLUME * (r * r)
-    }
-
-    if (p >= 1) musicFadeState = 'none'
-  }
-
-  else if (musicFadeState === 'out') {
-    const p = Math.min(musicFadeMs / MUSIC_FADE_OUT_MS, 1)
-    const r = 1 - p
-
-    AudioSource.getMutable(bloomSoundEntity).volume = r * r
-
-    if (ambientSoundEntity) {
-      AudioSource.getMutable(ambientSoundEntity).volume = AMBIENT_MAX_VOLUME * (p * p)
-    }
-
-    if (p >= 1) {
-      AudioSource.createOrReplace(bloomSoundEntity, {
-        audioClipUrl: 'assets/scene/Sounds/MagicSound.mp3',
-        playing: false,
-        loop: false,
-        volume: 0,
-        pitch: 1,
-      })
-
-      if (ambientSoundEntity) {
-        AudioSource.getMutable(ambientSoundEntity).volume = AMBIENT_MAX_VOLUME
-      }
-
-      musicFadeState = 'none'
-    }
-  }
-}
+// No-op — fade system removed, BaseLoop plays continuously.
+// Kept as export so wateringSystem.ts import doesn't need updating.
+export function musicFadeSystem(_dt: number): void {}
 
 // ---------------------------------------------------------------
 // Setup
@@ -215,23 +121,35 @@ export function setupBloomSystem(opts: {
   onResetCallback = opts.onReset
   onVisualBloomCallback = opts.onVisualBloom ?? (() => {})
 
-  ambientSoundEntity = engine.addEntity()
-  Transform.create(ambientSoundEntity, { position: BLOOM_CENTER })
-  AudioSource.create(ambientSoundEntity, {
-    audioClipUrl: 'assets/scene/Sounds/AmbientSound.mp3',
+  // Continuous base layer — always playing
+  baseLoopEntity = engine.addEntity()
+  Transform.create(baseLoopEntity, { position: BLOOM_CENTER })
+  AudioSource.create(baseLoopEntity, {
+    audioClipUrl: 'assets/scene/Audio/BaseLoop.mp3',
     playing: true,
     loop: true,
-    volume: AMBIENT_MAX_VOLUME,
+    volume: BASE_LOOP_VOLUME,
     pitch: 1,
   })
 
-  bloomSoundEntity = engine.addEntity()
-  Transform.create(bloomSoundEntity, { position: BLOOM_CENTER })
-  AudioSource.create(bloomSoundEntity, {
-    audioClipUrl: 'assets/scene/Sounds/MagicSound.mp3',
+  // Bloom layers — silent until bloom sequence defines them
+  pulseEntity = engine.addEntity()
+  Transform.create(pulseEntity, { position: BLOOM_CENTER })
+  AudioSource.create(pulseEntity, {
+    audioClipUrl: 'assets/scene/Audio/Pulse.mp3',
     playing: false,
-    loop: true,
-    volume: 1,
+    loop: false,
+    volume: 0,
+    pitch: 1,
+  })
+
+  swellEntity = engine.addEntity()
+  Transform.create(swellEntity, { position: BLOOM_CENTER })
+  AudioSource.create(swellEntity, {
+    audioClipUrl: 'assets/scene/Audio/Swell3.mp3',
+    playing: false,
+    loop: false,
+    volume: 0,
     pitch: 1,
   })
 
@@ -256,23 +174,8 @@ export function setupBloomSystem(opts: {
 
 export function triggerBloomEvent(): void {
   if (bloomActive) return
-
   bloomActive = true
-
-  if (bloomSoundEntity) {
-    AudioSource.createOrReplace(bloomSoundEntity, {
-      audioClipUrl: 'assets/scene/Sounds/MagicSound.mp3',
-      playing: true,
-      loop: true,
-      volume: 0,
-      pitch: 1,
-    })
-
-    musicFadeMs = 0
-    musicFadeState = 'in'
-  }
-
-  timers.setTimeout(launchVisualBloom, MUSIC_FADE_IN_MS)
+  launchVisualBloom()
 }
 
 // ---------------------------------------------------------------
@@ -282,17 +185,13 @@ export function triggerBloomEvent(): void {
 export function endBloom(): void {
   bloomActive = false
 
-  if (bloomSoundEntity) {
-    musicFadeMs = 0
-    musicFadeState = 'out'
+  // Stop bloom audio layers
+  if (pulseEntity) {
+    const src = AudioSource.getMutableOrNull(pulseEntity)
+    if (src) { src.playing = false; src.volume = 0 }
   }
 
   startPetalSettle()
-
-  if (stopPetalCycle) {
-    stopPetalCycle()
-    stopPetalCycle = null
-  }
 
   if (bloomModelEntity) {
     Animator.playSingleAnimation(bloomModelEntity, ANIM_IDLE)
@@ -311,4 +210,36 @@ export function setBloomTestMode(val: boolean): void {
 
 export function setCustomBloomHour(hour: number | null): void {
   customBloomHour = hour
+}
+
+// ---------------------------------------------------------------
+// Audio Intensity API — called by bloomEvent.ts intensity system
+// ---------------------------------------------------------------
+
+const PULSE_VOLUME: Record<0|1|2, number> = { 0: 0, 1: 0.45, 2: 0.85 }
+
+/** Set the looping Pulse layer volume (0 = silence, 1 = medium, 2 = peak). */
+export function setBloomAudioIntensity(level: 0|1|2): void {
+  if (!pulseEntity) return
+  const src = AudioSource.getMutableOrNull(pulseEntity)
+  if (!src) return
+  if (level === 0) {
+    src.playing = false
+    src.volume  = 0
+  } else {
+    src.volume  = PULSE_VOLUME[level]
+    src.playing = true
+  }
+}
+
+/** Fire a one-shot Swell accent (used at intensity 2 moments). */
+export function playBloomAudioAccent(): void {
+  if (!swellEntity) return
+  const src = AudioSource.getMutableOrNull(swellEntity)
+  if (!src) return
+  src.playing = false
+  timers.setTimeout(() => {
+    const s = AudioSource.getMutableOrNull(swellEntity!)
+    if (s) s.playing = true
+  }, 0)
 }

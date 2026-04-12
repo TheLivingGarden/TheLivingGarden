@@ -173,51 +173,67 @@ function setupFireflies() {
 
 // =============================================================
 // SECTION 4 — Ground ripple on watering
-// Fresh entity per trigger — avoids stale component state on reuse.
-// Entity is removed once the animation completes.
+// Uses a fixed pool of 3 entities — avoids entity creation/destruction per trigger.
 // =============================================================
 
-const RIPPLE_DUR_MS = 1700
-const RIPPLE_R_MAX  = 4.5   // world-unit radius
+const RIPPLE_DUR_MS   = 1700
+const RIPPLE_R_MAX    = 4.5   // world-unit radius
+const RIPPLE_POOL_SIZE = 3
 
-interface ActiveRipple { entity: Entity; elapsed: number }
-const activeRipples: ActiveRipple[] = []
+interface RippleSlot { entity: Entity; active: boolean; elapsed: number }
+const rippleSlots: RippleSlot[] = []
+
+function setupRipplePool(): void {
+  for (let i = 0; i < RIPPLE_POOL_SIZE; i++) {
+    const ent = engine.addEntity()
+    Transform.create(ent, {
+      position: { x: 0, y: -100, z: 0 },   // parked off-scene until triggered
+      rotation: Quaternion.fromEulerDegrees(90, 0, 0),
+      scale:    { x: 0.001, y: 0.001, z: 0.001 },
+    })
+    MeshRenderer.setPlane(ent)
+    Material.setPbrMaterial(ent, {
+      texture:           Material.Texture.Common({ src: SPARKLE_SRC }),
+      alphaTexture:      Material.Texture.Common({ src: SPARKLE_SRC }),
+      transparencyMode:  MaterialTransparencyMode.MTM_ALPHA_BLEND,
+      albedoColor:       Color4.create(1.0, 0.88, 0.52, 0.0),  // start transparent
+      emissiveColor:     { r: 1.0, g: 0.75, b: 0.32 },
+      emissiveIntensity: 2.0,
+    })
+    rippleSlots.push({ entity: ent, active: false, elapsed: 0 })
+  }
+}
 
 export function triggerGroundRipple(pos: { x: number; y: number; z: number }): void {
-  const ent = engine.addEntity()
-  Transform.create(ent, {
-    position: { x: pos.x, y: pos.y +0.5, z: pos.z },
-    rotation: Quaternion.fromEulerDegrees(90, 0, 0),
-    scale:    { x: 0.001, y: 0.001, z: 0.001 },
-  })
-  MeshRenderer.setPlane(ent)
-  Material.setPbrMaterial(ent, {
-    texture:           Material.Texture.Common({ src: SPARKLE_SRC }),
-    alphaTexture:      Material.Texture.Common({ src: SPARKLE_SRC }),
-    transparencyMode:  MaterialTransparencyMode.MTM_ALPHA_BLEND,
-    albedoColor:       Color4.create(1.0, 0.88, 0.52, 0.75),  // warm gold
-    emissiveColor:     { r: 1.0, g: 0.75, b: 0.32 },           // warm amber
-    emissiveIntensity: 2.0,
-  })
-  activeRipples.push({ entity: ent, elapsed: 0 })
+  const slot = rippleSlots.find(s => !s.active)
+  if (!slot) return   // all slots busy — skip (3 concurrent ripples is unlikely)
+  slot.active  = true
+  slot.elapsed = 0
+  const tf = Transform.getMutable(slot.entity)
+  tf.position = { x: pos.x, y: pos.y + 0.5, z: pos.z }
+  tf.scale    = { x: 0.001, y: 0.001, z: 0.001 }
+  const mat = Material.getFlatMutable(slot.entity)
+  if (mat.albedoColor) mat.albedoColor.a = 0.75
 }
 
 function tickRipples(dt: number) {
-  for (let i = activeRipples.length - 1; i >= 0; i--) {
-    const r = activeRipples[i]
-    r.elapsed += dt * 1000
+  for (const slot of rippleSlots) {
+    if (!slot.active) continue
+    slot.elapsed += dt * 1000
 
-    const t = Math.min(r.elapsed / RIPPLE_DUR_MS, 1)
+    const t = Math.min(slot.elapsed / RIPPLE_DUR_MS, 1)
     if (t >= 1) {
-      engine.removeEntity(r.entity)
-      activeRipples.splice(i, 1)
+      slot.active = false
+      Transform.getMutable(slot.entity).scale = { x: 0.001, y: 0.001, z: 0.001 }
+      const mat = Material.getFlatMutable(slot.entity)
+      if (mat.albedoColor) mat.albedoColor.a = 0
       continue
     }
 
     const sc    = (1 - (1 - t) * (1 - t)) * RIPPLE_R_MAX
     const alpha = (1 - t) * (1 - t) * 0.75
-    Transform.getMutable(r.entity).scale = { x: sc, y: sc, z: sc }
-    const mat = Material.getFlatMutable(r.entity)
+    Transform.getMutable(slot.entity).scale = { x: sc, y: sc, z: sc }
+    const mat = Material.getFlatMutable(slot.entity)
     if (mat.albedoColor) mat.albedoColor.a = alpha
   }
 }
@@ -230,6 +246,7 @@ export function setupAmbientFX(): void {
   setupMotes()
   setupShockwaves()
   setupFireflies()
+  setupRipplePool()
 }
 
 // =============================================================

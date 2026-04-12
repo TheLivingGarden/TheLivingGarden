@@ -151,10 +151,10 @@ const TRAVEL_ARC_HEIGHT  = 0.6    // m — peak of the arc above the straight-li
 const TRAVEL_POP_IN_FRAC = 0.25   // fraction of travel during which sparkle pops in
 
 // Orbit parameters
-const ORBIT_RADIUS_MIN = 1.0    // m
-const ORBIT_RADIUS_MAX = 2.8    // m
-const ORBIT_Y_MIN      = 3.0    // m — orbits around Bloom model at y=4
-const ORBIT_Y_MAX      = 5.5    // m
+const ORBIT_RADIUS_MIN = 2    // m
+const ORBIT_RADIUS_MAX = 4    // m
+const ORBIT_Y_MIN      = 4.0    // m — orbits around Bloom model at y=4
+const ORBIT_Y_MAX      = 7    // m
 const ORBIT_SPEED_MIN  = 0.3    // rad/s
 const ORBIT_SPEED_MAX  = 0.75   // rad/s
 
