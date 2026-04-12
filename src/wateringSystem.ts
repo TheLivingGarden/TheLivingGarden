@@ -754,7 +754,6 @@ export function setupWateringSystem(): void {
       // UI updates
       hidePersistent()
       showDailyLimit(NOTIFY_BLOOM_ACTIVE)
-      showBannerBloom()
       stopPreBloomTicker()
       setBloomLabelScale(SCALE_BLOOM_LABEL * 0.6)
       setBloomLabelText('Bloom Event\nThe Living Garden')

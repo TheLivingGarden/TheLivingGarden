@@ -18,18 +18,21 @@ import { BLOOM_CENTER, BLOOM_WINDOWS } from './shared/config'
 // Configuration
 // ---------------------------------------------------------------
 
-const BASE_LOOP_VOLUME  = 50
-const PULSE_BASE_VOLUME = 5
-const SWELL_BASE_VOLUME = 1.4
+const BASE_LOOP_VOLUME  = 1.0   // max — boost the audio file itself if more is needed
+const PULSE_BASE_VOLUME = 0.45
+const SWELL_BASE_VOLUME = 0.85
 const TEST_MODE_BLOOM_DELAY_MS = 10_000
 
 const ANIM_IDLE      = 'CloseIdle'
 const ANIM_BLOOM     = 'OpenAction'
 const ANIM_OPEN_IDLE = 'OpenIdle'
+const ANIM_CLOSE     = 'CloseAction'
 
-const BLOOM_ANIM_SPEED        = 0.5
+const BLOOM_ANIM_SPEED        = 0.25
 const BLOOM_SWITCH_TO_OPEN_MS = 20_000
 const BLOOM_OPEN_POSE_HOLD_MS = 30 * 60 * 1_000
+/** Same clip length as OpenAction, same speed — so the same duration applies. */
+const CLOSE_ACTION_MS         = BLOOM_SWITCH_TO_OPEN_MS
 
 // ---------------------------------------------------------------
 // State
@@ -86,7 +89,6 @@ function getNextBloomTime(): number {
 // ---------------------------------------------------------------
 
 function launchVisualBloom() {
-  showToast('The Garden is in Full Bloom!', 6000)
   console.log('Bloom visual launched!')
 
   onVisualBloomCallback()
@@ -95,9 +97,10 @@ function launchVisualBloom() {
   if (bloomModelEntity) {
     Animator.createOrReplace(bloomModelEntity, {
       states: [
-        { clip: ANIM_IDLE, playing: false, loop: true, speed: 1 },
-        { clip: ANIM_BLOOM, playing: true, loop: false, speed: BLOOM_ANIM_SPEED },
-        { clip: ANIM_OPEN_IDLE, playing: false, loop: true, speed: 1 },
+        { clip: ANIM_IDLE,      playing: false, loop: true,  speed: 1 },
+        { clip: ANIM_BLOOM,     playing: true,  loop: false, speed: BLOOM_ANIM_SPEED },
+        { clip: ANIM_OPEN_IDLE, playing: false, loop: true,  speed: 1 },
+        { clip: ANIM_CLOSE,     playing: false, loop: false, speed: BLOOM_ANIM_SPEED },
       ],
     })
 
@@ -175,9 +178,10 @@ export function setupBloomSystem(opts: {
 
     Animator.createOrReplace(bloomEnt, {
       states: [
-        { clip: ANIM_IDLE, playing: true, loop: true, speed: 1 },
-        { clip: ANIM_BLOOM, playing: false, loop: false, speed: BLOOM_ANIM_SPEED },
-        { clip: ANIM_OPEN_IDLE, playing: false, loop: true, speed: 1 },
+        { clip: ANIM_IDLE,      playing: true,  loop: true,  speed: 1 },
+        { clip: ANIM_BLOOM,     playing: false, loop: false, speed: BLOOM_ANIM_SPEED },
+        { clip: ANIM_OPEN_IDLE, playing: false, loop: true,  speed: 1 },
+        { clip: ANIM_CLOSE,     playing: false, loop: false, speed: BLOOM_ANIM_SPEED },
       ],
     })
   }
@@ -209,7 +213,10 @@ export function endBloom(): void {
   startPetalSettle()
 
   if (bloomModelEntity) {
-    Animator.playSingleAnimation(bloomModelEntity, ANIM_IDLE)
+    Animator.playSingleAnimation(bloomModelEntity, ANIM_CLOSE)
+    timers.setTimeout(() => {
+      if (bloomModelEntity) Animator.playSingleAnimation(bloomModelEntity, ANIM_IDLE)
+    }, CLOSE_ACTION_MS)
   }
 }
 
