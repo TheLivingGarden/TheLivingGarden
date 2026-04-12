@@ -78,9 +78,12 @@ const UNHEALTHY_ROSE_SRC  = 'assets/scene/Models/UnhealthyRose/UnhealthyRose.glb
 const ANIM_UNHEALTHY_IDLE = 'CloseIdle'  // idle loop in UnhealthyRose.glb
 
 // ── Emote ─────────────────────────────────────────────────────
-const EMOTE_SRC       = 'assets/scene/Models/Emotes/WateringCan_emote.glb'
-const EMOTE_TOTAL_MS  = 2933   // ms — full clip length (keeps emoteActive locked)
-const WATER_DISTANCE  = 2    // metres — how close player steps to the plant
+const EMOTE_SRC           = 'assets/scene/Models/Emotes/WateringCan_emote.glb'
+const EMOTE_TOTAL_MS      = 2933   // ms — full clip length (keeps emoteActive locked)
+const EMOTE_TRIGGER_MS    = 800    // delay before triggerSceneEmote — lets movePlayerTo's
+                                   // position update fully propagate through comms before
+                                   // the emote packet is sent, avoiding remote drop
+const WATER_DISTANCE      = 2      // metres — how close player steps to the plant
 
 // ── Watering choreography milestones ─────────────────────────
 // t=0           click — player steps to plant, emote fires
@@ -472,7 +475,7 @@ function triggerWateringEmote(plantEntity: Entity) {
       engine.removeSystem(systemName)
       stopWateringEmote()
     }, EMOTE_TOTAL_MS)
-  }, 200)
+  }, EMOTE_TRIGGER_MS)
 }
 
 // ---------------------------------------------------------------
