@@ -18,7 +18,9 @@ import { BLOOM_CENTER, BLOOM_WINDOWS } from './shared/config'
 // Configuration
 // ---------------------------------------------------------------
 
-const BASE_LOOP_VOLUME  = 0.7
+const BASE_LOOP_VOLUME  = 50
+const PULSE_BASE_VOLUME = 5
+const SWELL_BASE_VOLUME = 1.4
 const TEST_MODE_BLOOM_DELAY_MS = 10_000
 
 const ANIM_IDLE      = 'CloseIdle'
@@ -152,7 +154,7 @@ export function setupBloomSystem(opts: {
     audioClipUrl: 'assets/scene/Audio/Pulse.mp3',
     playing: false,
     loop: false,
-    volume: 0,
+    volume: PULSE_BASE_VOLUME,
     pitch: 1,
   })
 
@@ -162,7 +164,7 @@ export function setupBloomSystem(opts: {
     audioClipUrl: 'assets/scene/Audio/Swell3.mp3',
     playing: false,
     loop: false,
-    volume: 0,
+    volume: SWELL_BASE_VOLUME,
     pitch: 1,
   })
 

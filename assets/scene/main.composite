@@ -303,20 +303,20 @@
         "522": {
           "json": {
             "position": {
-              "x": 2.750000476837158,
-              "y": 0.5058925747871399,
-              "z": 8.226837158203125
+              "x": 2.75,
+              "y": 0.5099999904632568,
+              "z": 8.677538871765137
+            },
+            "rotation": {
+              "x": 0,
+              "y": 1,
+              "z": 0,
+              "w": 0
             },
             "scale": {
               "x": 1,
               "y": 1,
               "z": 1
-            },
-            "rotation": {
-              "x": 0,
-              "y": 0,
-              "z": 0,
-              "w": 1
             },
             "parent": 533
           }
@@ -324,20 +324,20 @@
         "523": {
           "json": {
             "position": {
-              "x": 2.750000476837158,
+              "x": 3.1167776584625244,
               "y": 0.5058925747871399,
-              "z": 10.099796295166016
-            },
-            "scale": {
-              "x": 1,
-              "y": 1,
-              "z": 1
+              "z": 9.981441497802734
             },
             "rotation": {
               "x": 0,
               "y": 0.5,
               "z": 0,
               "w": 0.8660253882408142
+            },
+            "scale": {
+              "x": 0.690930187702179,
+              "y": 0.690930187702179,
+              "z": 0.690930187702179
             },
             "parent": 533
           }
@@ -370,16 +370,16 @@
               "y": 0.5058925747871399,
               "z": 10.099796295166016
             },
-            "scale": {
-              "x": 1,
-              "y": 1,
-              "z": 1
-            },
             "rotation": {
               "x": 0,
               "y": 0.6087614297866821,
               "z": 0,
               "w": 0.7933533191680908
+            },
+            "scale": {
+              "x": 0.699999988079071,
+              "y": 0.699999988079071,
+              "z": 0.699999988079071
             },
             "parent": 533
           }
@@ -387,14 +387,9 @@
         "526": {
           "json": {
             "position": {
-              "x": 10.442841529846191,
+              "x": 10.701126098632812,
               "y": 0.5058925747871399,
-              "z": 8.226837158203125
-            },
-            "scale": {
-              "x": 1,
-              "y": 1,
-              "z": 1
+              "z": 8.976837158203125
             },
             "rotation": {
               "x": 0,
@@ -402,20 +397,20 @@
               "z": 0,
               "w": 1
             },
+            "scale": {
+              "x": 1.100000023841858,
+              "y": 1.100000023841858,
+              "z": 1.100000023841858
+            },
             "parent": 533
           }
         },
         "527": {
           "json": {
             "position": {
-              "x": 10.442841529846191,
+              "x": 10.87696647644043,
               "y": 0.5058925747871399,
-              "z": 6.4838995933532715
-            },
-            "scale": {
-              "x": 1,
-              "y": 1,
-              "z": 1
+              "z": 5.858948230743408
             },
             "rotation": {
               "x": 0,
@@ -423,26 +418,31 @@
               "z": 0,
               "w": 0.7933533191680908
             },
+            "scale": {
+              "x": 1,
+              "y": 1,
+              "z": 1
+            },
             "parent": 533
           }
         },
         "528": {
           "json": {
             "position": {
-              "x": 10.442841529846191,
+              "x": 10.880141258239746,
               "y": 0.5058925747871399,
-              "z": 41.435768127441406
-            },
-            "scale": {
-              "x": 1,
-              "y": 1,
-              "z": 1
+              "z": 40.935768127441406
             },
             "rotation": {
               "x": 0,
               "y": 0.5,
               "z": 0,
               "w": 0.8660253882408142
+            },
+            "scale": {
+              "x": 1,
+              "y": 1,
+              "z": 1
             },
             "parent": 533
           }
@@ -454,16 +454,16 @@
               "y": 0.5058925747871399,
               "z": 39.562808990478516
             },
-            "scale": {
-              "x": 1,
-              "y": 1,
-              "z": 1
-            },
             "rotation": {
               "x": 0,
               "y": -0.258819043636322,
               "z": 0,
               "w": 0.9659258127212524
+            },
+            "scale": {
+              "x": 0.800000011920929,
+              "y": 0.800000011920929,
+              "z": 0.800000011920929
             },
             "parent": 533
           }
@@ -473,18 +473,18 @@
             "position": {
               "x": 10.442841529846191,
               "y": 0.5058925747871399,
-              "z": 37.81986999511719
-            },
-            "scale": {
-              "x": 1,
-              "y": 1,
-              "z": 1
+              "z": 37.31986999511719
             },
             "rotation": {
               "x": 0,
               "y": -0.5,
               "z": 0,
               "w": 0.8660253882408142
+            },
+            "scale": {
+              "x": 0.699999988079071,
+              "y": 0.699999988079071,
+              "z": 0.699999988079071
             },
             "parent": 533
           }
@@ -492,20 +492,20 @@
         "531": {
           "json": {
             "position": {
-              "x": 2.750000476837158,
-              "y": 0.5058925747871399,
-              "z": 37.81986999511719
+              "x": 2.75,
+              "y": 0.5099999904632568,
+              "z": 37.81999969482422
+            },
+            "rotation": {
+              "x": 0,
+              "y": 0.8659999966621399,
+              "z": 0,
+              "w": 0.5
             },
             "scale": {
               "x": 1,
               "y": 1,
               "z": 1
-            },
-            "rotation": {
-              "x": 0,
-              "y": -0.5,
-              "z": 0,
-              "w": 0.8660253882408142
             },
             "parent": 533
           }
@@ -513,20 +513,20 @@
         "532": {
           "json": {
             "position": {
-              "x": 2.750000476837158,
-              "y": 0.5058925747871399,
-              "z": 39.562808990478516
+              "x": 2.630000114440918,
+              "y": 0.5099999904632568,
+              "z": 39.779998779296875
+            },
+            "rotation": {
+              "x": 0,
+              "y": 1,
+              "z": 0,
+              "w": 0
             },
             "scale": {
               "x": 1,
               "y": 1,
               "z": 1
-            },
-            "rotation": {
-              "x": 0,
-              "y": 0,
-              "z": 0,
-              "w": 1
             },
             "parent": 533
           }
@@ -578,18 +578,18 @@
             "position": {
               "x": 2.750000476837158,
               "y": 0.5058925747871399,
-              "z": 6.483898639678955
-            },
-            "scale": {
-              "x": 1,
-              "y": 1,
-              "z": 1
+              "z": 6.9996256828308105
             },
             "rotation": {
               "x": 0,
               "y": -0.6087614297866821,
               "z": 0,
               "w": 0.7933533191680908
+            },
+            "scale": {
+              "x": 0.690930187702179,
+              "y": 0.690930187702179,
+              "z": 0.690930187702179
             },
             "parent": 533
           }
@@ -618,14 +618,9 @@
         "537": {
           "json": {
             "position": {
-              "x": 11.735212326049805,
+              "x": 11.06242847442627,
               "y": 0.024768145754933357,
-              "z": 21.25
-            },
-            "scale": {
-              "x": 1,
-              "y": 1,
-              "z": 1
+              "z": 20.808547973632812
             },
             "rotation": {
               "x": 0,
@@ -633,26 +628,31 @@
               "z": 0,
               "w": 0.13052618503570557
             },
+            "scale": {
+              "x": 1,
+              "y": 1,
+              "z": 1
+            },
             "parent": 533
           }
         },
         "538": {
           "json": {
             "position": {
-              "x": 9.059849739074707,
-              "y": 0.309503972530365,
-              "z": 1.7163242101669312
-            },
-            "scale": {
-              "x": 1,
-              "y": 1,
-              "z": 1
+              "x": 9.0600004196167,
+              "y": 0.3100000023841858,
+              "z": 1.7200000286102295
             },
             "rotation": {
               "x": 0,
-              "y": 0,
+              "y": 0.38269999623298645,
               "z": 0,
-              "w": 1
+              "w": 0.9239000082015991
+            },
+            "scale": {
+              "x": 0.6000000238418579,
+              "y": 0.6000000238418579,
+              "z": 0.6000000238418579
             },
             "parent": 533
           }
@@ -660,20 +660,20 @@
         "539": {
           "json": {
             "position": {
-              "x": 13.710273742675781,
-              "y": 0.24950972199440002,
+              "x": 13.710000038146973,
+              "y": 0.25,
               "z": 14.25
-            },
-            "scale": {
-              "x": 1,
-              "y": 1,
-              "z": 1
             },
             "rotation": {
               "x": 0,
-              "y": 0,
+              "y": -0.38269999623298645,
               "z": 0,
-              "w": 1
+              "w": 0.9239000082015991
+            },
+            "scale": {
+              "x": 0.8999999761581421,
+              "y": 0.8999999761581421,
+              "z": 0.8999999761581421
             },
             "parent": 533
           }
@@ -681,20 +681,20 @@
         "540": {
           "json": {
             "position": {
-              "x": 2.816927909851074,
-              "y": 0.24254579842090607,
-              "z": 2.002530813217163
-            },
-            "scale": {
-              "x": 1,
-              "y": 1,
-              "z": 1
+              "x": 2.819999933242798,
+              "y": 0.23999999463558197,
+              "z": 2
             },
             "rotation": {
               "x": 0,
-              "y": 0,
+              "y": 1,
               "z": 0,
-              "w": 1
+              "w": 0
+            },
+            "scale": {
+              "x": 0.800000011920929,
+              "y": 0.800000011920929,
+              "z": 0.800000011920929
             },
             "parent": 533
           }
@@ -702,14 +702,9 @@
         "541": {
           "json": {
             "position": {
-              "x": 2.750000476837158,
+              "x": 3.0814080238342285,
               "y": 0.5058925747871399,
-              "z": 41.435768127441406
-            },
-            "scale": {
-              "x": 1,
-              "y": 1,
-              "z": 1
+              "z": 41.89309310913086
             },
             "rotation": {
               "x": 0,
@@ -717,26 +712,31 @@
               "z": 0,
               "w": 0.9238795042037964
             },
+            "scale": {
+              "x": 0.699999988079071,
+              "y": 0.699999988079071,
+              "z": 0.699999988079071
+            },
             "parent": 533
           }
         },
         "542": {
           "json": {
             "position": {
-              "x": 11.735212326049805,
-              "y": 0.024768145754933357,
-              "z": 26.7572021484375
+              "x": 11.270000457763672,
+              "y": 0.019999999552965164,
+              "z": 27.260000228881836
+            },
+            "rotation": {
+              "x": 0,
+              "y": -0.9914000034332275,
+              "z": 0,
+              "w": 0.13050000369548798
             },
             "scale": {
               "x": 1,
               "y": 1,
               "z": 1
-            },
-            "rotation": {
-              "x": 0,
-              "y": -0.7933533191680908,
-              "z": 0,
-              "w": 0.6087614297866821
             },
             "parent": 533
           }
@@ -765,20 +765,20 @@
         "544": {
           "json": {
             "position": {
-              "x": 13.76870346069336,
-              "y": 0.24950972199440002,
-              "z": 33.47984313964844
-            },
-            "scale": {
-              "x": 1,
-              "y": 1,
-              "z": 1
+              "x": 13.770000457763672,
+              "y": 0.25,
+              "z": 33.47999954223633
             },
             "rotation": {
               "x": 0,
-              "y": 0,
+              "y": 0.38269999623298645,
               "z": 0,
-              "w": 1
+              "w": 0.9239000082015991
+            },
+            "scale": {
+              "x": 0.800000011920929,
+              "y": 0.800000011920929,
+              "z": 0.800000011920929
             },
             "parent": 533
           }
@@ -807,20 +807,20 @@
         "546": {
           "json": {
             "position": {
-              "x": 9.19970417022705,
-              "y": 0.42783012986183167,
-              "z": 46.39243698120117
-            },
-            "scale": {
-              "x": 1,
-              "y": 1,
-              "z": 1
+              "x": 9.199999809265137,
+              "y": 0.4300000071525574,
+              "z": 46.38999938964844
             },
             "rotation": {
               "x": 0,
-              "y": 0,
+              "y": -0.38269999623298645,
               "z": 0,
-              "w": 1
+              "w": 0.9239000082015991
+            },
+            "scale": {
+              "x": 0.699999988079071,
+              "y": 0.699999988079071,
+              "z": 0.699999988079071
             },
             "parent": 533
           }
@@ -828,20 +828,20 @@
         "547": {
           "json": {
             "position": {
-              "x": 2.7598092555999756,
-              "y": 0.3515729606151581,
-              "z": 45.95064163208008
+              "x": 2.759999990463257,
+              "y": 0.3499999940395355,
+              "z": 45.95000076293945
+            },
+            "rotation": {
+              "x": 0,
+              "y": 1,
+              "z": 0,
+              "w": 0
             },
             "scale": {
               "x": 1,
               "y": 1,
               "z": 1
-            },
-            "rotation": {
-              "x": 0,
-              "y": 0,
-              "z": 0,
-              "w": 1
             },
             "parent": 533
           }
@@ -2189,6 +2189,216 @@
             },
             "parent": 0
           }
+        },
+        "614": {
+          "json": {
+            "position": {
+              "x": 11.925798416137695,
+              "y": 0.3515729606151581,
+              "z": 26.31360626220703
+            },
+            "rotation": {
+              "x": 0,
+              "y": 0,
+              "z": 0,
+              "w": 1
+            },
+            "scale": {
+              "x": 0.6429988741874695,
+              "y": 0.6429988741874695,
+              "z": 0.6429988741874695
+            },
+            "parent": 533
+          }
+        },
+        "615": {
+          "json": {
+            "position": {
+              "x": 11.925798416137695,
+              "y": 0.3515729606151581,
+              "z": 21.70097541809082
+            },
+            "rotation": {
+              "x": 0,
+              "y": -0.8451769351959229,
+              "z": 0,
+              "w": 0.5344865918159485
+            },
+            "scale": {
+              "x": 0.6429988741874695,
+              "y": 0.6429988741874695,
+              "z": 0.6429988741874695
+            },
+            "parent": 533
+          }
+        },
+        "616": {
+          "json": {
+            "position": {
+              "x": 3.192439079284668,
+              "y": 0.5058925747871399,
+              "z": 6.0851898193359375
+            },
+            "rotation": {
+              "x": 0,
+              "y": 0.8247565627098083,
+              "z": 0,
+              "w": -0.5654879212379456
+            },
+            "scale": {
+              "x": 0.5406243205070496,
+              "y": 0.5406243205070496,
+              "z": 0.5406243205070496
+            },
+            "parent": 533
+          }
+        },
+        "617": {
+          "json": {
+            "position": {
+              "x": 10.337751388549805,
+              "y": 0.5058925747871399,
+              "z": 6.791306495666504
+            },
+            "rotation": {
+              "x": 0,
+              "y": -0.9920086860656738,
+              "z": 0,
+              "w": 0.12616947293281555
+            },
+            "scale": {
+              "x": 0.699999988079071,
+              "y": 0.699999988079071,
+              "z": 0.699999988079071
+            },
+            "parent": 533
+          }
+        },
+        "618": {
+          "json": {
+            "position": {
+              "x": 10.442841529846191,
+              "y": 0.5058925747871399,
+              "z": 7.726837158203125
+            },
+            "rotation": {
+              "x": 0,
+              "y": -0.5,
+              "z": 0,
+              "w": 0.8660253882408142
+            },
+            "scale": {
+              "x": 0.8483083248138428,
+              "y": 0.8483083248138428,
+              "z": 0.8483083248138428
+            },
+            "parent": 533
+          }
+        },
+        "619": {
+          "json": {
+            "position": {
+              "x": 3.0920569896698,
+              "y": 0.5058925747871399,
+              "z": 7.886140823364258
+            },
+            "rotation": {
+              "x": 0,
+              "y": 0.999923586845398,
+              "z": 0,
+              "w": 0.012361043132841587
+            },
+            "scale": {
+              "x": 0.5406243205070496,
+              "y": 0.5406243205070496,
+              "z": 0.5406243205070496
+            },
+            "parent": 533
+          }
+        },
+        "620": {
+          "json": {
+            "position": {
+              "x": 2.75,
+              "y": 0.5099999904632568,
+              "z": 40.86000061035156
+            },
+            "rotation": {
+              "x": 0,
+              "y": 0.38269999623298645,
+              "z": 0,
+              "w": 0.9239000082015991
+            },
+            "scale": {
+              "x": 0.699999988079071,
+              "y": 0.699999988079071,
+              "z": 0.699999988079071
+            },
+            "parent": 533
+          }
+        },
+        "621": {
+          "json": {
+            "position": {
+              "x": 3.110210657119751,
+              "y": 0.5058925747871399,
+              "z": 38.935768127441406
+            },
+            "rotation": {
+              "x": 0,
+              "y": 0.8660253882408142,
+              "z": 0,
+              "w": 0.5
+            },
+            "scale": {
+              "x": 0.699999988079071,
+              "y": 0.699999988079071,
+              "z": 0.699999988079071
+            },
+            "parent": 533
+          }
+        },
+        "622": {
+          "json": {
+            "position": {
+              "x": 10.442841529846191,
+              "y": 0.5058925747871399,
+              "z": 42.06986999511719
+            },
+            "rotation": {
+              "x": 0,
+              "y": -0.9914448261260986,
+              "z": 0,
+              "w": 0.13052618503570557
+            },
+            "scale": {
+              "x": 0.699999988079071,
+              "y": 0.699999988079071,
+              "z": 0.699999988079071
+            },
+            "parent": 533
+          }
+        },
+        "623": {
+          "json": {
+            "position": {
+              "x": 10.91221809387207,
+              "y": 0.5058925747871399,
+              "z": 38.41315841674805
+            },
+            "rotation": {
+              "x": 0,
+              "y": -0.9238795042037964,
+              "z": 0,
+              "w": 0.3826834261417389
+            },
+            "scale": {
+              "x": 0.6000000238418579,
+              "y": 0.6000000238418579,
+              "z": 0.6000000238418579
+            },
+            "parent": 533
+          }
         }
       }
     },
@@ -2296,7 +2506,7 @@
           "json": {
             "states": [
               {
-                "clip": "HealthyState",
+                "clip": "Play",
                 "playing": false,
                 "weight": 1,
                 "speed": 1,
@@ -2304,7 +2514,7 @@
                 "shouldReset": false
               },
               {
-                "clip": "DroopyState",
+                "clip": "CloseIdle",
                 "playing": false,
                 "weight": 1,
                 "speed": 1,
@@ -2312,7 +2522,7 @@
                 "shouldReset": false
               },
               {
-                "clip": "DroopyToHealthy",
+                "clip": "OpenIdle",
                 "playing": false,
                 "weight": 1,
                 "speed": 1,
@@ -2320,7 +2530,15 @@
                 "shouldReset": false
               },
               {
-                "clip": "HealthyToDroopy",
+                "clip": "Open",
+                "playing": false,
+                "weight": 1,
+                "speed": 1,
+                "loop": false,
+                "shouldReset": false
+              },
+              {
+                "clip": "Close",
                 "playing": false,
                 "weight": 1,
                 "speed": 1,
@@ -2426,7 +2644,7 @@
           "json": {
             "states": [
               {
-                "clip": "HealthyState",
+                "clip": "Play",
                 "playing": false,
                 "weight": 1,
                 "speed": 1,
@@ -2434,7 +2652,7 @@
                 "shouldReset": false
               },
               {
-                "clip": "DroopyState",
+                "clip": "CloseIdle",
                 "playing": false,
                 "weight": 1,
                 "speed": 1,
@@ -2442,7 +2660,7 @@
                 "shouldReset": false
               },
               {
-                "clip": "DroopyToHealthy",
+                "clip": "OpenIdle",
                 "playing": false,
                 "weight": 1,
                 "speed": 1,
@@ -2450,7 +2668,15 @@
                 "shouldReset": false
               },
               {
-                "clip": "HealthyToDroopy",
+                "clip": "Open",
+                "playing": false,
+                "weight": 1,
+                "speed": 1,
+                "loop": false,
+                "shouldReset": false
+              },
+              {
+                "clip": "Close",
                 "playing": false,
                 "weight": 1,
                 "speed": 1,
@@ -2694,7 +2920,7 @@
           "json": {
             "states": [
               {
-                "clip": "HealthyState",
+                "clip": "Play",
                 "playing": false,
                 "weight": 1,
                 "speed": 1,
@@ -2702,7 +2928,7 @@
                 "shouldReset": false
               },
               {
-                "clip": "DroopyState",
+                "clip": "CloseIdle",
                 "playing": false,
                 "weight": 1,
                 "speed": 1,
@@ -2710,7 +2936,7 @@
                 "shouldReset": false
               },
               {
-                "clip": "DroopyToHealthy",
+                "clip": "OpenIdle",
                 "playing": false,
                 "weight": 1,
                 "speed": 1,
@@ -2718,7 +2944,15 @@
                 "shouldReset": false
               },
               {
-                "clip": "HealthyToDroopy",
+                "clip": "Open",
+                "playing": false,
+                "weight": 1,
+                "speed": 1,
+                "loop": false,
+                "shouldReset": false
+              },
+              {
+                "clip": "Close",
                 "playing": false,
                 "weight": 1,
                 "speed": 1,
@@ -2732,7 +2966,47 @@
           "json": {
             "states": [
               {
-                "clip": "Bloom",
+                "clip": "CloseAction",
+                "playing": false,
+                "weight": 1,
+                "speed": 1,
+                "loop": false,
+                "shouldReset": false
+              },
+              {
+                "clip": "OpenIdle",
+                "playing": false,
+                "weight": 1,
+                "speed": 1,
+                "loop": false,
+                "shouldReset": false
+              },
+              {
+                "clip": "Open",
+                "playing": false,
+                "weight": 1,
+                "speed": 1,
+                "loop": false,
+                "shouldReset": false
+              },
+              {
+                "clip": "Close",
+                "playing": false,
+                "weight": 1,
+                "speed": 1,
+                "loop": false,
+                "shouldReset": false
+              },
+              {
+                "clip": "CloseIdle",
+                "playing": false,
+                "weight": 1,
+                "speed": 1,
+                "loop": false,
+                "shouldReset": false
+              },
+              {
+                "clip": "OpenAction",
                 "playing": false,
                 "weight": 1,
                 "speed": 1,
@@ -3337,6 +3611,466 @@
               }
             ]
           }
+        },
+        "614": {
+          "json": {
+            "states": [
+              {
+                "clip": "Play",
+                "playing": false,
+                "weight": 1,
+                "speed": 1,
+                "loop": false,
+                "shouldReset": false
+              },
+              {
+                "clip": "CloseIdle",
+                "playing": false,
+                "weight": 1,
+                "speed": 1,
+                "loop": false,
+                "shouldReset": false
+              },
+              {
+                "clip": "OpenIdle",
+                "playing": false,
+                "weight": 1,
+                "speed": 1,
+                "loop": false,
+                "shouldReset": false
+              },
+              {
+                "clip": "Open",
+                "playing": false,
+                "weight": 1,
+                "speed": 1,
+                "loop": false,
+                "shouldReset": false
+              },
+              {
+                "clip": "Close",
+                "playing": false,
+                "weight": 1,
+                "speed": 1,
+                "loop": false,
+                "shouldReset": false
+              }
+            ]
+          }
+        },
+        "615": {
+          "json": {
+            "states": [
+              {
+                "clip": "Play",
+                "playing": false,
+                "weight": 1,
+                "speed": 1,
+                "loop": false,
+                "shouldReset": false
+              },
+              {
+                "clip": "CloseIdle",
+                "playing": false,
+                "weight": 1,
+                "speed": 1,
+                "loop": false,
+                "shouldReset": false
+              },
+              {
+                "clip": "OpenIdle",
+                "playing": false,
+                "weight": 1,
+                "speed": 1,
+                "loop": false,
+                "shouldReset": false
+              },
+              {
+                "clip": "Open",
+                "playing": false,
+                "weight": 1,
+                "speed": 1,
+                "loop": false,
+                "shouldReset": false
+              },
+              {
+                "clip": "Close",
+                "playing": false,
+                "weight": 1,
+                "speed": 1,
+                "loop": false,
+                "shouldReset": false
+              }
+            ]
+          }
+        },
+        "616": {
+          "json": {
+            "states": [
+              {
+                "clip": "Play",
+                "playing": false,
+                "weight": 1,
+                "speed": 1,
+                "loop": false,
+                "shouldReset": false
+              },
+              {
+                "clip": "CloseIdle",
+                "playing": false,
+                "weight": 1,
+                "speed": 1,
+                "loop": false,
+                "shouldReset": false
+              },
+              {
+                "clip": "OpenIdle",
+                "playing": false,
+                "weight": 1,
+                "speed": 1,
+                "loop": false,
+                "shouldReset": false
+              },
+              {
+                "clip": "Open",
+                "playing": false,
+                "weight": 1,
+                "speed": 1,
+                "loop": false,
+                "shouldReset": false
+              },
+              {
+                "clip": "Close",
+                "playing": false,
+                "weight": 1,
+                "speed": 1,
+                "loop": false,
+                "shouldReset": false
+              }
+            ]
+          }
+        },
+        "617": {
+          "json": {
+            "states": [
+              {
+                "clip": "Play",
+                "playing": false,
+                "weight": 1,
+                "speed": 1,
+                "loop": false,
+                "shouldReset": false
+              },
+              {
+                "clip": "CloseIdle",
+                "playing": false,
+                "weight": 1,
+                "speed": 1,
+                "loop": false,
+                "shouldReset": false
+              },
+              {
+                "clip": "OpenIdle",
+                "playing": false,
+                "weight": 1,
+                "speed": 1,
+                "loop": false,
+                "shouldReset": false
+              },
+              {
+                "clip": "Open",
+                "playing": false,
+                "weight": 1,
+                "speed": 1,
+                "loop": false,
+                "shouldReset": false
+              },
+              {
+                "clip": "Close",
+                "playing": false,
+                "weight": 1,
+                "speed": 1,
+                "loop": false,
+                "shouldReset": false
+              }
+            ]
+          }
+        },
+        "618": {
+          "json": {
+            "states": [
+              {
+                "clip": "Play",
+                "playing": false,
+                "weight": 1,
+                "speed": 1,
+                "loop": false,
+                "shouldReset": false
+              },
+              {
+                "clip": "CloseIdle",
+                "playing": false,
+                "weight": 1,
+                "speed": 1,
+                "loop": false,
+                "shouldReset": false
+              },
+              {
+                "clip": "OpenIdle",
+                "playing": false,
+                "weight": 1,
+                "speed": 1,
+                "loop": false,
+                "shouldReset": false
+              },
+              {
+                "clip": "Open",
+                "playing": false,
+                "weight": 1,
+                "speed": 1,
+                "loop": false,
+                "shouldReset": false
+              },
+              {
+                "clip": "Close",
+                "playing": false,
+                "weight": 1,
+                "speed": 1,
+                "loop": false,
+                "shouldReset": false
+              }
+            ]
+          }
+        },
+        "619": {
+          "json": {
+            "states": [
+              {
+                "clip": "Play",
+                "playing": false,
+                "weight": 1,
+                "speed": 1,
+                "loop": false,
+                "shouldReset": false
+              },
+              {
+                "clip": "CloseIdle",
+                "playing": false,
+                "weight": 1,
+                "speed": 1,
+                "loop": false,
+                "shouldReset": false
+              },
+              {
+                "clip": "OpenIdle",
+                "playing": false,
+                "weight": 1,
+                "speed": 1,
+                "loop": false,
+                "shouldReset": false
+              },
+              {
+                "clip": "Open",
+                "playing": false,
+                "weight": 1,
+                "speed": 1,
+                "loop": false,
+                "shouldReset": false
+              },
+              {
+                "clip": "Close",
+                "playing": false,
+                "weight": 1,
+                "speed": 1,
+                "loop": false,
+                "shouldReset": false
+              }
+            ]
+          }
+        },
+        "620": {
+          "json": {
+            "states": [
+              {
+                "clip": "Play",
+                "playing": false,
+                "weight": 1,
+                "speed": 1,
+                "loop": false,
+                "shouldReset": false
+              },
+              {
+                "clip": "CloseIdle",
+                "playing": false,
+                "weight": 1,
+                "speed": 1,
+                "loop": false,
+                "shouldReset": false
+              },
+              {
+                "clip": "OpenIdle",
+                "playing": false,
+                "weight": 1,
+                "speed": 1,
+                "loop": false,
+                "shouldReset": false
+              },
+              {
+                "clip": "Open",
+                "playing": false,
+                "weight": 1,
+                "speed": 1,
+                "loop": false,
+                "shouldReset": false
+              },
+              {
+                "clip": "Close",
+                "playing": false,
+                "weight": 1,
+                "speed": 1,
+                "loop": false,
+                "shouldReset": false
+              }
+            ]
+          }
+        },
+        "621": {
+          "json": {
+            "states": [
+              {
+                "clip": "Play",
+                "playing": false,
+                "weight": 1,
+                "speed": 1,
+                "loop": false,
+                "shouldReset": false
+              },
+              {
+                "clip": "CloseIdle",
+                "playing": false,
+                "weight": 1,
+                "speed": 1,
+                "loop": false,
+                "shouldReset": false
+              },
+              {
+                "clip": "OpenIdle",
+                "playing": false,
+                "weight": 1,
+                "speed": 1,
+                "loop": false,
+                "shouldReset": false
+              },
+              {
+                "clip": "Open",
+                "playing": false,
+                "weight": 1,
+                "speed": 1,
+                "loop": false,
+                "shouldReset": false
+              },
+              {
+                "clip": "Close",
+                "playing": false,
+                "weight": 1,
+                "speed": 1,
+                "loop": false,
+                "shouldReset": false
+              }
+            ]
+          }
+        },
+        "622": {
+          "json": {
+            "states": [
+              {
+                "clip": "Play",
+                "playing": false,
+                "weight": 1,
+                "speed": 1,
+                "loop": false,
+                "shouldReset": false
+              },
+              {
+                "clip": "CloseIdle",
+                "playing": false,
+                "weight": 1,
+                "speed": 1,
+                "loop": false,
+                "shouldReset": false
+              },
+              {
+                "clip": "OpenIdle",
+                "playing": false,
+                "weight": 1,
+                "speed": 1,
+                "loop": false,
+                "shouldReset": false
+              },
+              {
+                "clip": "Open",
+                "playing": false,
+                "weight": 1,
+                "speed": 1,
+                "loop": false,
+                "shouldReset": false
+              },
+              {
+                "clip": "Close",
+                "playing": false,
+                "weight": 1,
+                "speed": 1,
+                "loop": false,
+                "shouldReset": false
+              }
+            ]
+          }
+        },
+        "623": {
+          "json": {
+            "states": [
+              {
+                "clip": "Play",
+                "playing": false,
+                "weight": 1,
+                "speed": 1,
+                "loop": false,
+                "shouldReset": false
+              },
+              {
+                "clip": "CloseIdle",
+                "playing": false,
+                "weight": 1,
+                "speed": 1,
+                "loop": false,
+                "shouldReset": false
+              },
+              {
+                "clip": "OpenIdle",
+                "playing": false,
+                "weight": 1,
+                "speed": 1,
+                "loop": false,
+                "shouldReset": false
+              },
+              {
+                "clip": "Open",
+                "playing": false,
+                "weight": 1,
+                "speed": 1,
+                "loop": false,
+                "shouldReset": false
+              },
+              {
+                "clip": "Close",
+                "playing": false,
+                "weight": 1,
+                "speed": 1,
+                "loop": false,
+                "shouldReset": false
+              }
+            ]
+          }
         }
       }
     },
@@ -3409,14 +4143,14 @@
           "json": {
             "src": "assets/scene/Models/demoPlant/demoPlant.glb",
             "visibleMeshesCollisionMask": 0,
-            "invisibleMeshesCollisionMask": 1
+            "invisibleMeshesCollisionMask": 3
           }
         },
         "523": {
           "json": {
             "src": "assets/scene/Models/demoPlant/demoPlant.glb",
             "visibleMeshesCollisionMask": 0,
-            "invisibleMeshesCollisionMask": 1
+            "invisibleMeshesCollisionMask": 3
           }
         },
         "524": {
@@ -3430,62 +4164,62 @@
           "json": {
             "src": "assets/scene/Models/demoPlant/demoPlant.glb",
             "visibleMeshesCollisionMask": 0,
-            "invisibleMeshesCollisionMask": 1
+            "invisibleMeshesCollisionMask": 3
           }
         },
         "526": {
           "json": {
             "src": "assets/scene/Models/demoPlant/demoPlant.glb",
             "visibleMeshesCollisionMask": 0,
-            "invisibleMeshesCollisionMask": 1
+            "invisibleMeshesCollisionMask": 3
           }
         },
         "527": {
           "json": {
             "src": "assets/scene/Models/demoPlant/demoPlant.glb",
             "visibleMeshesCollisionMask": 0,
-            "invisibleMeshesCollisionMask": 1
+            "invisibleMeshesCollisionMask": 3
           }
         },
         "528": {
           "json": {
             "src": "assets/scene/Models/demoPlant/demoPlant.glb",
             "visibleMeshesCollisionMask": 0,
-            "invisibleMeshesCollisionMask": 1
+            "invisibleMeshesCollisionMask": 3
           }
         },
         "529": {
           "json": {
             "src": "assets/scene/Models/demoPlant/demoPlant.glb",
             "visibleMeshesCollisionMask": 0,
-            "invisibleMeshesCollisionMask": 1
+            "invisibleMeshesCollisionMask": 3
           }
         },
         "530": {
           "json": {
             "src": "assets/scene/Models/demoPlant/demoPlant.glb",
             "visibleMeshesCollisionMask": 0,
-            "invisibleMeshesCollisionMask": 1
+            "invisibleMeshesCollisionMask": 3
           }
         },
         "531": {
           "json": {
             "src": "assets/scene/Models/demoPlant/demoPlant.glb",
             "visibleMeshesCollisionMask": 0,
-            "invisibleMeshesCollisionMask": 1
+            "invisibleMeshesCollisionMask": 3
           }
         },
         "532": {
           "json": {
             "src": "assets/scene/Models/demoPlant/demoPlant.glb",
             "visibleMeshesCollisionMask": 0,
-            "invisibleMeshesCollisionMask": 1
+            "invisibleMeshesCollisionMask": 3
           }
         },
         "534": {
           "json": {
             "src": "assets/scene/Models/Bloom/Bloom.glb",
-            "visibleMeshesCollisionMask": 0,
+            "visibleMeshesCollisionMask": 2,
             "invisibleMeshesCollisionMask": 0
           }
         },
@@ -3493,56 +4227,56 @@
           "json": {
             "src": "assets/scene/Models/demoPlant/demoPlant.glb",
             "visibleMeshesCollisionMask": 0,
-            "invisibleMeshesCollisionMask": 1
+            "invisibleMeshesCollisionMask": 3
           }
         },
         "536": {
           "json": {
             "src": "assets/scene/Models/demoPlant/demoPlant.glb",
             "visibleMeshesCollisionMask": 0,
-            "invisibleMeshesCollisionMask": 1
+            "invisibleMeshesCollisionMask": 3
           }
         },
         "537": {
           "json": {
             "src": "assets/scene/Models/demoPlant/demoPlant.glb",
             "visibleMeshesCollisionMask": 0,
-            "invisibleMeshesCollisionMask": 1
+            "invisibleMeshesCollisionMask": 3
           }
         },
         "538": {
           "json": {
             "src": "assets/scene/Models/demoPlant/demoPlant.glb",
             "visibleMeshesCollisionMask": 0,
-            "invisibleMeshesCollisionMask": 1
+            "invisibleMeshesCollisionMask": 3
           }
         },
         "539": {
           "json": {
             "src": "assets/scene/Models/demoPlant/demoPlant.glb",
             "visibleMeshesCollisionMask": 0,
-            "invisibleMeshesCollisionMask": 1
+            "invisibleMeshesCollisionMask": 3
           }
         },
         "540": {
           "json": {
             "src": "assets/scene/Models/demoPlant/demoPlant.glb",
             "visibleMeshesCollisionMask": 0,
-            "invisibleMeshesCollisionMask": 1
+            "invisibleMeshesCollisionMask": 3
           }
         },
         "541": {
           "json": {
             "src": "assets/scene/Models/demoPlant/demoPlant.glb",
             "visibleMeshesCollisionMask": 0,
-            "invisibleMeshesCollisionMask": 1
+            "invisibleMeshesCollisionMask": 3
           }
         },
         "542": {
           "json": {
             "src": "assets/scene/Models/demoPlant/demoPlant.glb",
             "visibleMeshesCollisionMask": 0,
-            "invisibleMeshesCollisionMask": 1
+            "invisibleMeshesCollisionMask": 3
           }
         },
         "543": {
@@ -3556,28 +4290,28 @@
           "json": {
             "src": "assets/scene/Models/demoPlant/demoPlant.glb",
             "visibleMeshesCollisionMask": 0,
-            "invisibleMeshesCollisionMask": 1
+            "invisibleMeshesCollisionMask": 3
           }
         },
         "545": {
           "json": {
             "src": "assets/scene/Models/demoPlant/demoPlant.glb",
             "visibleMeshesCollisionMask": 0,
-            "invisibleMeshesCollisionMask": 1
+            "invisibleMeshesCollisionMask": 3
           }
         },
         "546": {
           "json": {
             "src": "assets/scene/Models/demoPlant/demoPlant.glb",
             "visibleMeshesCollisionMask": 0,
-            "invisibleMeshesCollisionMask": 1
+            "invisibleMeshesCollisionMask": 3
           }
         },
         "547": {
           "json": {
             "src": "assets/scene/Models/demoPlant/demoPlant.glb",
             "visibleMeshesCollisionMask": 0,
-            "invisibleMeshesCollisionMask": 1
+            "invisibleMeshesCollisionMask": 3
           }
         },
         "563": {
@@ -3856,6 +4590,76 @@
         "613": {
           "json": {
             "src": "assets/asset-packs/discord_button/discord.glb",
+            "visibleMeshesCollisionMask": 0,
+            "invisibleMeshesCollisionMask": 3
+          }
+        },
+        "614": {
+          "json": {
+            "src": "assets/scene/Models/demoPlant/demoPlant.glb",
+            "visibleMeshesCollisionMask": 0,
+            "invisibleMeshesCollisionMask": 3
+          }
+        },
+        "615": {
+          "json": {
+            "src": "assets/scene/Models/demoPlant/demoPlant.glb",
+            "visibleMeshesCollisionMask": 0,
+            "invisibleMeshesCollisionMask": 3
+          }
+        },
+        "616": {
+          "json": {
+            "src": "assets/scene/Models/demoPlant/demoPlant.glb",
+            "visibleMeshesCollisionMask": 0,
+            "invisibleMeshesCollisionMask": 3
+          }
+        },
+        "617": {
+          "json": {
+            "src": "assets/scene/Models/demoPlant/demoPlant.glb",
+            "visibleMeshesCollisionMask": 0,
+            "invisibleMeshesCollisionMask": 3
+          }
+        },
+        "618": {
+          "json": {
+            "src": "assets/scene/Models/demoPlant/demoPlant.glb",
+            "visibleMeshesCollisionMask": 0,
+            "invisibleMeshesCollisionMask": 3
+          }
+        },
+        "619": {
+          "json": {
+            "src": "assets/scene/Models/demoPlant/demoPlant.glb",
+            "visibleMeshesCollisionMask": 0,
+            "invisibleMeshesCollisionMask": 3
+          }
+        },
+        "620": {
+          "json": {
+            "src": "assets/scene/Models/demoPlant/demoPlant.glb",
+            "visibleMeshesCollisionMask": 0,
+            "invisibleMeshesCollisionMask": 3
+          }
+        },
+        "621": {
+          "json": {
+            "src": "assets/scene/Models/demoPlant/demoPlant.glb",
+            "visibleMeshesCollisionMask": 0,
+            "invisibleMeshesCollisionMask": 3
+          }
+        },
+        "622": {
+          "json": {
+            "src": "assets/scene/Models/demoPlant/demoPlant.glb",
+            "visibleMeshesCollisionMask": 0,
+            "invisibleMeshesCollisionMask": 3
+          }
+        },
+        "623": {
+          "json": {
+            "src": "assets/scene/Models/demoPlant/demoPlant.glb",
             "visibleMeshesCollisionMask": 0,
             "invisibleMeshesCollisionMask": 3
           }
@@ -5343,6 +6147,56 @@
           "json": {
             "value": "Discord Button_2"
           }
+        },
+        "614": {
+          "json": {
+            "value": "Plant_23"
+          }
+        },
+        "615": {
+          "json": {
+            "value": "Plant_24"
+          }
+        },
+        "616": {
+          "json": {
+            "value": "Plant_25"
+          }
+        },
+        "617": {
+          "json": {
+            "value": "Plant_26"
+          }
+        },
+        "618": {
+          "json": {
+            "value": "Plant_27"
+          }
+        },
+        "619": {
+          "json": {
+            "value": "Plant_28"
+          }
+        },
+        "620": {
+          "json": {
+            "value": "Plant_29"
+          }
+        },
+        "621": {
+          "json": {
+            "value": "Plant_30"
+          }
+        },
+        "622": {
+          "json": {
+            "value": "Plant_31"
+          }
+        },
+        "623": {
+          "json": {
+            "value": "Plant_32"
+          }
         }
       }
     },
@@ -5694,9 +6548,9 @@
         "serializationType": "map"
       },
       "data": {
-        "600": {
+        "620": {
           "json": {
-            "gizmo": 0
+            "gizmo": 1
           }
         }
       }
@@ -5825,6 +6679,7 @@
               },
               {
                 "entity": 533,
+                "open": true,
                 "children": [
                   535,
                   536,
@@ -5847,7 +6702,17 @@
                   544,
                   545,
                   546,
-                  547
+                  547,
+                  614,
+                  615,
+                  616,
+                  617,
+                  618,
+                  619,
+                  620,
+                  621,
+                  622,
+                  623
                 ]
               },
               {
@@ -6258,6 +7123,46 @@
               {
                 "entity": 613,
                 "children": []
+              },
+              {
+                "entity": 614,
+                "children": []
+              },
+              {
+                "entity": 615,
+                "children": []
+              },
+              {
+                "entity": 616,
+                "children": []
+              },
+              {
+                "entity": 617,
+                "children": []
+              },
+              {
+                "entity": 618,
+                "children": []
+              },
+              {
+                "entity": 619,
+                "children": []
+              },
+              {
+                "entity": 620,
+                "children": []
+              },
+              {
+                "entity": 621,
+                "children": []
+              },
+              {
+                "entity": 622,
+                "children": []
+              },
+              {
+                "entity": 623,
+                "children": []
               }
             ]
           }
@@ -6585,6 +7490,36 @@
           "json": {}
         },
         "613": {
+          "json": {}
+        },
+        "614": {
+          "json": {}
+        },
+        "615": {
+          "json": {}
+        },
+        "616": {
+          "json": {}
+        },
+        "617": {
+          "json": {}
+        },
+        "618": {
+          "json": {}
+        },
+        "619": {
+          "json": {}
+        },
+        "620": {
+          "json": {}
+        },
+        "621": {
+          "json": {}
+        },
+        "622": {
+          "json": {}
+        },
+        "623": {
           "json": {}
         }
       }

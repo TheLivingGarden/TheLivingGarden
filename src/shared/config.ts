@@ -9,13 +9,13 @@ export const BLOOM_WINDOWS: ReadonlyArray<{ hour: number; minute: number }> = [
   { hour: 17, minute: 30 },   // 17:30 UTC
 ]
 
-export const TOTAL_PLANTS       = 21
+export const TOTAL_PLANTS       = 32
 export const BLOOM_THRESHOLD    = Math.ceil(TOTAL_PLANTS * 0.8)  // 17
 export const DAILY_WATER_LIMIT  = 8
 export const WATERED_EXPIRY_MS  = 30 * 60 * 1000        // 30 minutes
 /** How long after bloom triggers before the server resets all plants.
  *  Matches the 10-min visual bloom so the reset coincides with the post-bloom cooldown start. */
-export const BLOOM_RESET_DELAY_MS = 10 * 60_000         // 10 minutes
+export const BLOOM_RESET_DELAY_MS = 11 * 60_000         // 10 minutes + 1min breather
 
 // ── Scene-wide spatial / asset constants ─────────────────────
 /** World-space centre of the Bloom model — used for sound, sparkles, shockwaves. */
@@ -31,5 +31,7 @@ export const PLANT_NAMES: string[] = [
   'Plant_9',  'Plant_10', 'Plant_11', 'Plant_12',
   'Plant_13', 'Plant_14', 'Plant_15', 'Plant_16',
   'Plant_17', 'Plant_18', 'Plant_19', 'Plant_20',
-  'Plant_21',
+  'Plant_21', 'Plant_22', 'Plant_23', 'Plant_24',
+  'Plant_25', 'Plant_26', 'Plant_27', 'Plant_28',
+  'Plant_29', 'Plant_30', 'Plant_31', 'Plant_32'
 ]
