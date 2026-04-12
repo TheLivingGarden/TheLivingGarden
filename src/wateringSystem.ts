@@ -105,7 +105,6 @@ const VOL_CLICK    = 0.9
 const VOL_WATERING = 0.7
 const VOL_MAGIC    = 0.9
 const SND_INIT_POS = { x: 8, y: 1, z: 8 }   // initial transform — overwritten on play
-const MAGIC_SOUND_CLEANUP_MS = 8_000          // remove one-shot entity after this many ms
 
 // ── Clickbox (optional alternative pointer target) ────────────
 const CLICKBOX_Y     = 1    // local Y offset above plant pivot
@@ -168,6 +167,7 @@ const bloomLabels:       Entity[] = []   // Image_6–9 placed in Creator Hub
 let hoverSoundEntity:    Entity
 let clickSoundEntity:    Entity
 let wateringSoundEntity: Entity
+let magicSoundEntity:    Entity
 
 let playerWateredToday      = 0
 let dailyLimitReached       = false
@@ -282,12 +282,13 @@ function startPreBloomTicker(): void {
   if (runtimeTestMode) return
   const myGen = ++preBloomTickerGen
   function tick() {
-    if (preBloomTickerGen !== myGen) return        // cancelled (threshold dropped or bloom started)
+    if (preBloomTickerGen !== myGen) return        // cancelled (bloom started)
     if (isBloomActive()) return                    // bloom took over — bloom updater handles text
-    if (computeWateredCount() < BLOOM_THRESHOLD) return  // fell below threshold
     const countdown = formatBloomCountdown(false)
-    setBloomLabelText(countdown)
-    updateBannerCountdown(countdown)
+    updateBannerCountdown(countdown)               // always keep top banner in sync
+    if (computeWateredCount() >= BLOOM_THRESHOLD) {
+      setBloomLabelText(countdown)                 // 3D labels only when above threshold
+    }
     // When countdown hits 0 server is about to fire bloomTriggered — keep ticking until it does
     timers.setTimeout(tick, BLOOM_LABEL_TICK_MS)
   }
@@ -415,10 +416,9 @@ function playWateringSound() { playAtPlayer(wateringSoundEntity) }
 
 function playMagicFXSound() {
   const pos = Transform.getOrNull(engine.PlayerEntity)?.position ?? { x: 8, y: 1, z: 8 }
-  const ent = engine.addEntity()
-  Transform.create(ent, { position: pos })
-  AudioSource.create(ent, { audioClipUrl: SND_MAGIC, playing: true, loop: false, volume: VOL_MAGIC, pitch: 1 })
-  timers.setTimeout(() => engine.removeEntity(ent), MAGIC_SOUND_CLEANUP_MS)
+  Transform.getMutable(magicSoundEntity).position = pos
+  AudioSource.getMutable(magicSoundEntity).playing = false
+  timers.setTimeout(() => { AudioSource.getMutable(magicSoundEntity).playing = true }, 0)
 }
 
 function stopWateringEmote() {
@@ -783,6 +783,9 @@ export function setupWateringSystem(): void {
   wateringSoundEntity = engine.addEntity()
   Transform.create(wateringSoundEntity, { position: SND_INIT_POS })
   AudioSource.create(wateringSoundEntity, { audioClipUrl: SND_WATERING, playing: false, loop: false, volume: VOL_WATERING, pitch: 1 })
+  magicSoundEntity    = engine.addEntity()
+  Transform.create(magicSoundEntity,    { position: SND_INIT_POS })
+  AudioSource.create(magicSoundEntity,  { audioClipUrl: SND_MAGIC,    playing: false, loop: false, volume: VOL_MAGIC,    pitch: 1 })
 
   for (const name of PLANT_NAMES) setupPlant(name)
 

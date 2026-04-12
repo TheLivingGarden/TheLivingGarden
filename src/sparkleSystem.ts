@@ -47,75 +47,87 @@ function makeSparkleEntity(emissiveIntensity: number): Entity {
 
 // =============================================================
 // SECTION 1 — Per-plant burst
-// Fresh entity per sparkle — no pool reuse, no stale component state.
+// Pre-allocated pool — no entity creation/destruction at runtime.
 // =============================================================
 
-const BURST_COUNT  = 14    // sparkles per plant per watering
-const SPARKLE_SIZE = 0.22  // world-space diameter at peak (m)
-const SPEED_MIN    = 1.8   // m/s
-const SPEED_MAX    = 4.2   // m/s
-const GRAVITY      = 5.0   // m/s²
-const LIFE_BASE_MS = 1550
-const LIFE_VARY_MS = 250
-const SPAWN_Y      = 2   // metres above plant base
+const BURST_COUNT     = 14   // sparkles claimed per watering
+const BURST_POOL_SIZE = 16   // pool slots (BURST_COUNT + 2 buffer)
+const SPARKLE_SIZE    = 0.22 // world-space diameter at peak (m)
+const SPEED_MIN       = 1.8  // m/s
+const SPEED_MAX       = 4.2  // m/s
+const GRAVITY         = 5.0  // m/s²
+const LIFE_BASE_MS    = 1550
+const LIFE_VARY_MS    = 250
+const SPAWN_Y         = 2    // metres above plant base
 // Scale curve breakpoints (0–1 fraction of lifetime)
 const POP_IN   = 0.25
 const HOLD_END = 0.55
 
-interface SparkleState {
+interface BurstSlot {
   entity:    Entity
+  active:    boolean
   pos:       { x: number; y: number; z: number }
   vel:       { x: number; y: number; z: number }
   lifeMs:    number
   maxLifeMs: number
 }
 
-const activeSparkles: SparkleState[] = []
+const burstPool: BurstSlot[] = []
 
-/** Call once at scene startup — builds bloom and tribute pools. */
+/** Call once at scene startup — builds burst, bloom and tribute pools. */
 export function setupSparkleSystem(): void {
+  for (let i = 0; i < BURST_POOL_SIZE; i++) {
+    burstPool.push({
+      entity:    makeSparkleEntity(1.5),
+      active:    false,
+      pos:       { x: 0, y: 0, z: 0 },
+      vel:       { x: 0, y: 0, z: 0 },
+      lifeMs:    0,
+      maxLifeMs: 0,
+    })
+  }
   bloomPool   = createPool(BLOOM_POOL_SIZE,   'bloom',   2.0, TRAVEL_DUR_BASE,  1.5, RISE_DUR_MS)
   tributePool = createPool(TRIBUTE_POOL_SIZE, 'tribute', 1.8, TRIBUTE_DUR_BASE, 0.4, TRIBUTE_DISSOLVE_MS)
-  console.log(`[Sparkles] Bloom pool: ${BLOOM_POOL_SIZE}  Tribute pool: ${TRIBUTE_POOL_SIZE}`)
+  console.log(`[Sparkles] Burst pool: ${BURST_POOL_SIZE}  Bloom pool: ${BLOOM_POOL_SIZE}  Tribute pool: ${TRIBUTE_POOL_SIZE}`)
 }
 
 /** Emit a burst of sparkles centred on `pos` (world position of the plant). */
 export function triggerSparkle(pos: { x: number; y: number; z: number }): void {
-  for (let i = 0; i < BURST_COUNT; i++) {
-    const ent       = makeSparkleEntity(1.5)
+  let claimed = 0
+  for (const slot of burstPool) {
+    if (claimed >= BURST_COUNT) break
+    if (slot.active) continue
     const azimuth   = Math.random() * Math.PI * 2
     const elevation = (20 + Math.random() * 70) * (Math.PI / 180)
     const speed     = SPEED_MIN + Math.random() * (SPEED_MAX - SPEED_MIN)
-    const spawnPos  = { x: pos.x, y: pos.y + SPAWN_Y, z: pos.z }
-    Transform.getMutable(ent).position = spawnPos
-    activeSparkles.push({
-      entity:    ent,
-      pos:       { ...spawnPos },
-      vel:       {
-        x: Math.cos(azimuth) * Math.cos(elevation) * speed,
-        y: Math.sin(elevation) * speed,
-        z: Math.sin(azimuth)  * Math.cos(elevation) * speed,
-      },
-      lifeMs:    0,
-      maxLifeMs: LIFE_BASE_MS + Math.random() * LIFE_VARY_MS,
-    })
+    slot.active    = true
+    slot.lifeMs    = 0
+    slot.maxLifeMs = LIFE_BASE_MS + Math.random() * LIFE_VARY_MS
+    slot.pos       = { x: pos.x, y: pos.y + SPAWN_Y, z: pos.z }
+    slot.vel       = {
+      x: Math.cos(azimuth) * Math.cos(elevation) * speed,
+      y: Math.sin(elevation) * speed,
+      z: Math.sin(azimuth)  * Math.cos(elevation) * speed,
+    }
+    Transform.getMutable(slot.entity).position = { ...slot.pos }
+    claimed++
   }
 }
 
 /** ECS system for per-plant bursts — register once with engine.addSystem. */
 export function sparkleSystem(dt: number): void {
-  for (let i = activeSparkles.length - 1; i >= 0; i--) {
-    const s    = activeSparkles[i]
-    s.lifeMs  += dt * 1000
+  for (const s of burstPool) {
+    if (!s.active) continue
 
-    s.vel.y -= GRAVITY * dt
-    s.pos.x += s.vel.x * dt
-    s.pos.y += s.vel.y * dt
-    s.pos.z += s.vel.z * dt
+    s.lifeMs += dt * 1000
+    s.vel.y  -= GRAVITY * dt
+    s.pos.x  += s.vel.x * dt
+    s.pos.y  += s.vel.y * dt
+    s.pos.z  += s.vel.z * dt
 
     if (s.lifeMs >= s.maxLifeMs) {
-      engine.removeEntity(s.entity)
-      activeSparkles.splice(i, 1)
+      s.active = false
+      Transform.getMutable(s.entity).scale = { x: 0.001, y: 0.001, z: 0.001 }
       continue
     }
 

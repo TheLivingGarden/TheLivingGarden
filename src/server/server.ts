@@ -21,8 +21,7 @@ import {
   DAILY_WATER_LIMIT,
   WATERED_EXPIRY_MS,
   BLOOM_RESET_DELAY_MS,
-  BLOOM_UTC_HOUR,
-  BLOOM_UTC_MINUTE,
+  BLOOM_WINDOWS,
 } from '../shared/config'
 
 // ---------------------------------------------------------------
@@ -230,16 +229,20 @@ function scheduleExpiry(
 // ---------------------------------------------------------------
 
 function msUntilNextBloomWindow(): number {
-  // 15:30 Madrid (CEST = UTC+2 → 13:30 UTC)
-  const now      = Date.now()
-  const d        = new Date(now)
-  const y        = d.getUTCFullYear()
-  const mo       = d.getUTCMonth()
-  const day      = d.getUTCDate()
-  const today    = Date.UTC(y, mo, day,     BLOOM_UTC_HOUR, BLOOM_UTC_MINUTE, 0, 0)
-  const tomorrow = Date.UTC(y, mo, day + 1, BLOOM_UTC_HOUR, BLOOM_UTC_MINUTE, 0, 0)
-  const ms       = today - now
-  return ms > 500 ? ms : tomorrow - now
+  const now = Date.now()
+  const d   = new Date(now)
+  const y   = d.getUTCFullYear()
+  const mo  = d.getUTCMonth()
+  const day = d.getUTCDate()
+  let nearest = Infinity
+  for (const w of BLOOM_WINDOWS) {
+    const today    = Date.UTC(y, mo, day,     w.hour, w.minute, 0, 0)
+    const tomorrow = Date.UTC(y, mo, day + 1, w.hour, w.minute, 0, 0)
+    const ms = today - now
+    if (ms > 500 && ms < nearest) nearest = ms          // today's window still ahead
+    else if (tomorrow - now < nearest) nearest = tomorrow - now  // fall back to tomorrow
+  }
+  return nearest
 }
 
 function scheduleBloomCheck(): void {

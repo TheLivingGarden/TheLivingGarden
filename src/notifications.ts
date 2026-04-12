@@ -13,22 +13,27 @@ export {
   updatePlayerCount,
 } from './ui'
 export { setupUi as setupNotifications } from './ui'
-import { BLOOM_UTC_HOUR, BLOOM_UTC_MINUTE } from './shared/config'
+import { BLOOM_WINDOWS } from './shared/config'
 
 // ---------------------------------------------------------------
 // Message formatters
 // ---------------------------------------------------------------
 
-/** Raw ms until the next bloom window (driven by BLOOM_UTC_HOUR / BLOOM_UTC_MINUTE in shared/config.ts). */
+/** Raw ms until the nearest upcoming bloom window (per BLOOM_WINDOWS in shared/config.ts). */
 export function getMsUntilBloom(): number {
-  const now      = Date.now()
-  const d        = new Date(now)
-  const y        = d.getUTCFullYear()
-  const mo       = d.getUTCMonth()
-  const day      = d.getUTCDate()
-  const today    = Date.UTC(y, mo, day,     BLOOM_UTC_HOUR, BLOOM_UTC_MINUTE, 0, 0)
-  const tomorrow = Date.UTC(y, mo, day + 1, BLOOM_UTC_HOUR, BLOOM_UTC_MINUTE, 0, 0)
-  return (today > now ? today : tomorrow) - now
+  const now = Date.now()
+  const d   = new Date(now)
+  const y   = d.getUTCFullYear()
+  const mo  = d.getUTCMonth()
+  const day = d.getUTCDate()
+  let nearest = Infinity
+  for (const w of BLOOM_WINDOWS) {
+    const today    = Date.UTC(y, mo, day,     w.hour, w.minute, 0, 0)
+    const tomorrow = Date.UTC(y, mo, day + 1, w.hour, w.minute, 0, 0)
+    const ms = (today > now ? today : tomorrow) - now
+    if (ms < nearest) nearest = ms
+  }
+  return nearest
 }
 
 /** Bloom countdown — returns time remaining with seconds (e.g. "2h 14m 07s").

@@ -12,7 +12,7 @@ import {
 } from '@dcl/sdk/ecs'
 import { startPetalSettle } from './petalSystem'
 import { showToast } from './notifications'
-import { BLOOM_CENTER, BLOOM_UTC_HOUR, BLOOM_UTC_MINUTE } from './shared/config'
+import { BLOOM_CENTER, BLOOM_WINDOWS } from './shared/config'
 
 // ---------------------------------------------------------------
 // Configuration
@@ -54,16 +54,29 @@ let onVisualBloomCallback: () => void = () => {}
 function getNextBloomTime(): number {
   if (testMode) return Date.now() + TEST_MODE_BLOOM_DELAY_MS
 
-  const hour = customBloomHour ?? BLOOM_UTC_HOUR
-  const now = new Date()
-  const target = new Date(now)
+  // Test-panel override: treat customBloomHour as a single one-off window (minute 0)
+  if (customBloomHour !== null) {
+    const target = new Date()
+    target.setUTCHours(customBloomHour, 0, 0, 0)
+    if (Date.now() < target.getTime()) return target.getTime()
+    target.setUTCDate(target.getUTCDate() + 1)
+    return target.getTime()
+  }
 
-  target.setUTCHours(hour, BLOOM_UTC_MINUTE, 0, 0)
-
-  if (now < target) return target.getTime()
-
-  target.setUTCDate(target.getUTCDate() + 1)
-  return target.getTime()
+  // Find the nearest upcoming window across all configured bloom times
+  const now = Date.now()
+  const d   = new Date(now)
+  const y   = d.getUTCFullYear()
+  const mo  = d.getUTCMonth()
+  const day = d.getUTCDate()
+  let nearest = Infinity
+  for (const w of BLOOM_WINDOWS) {
+    const today    = Date.UTC(y, mo, day,     w.hour, w.minute, 0, 0)
+    const tomorrow = Date.UTC(y, mo, day + 1, w.hour, w.minute, 0, 0)
+    const t = today > now ? today : tomorrow
+    if (t < nearest) nearest = t
+  }
+  return nearest
 }
 
 // ---------------------------------------------------------------

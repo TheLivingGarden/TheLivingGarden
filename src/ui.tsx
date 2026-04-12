@@ -31,7 +31,8 @@ let persistText    = ''
 
 type BannerState = 'idle' | 'countdown' | 'bloom'
 let bannerState:    BannerState = 'idle'
-let bannerCountdown = ''   // e.g. "3h 42m"
+let bannerCountdown = ''   // e.g. "3h 42m 15s" — always kept current by ticker
+let bannerVisible   = true // player can dismiss; auto-restores on bloom/countdown
 let bannerHealth    = 0    // 0–1 — drives the right-hand side bar
 let playerCount     = 0
 
@@ -63,16 +64,18 @@ export function hidePersistent(): void { persistVisible = false }
 // Public API — top banner
 // ---------------------------------------------------------------
 
-export function showBannerIdle(): void      { bannerState = 'idle'      }
-export function showBannerBloom(): void     { bannerState = 'idle'      }
+export function showBannerIdle(): void  { bannerState = 'idle' }
+export function showBannerBloom(): void { bannerState = 'bloom'; bannerVisible = true }
 
 export function showBannerCountdown(countdown: string): void {
   bannerState     = 'countdown'
   bannerCountdown = countdown
+  bannerVisible   = true   // always re-show when countdown starts
 }
 export function updateBannerCountdown(countdown: string): void {
   bannerCountdown = countdown
 }
+function hideBanner(): void { bannerVisible = false }
 
 // ---------------------------------------------------------------
 // Public API — side health bar
@@ -111,22 +114,22 @@ const TOAST_FONT_SM   = 18
 
 // ── Daily Limit pill ──────────────────────────────────────────
 const DAILY_FONT          = 18
-const DAILY_PAD_LEFT      = 28
-const DAILY_PAD_RIGHT     = 8
-const DAILY_DISMISS_SIZE  = 44   // dismiss button width & height
+const DAILY_DISMISS_SIZE  = 44   // dismiss button width & height (also used as ghost spacer)
 const DAILY_DISMISS_FONT  = 22
 
 // ── Persistent pill ───────────────────────────────────────────
 const PERSIST_FONT    = 18
 
 // ── Top banner ────────────────────────────────────────────────
-const BANNER_W            = 700
+const BANNER_W            = 820   // wide enough for idle text + countdown + dismiss button
 const BANNER_LEFT         = (1920 - BANNER_W) / 2
 const BANNER_TOP          = 28
-const BANNER_PAD_X        = 32   // horizontal padding inside banner
 
 const BANNER_H_SINGLE     = 52   // one line of text
 const BANNER_H_COUNTDOWN  = 80   // main line + countdown subtitle
+
+const BANNER_DISMISS_SIZE = 36   // close button width & height
+const BANNER_DISMISS_FONT = 15
 
 const BANNER_FONT_BLOOM     = 20
 const BANNER_FONT_COUNTDOWN = 19
@@ -187,7 +190,9 @@ function sideFillColor(): Color4 {
 function bannerLine1(): string {
   if (bannerState === 'bloom')     return 'The Garden is in Full Bloom!'
   if (bannerState === 'countdown') return `Garden Bloom in ${bannerCountdown}`
-  return 'Water the plants to see the garden bloom'
+  return bannerCountdown
+    ? `Water the plants to see the garden bloom in ${bannerCountdown}`
+    : 'Water the plants to see the garden bloom'
 }
 function bannerFontSize(): number {
   return bannerState === 'bloom' ? BANNER_FONT_BLOOM : bannerState === 'countdown' ? BANNER_FONT_COUNTDOWN : BANNER_FONT_IDLE
@@ -239,37 +244,64 @@ function uiComponent() {
       <TestPanelUi />
 
       {/* ═══════════════════════════════════════════════════════════
-          TOP BANNER — always dark, compact
+          TOP BANNER — always dark, compact, player-dismissible
       ══════════════════════════════════════════════════════════════ */}
       <UiEntity
         uiTransform={{
+          display:        bannerVisible ? 'flex' : 'none',
           positionType:   'absolute',
           position:       { top: BANNER_TOP, left: BANNER_LEFT },
           width:          BANNER_W,
           height:         bannerH,
-          flexDirection:  'column',
+          flexDirection:  'row',
           alignItems:     'center',
-          justifyContent: 'center',
-          padding:        { left: BANNER_PAD_X, right: BANNER_PAD_X },
         }}
         uiBackground={{ color: DARK }}
       >
-        <Label
-          value={bannerLine1()}
-          fontSize={bannerFontSize()}
-          color={bannerTextColor()}
-          textAlign="middle-center"
-          uiTransform={{ width: '100%', height: BANNER_LINE1_H }}
-        />
-        {isCountdown && (
+        {/* Ghost spacer — mirrors dismiss button so text stays centred */}
+        <UiEntity uiTransform={{ width: BANNER_DISMISS_SIZE, height: BANNER_DISMISS_SIZE, flexShrink: 0 }} />
+
+        {/* Centre content column */}
+        <UiEntity
+          uiTransform={{
+            flexGrow:       1,
+            height:         '100%',
+            flexDirection:  'column',
+            alignItems:     'center',
+            justifyContent: 'center',
+          }}
+        >
           <Label
-            value="Keep garden health at or above 80%"
-            fontSize={BANNER_SUBTEXT_FONT}
-            color={TEXT_SUBTEXT}
+            value={bannerLine1()}
+            fontSize={bannerFontSize()}
+            color={bannerTextColor()}
             textAlign="middle-center"
-            uiTransform={{ width: '100%', height: BANNER_SUBTEXT_H }}
+            uiTransform={{ width: '100%', height: BANNER_LINE1_H }}
           />
-        )}
+          {isCountdown && (
+            <Label
+              value="Keep garden health at or above 80%"
+              fontSize={BANNER_SUBTEXT_FONT}
+              color={TEXT_SUBTEXT}
+              textAlign="middle-center"
+              uiTransform={{ width: '100%', height: BANNER_SUBTEXT_H }}
+            />
+          )}
+        </UiEntity>
+
+        {/* Dismiss button */}
+        <UiEntity
+          uiTransform={{ width: BANNER_DISMISS_SIZE, height: BANNER_DISMISS_SIZE, alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}
+          onMouseDown={hideBanner}
+        >
+          <Label
+            value="✕"
+            fontSize={BANNER_DISMISS_FONT}
+            color={TEXT_IDLE}
+            textAlign="middle-center"
+            uiTransform={{ width: '100%', height: '100%' }}
+          />
+        </UiEntity>
       </UiEntity>
 
       {/* ═══════════════════════════════════════════════════════════
@@ -417,15 +449,16 @@ function uiComponent() {
           height:         PILL_H_SM,
           flexDirection:  'row',
           alignItems:     'center',
-          padding:        { left: DAILY_PAD_LEFT, right: DAILY_PAD_RIGHT },
         }}
         uiBackground={{ color: DARK }}
       >
+        {/* Ghost spacer — mirrors the dismiss button so the label area is symmetric */}
+        <UiEntity uiTransform={{ width: DAILY_DISMISS_SIZE, height: DAILY_DISMISS_SIZE, flexShrink: 0 }} />
         <Label
           value={dailyLimitText}
           fontSize={DAILY_FONT}
           color={WHITE}
-          textAlign="middle-left"
+          textAlign="middle-center"
           uiTransform={{ flexGrow: 1, height: '100%' }}
         />
         <UiEntity

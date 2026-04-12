@@ -3,9 +3,11 @@
 // Imported by both server and client so constants stay in sync.
 // =============================================================
 
-/** Daily bloom time in UTC. Change both values here to reschedule. */
-export const BLOOM_UTC_HOUR   = 14
-export const BLOOM_UTC_MINUTE =  5
+/** Daily bloom windows in UTC. Add or remove entries to change the schedule. */
+export const BLOOM_WINDOWS: ReadonlyArray<{ hour: number; minute: number }> = [
+  { hour:  5, minute: 30 },   // 05:30 UTC
+  { hour: 17, minute: 30 },   // 17:30 UTC
+]
 
 export const TOTAL_PLANTS       = 21
 export const BLOOM_THRESHOLD    = Math.ceil(TOTAL_PLANTS * 0.8)  // 17
