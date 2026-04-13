@@ -45,7 +45,8 @@ import { setupProgressBars, updateProgressBars }              from './progressBa
 import { setupGroundLights, updateGroundLights, triggerGroundLightBurst }                       from './groundLightSystem'
 import { setupLeaderboardBoards, updateLeaderboardDisplay }   from './leaderboardSystem'
 import { setupFairyLights, setFairyLightsBloom }             from './fairyLightSystem'
-import { showToast, showDailyLimit, hideDailyLimit, showPersistent, hidePersistent, showBannerIdle, showBannerCountdown, updateBannerCountdown, showBannerBloom, updateBannerHealth, updatePlayerCount, formatBloomCountdown, formatDailyLimitMessage, getMsUntilBloom } from './notifications'
+import { showToast, showDailyLimit, hideDailyLimit, showPersistent, hidePersistent, showBannerIdle, showBannerCountdown, updateBannerCountdown, showBannerBloom, updateBannerHealth, updatePlayerCount, formatBloomCountdown, formatDailyLimitMessage, getMsUntilBloom, setNextBloomLocalTime } from './notifications'
+import { clockSync } from './shared/clockSync'
 import { triggerSceneEmote }               from '~system/RestrictedActions'
 import { room }                             from './shared/messages'
 import { TOTAL_PLANTS, BLOOM_THRESHOLD, DAILY_WATER_LIMIT, PLANT_NAMES } from './shared/config'
@@ -897,7 +898,16 @@ export function setupWateringSystem(): void {
   // N animations, and N ripples per broadcast — a reliable crash path.
   room.clear()
 
+  room.onMessage('notifyServerTime', (data) => {
+    clockSync.updateOffset(data.sentAt)
+  })
+
   room.onMessage('playerDailyState', (data) => {
+    // Clock sync — keep offset calibrated on every server message
+    if (data.sentAt)    clockSync.updateOffset(data.sentAt)
+    // Store server-authoritative bloom time converted to local clock
+    if (data.bloomTime) setNextBloomLocalTime(clockSync.toLocalTime(data.bloomTime))
+
     // First message from the server proves the room is functional — register the player now
     if (!roomReady) {
       roomReady = true

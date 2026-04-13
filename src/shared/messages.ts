@@ -19,9 +19,15 @@ export const room = registerMessages({
   /** Sent on room.onReady so the server re-sends full state even after a client reload. */
   requestFullSync:  Schemas.Map({}),
 
+  // ── Server → all clients ─────────────────────────────────
+  /** Periodic heartbeat so clients can maintain a clock-offset via clockSync. */
+  notifyServerTime: Schemas.Map({ sentAt: Schemas.Number }),
+
   // ── Server → specific client ──────────────────────────────
-  /** Sent on player join and after each successful watering. */
-  playerDailyState: Schemas.Map({ wateredToday: Schemas.Number, dailyLimit: Schemas.Number }),
+  /** Sent on player join and after each successful watering.
+   *  sentAt: server timestamp when message was created (for clockSync).
+   *  bloomTime: absolute server timestamp of the next bloom window. */
+  playerDailyState: Schemas.Map({ wateredToday: Schemas.Number, dailyLimit: Schemas.Number, sentAt: Schemas.Number, bloomTime: Schemas.Number }),
   /** Sent when server rejects a water attempt. */
   waterRejected:    Schemas.Map({ plantId: Schemas.String, reason: Schemas.String }),
 

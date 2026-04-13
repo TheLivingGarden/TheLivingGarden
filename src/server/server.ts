@@ -245,6 +245,14 @@ function msUntilNextBloomWindow(): number {
   return nearest
 }
 
+/** Build a playerDailyState payload stamped with the current server time and
+ *  the absolute timestamp of the next bloom window (for client clock-sync). */
+function dailyStatePayload(wateredToday: number) {
+  const sentAt     = Date.now()
+  const bloomTime  = sentAt + msUntilNextBloomWindow()
+  return { wateredToday, dailyLimit: DAILY_WATER_LIMIT, sentAt, bloomTime }
+}
+
 function scheduleBloomCheck(): void {
   const delay    = msUntilNextBloomWindow()
   const windowAt = new Date(Date.now() + delay).toISOString()
@@ -286,7 +294,7 @@ function playerJoinSystem(): void {
     playerAddresses.set(entity, address)
     executeTask(async () => {
       const wateredToday = await getPlayerDailyCount(address)
-      room.send('playerDailyState', { wateredToday, dailyLimit: DAILY_WATER_LIMIT }, { to: [address] })
+      room.send('playerDailyState', dailyStatePayload(wateredToday), { to: [address] })
 
       // Send current state of all plants so the client can restore visuals
       for (const [plantId, plantEntity] of plantEntities) {
@@ -398,7 +406,7 @@ export async function server(): Promise<void> {
       await saveLeaderboard()
       scheduleExpiry(plantId, entity, now, WATERED_EXPIRY_MS)
 
-      room.send('playerDailyState', { wateredToday: newCount, dailyLimit: DAILY_WATER_LIMIT }, { to: [playerAddress] })
+      room.send('playerDailyState', dailyStatePayload(newCount), { to: [playerAddress] })
       room.send('plantStateUpdate', { plantId, isWatered: true, wateredAt: now, wateredBy: displayName })
       broadcastLeaderboard()
       console.log(`[Server] ${plantId} watered by ${playerAddress} (${newCount}/${DAILY_WATER_LIMIT} today, ${getWateredCount()}/${BLOOM_THRESHOLD} garden)`)
@@ -420,7 +428,7 @@ export async function server(): Promise<void> {
     }
     syncRateLimits.set(address, now)
     const wateredToday = await getPlayerDailyCount(address)
-    room.send('playerDailyState', { wateredToday, dailyLimit: DAILY_WATER_LIMIT }, { to: [address] })
+    room.send('playerDailyState', dailyStatePayload(wateredToday), { to: [address] })
     for (const [plantId, plantEntity] of plantEntities) {
       const ps = PlantSync.getOrNull(plantEntity)
       if (!ps) continue
@@ -460,6 +468,11 @@ export async function server(): Promise<void> {
 
   // Schedule bloom checks at every 6am/6pm UTC window
   scheduleBloomCheck()
+
+  // Clock-sync heartbeat — lets clients keep their clockSync offset calibrated
+  const SERVER_TIME_INTERVAL_MS = 30_000
+  room.send('notifyServerTime', { sentAt: Date.now() })
+  setInterval(() => room.send('notifyServerTime', { sentAt: Date.now() }), SERVER_TIME_INTERVAL_MS)
 
   console.log('[Server] Ready')
 }

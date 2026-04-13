@@ -16,11 +16,31 @@ export { setupUi as setupNotifications } from './ui'
 import { BLOOM_WINDOWS } from './shared/config'
 
 // ---------------------------------------------------------------
+// Server-synced bloom time
+// ---------------------------------------------------------------
+
+/** Local timestamp (ms) of the next bloom, converted from server time via clockSync.
+ *  0 = not yet received from server — falls back to BLOOM_WINDOWS calculation. */
+let nextBloomLocalTime = 0
+
+/** Called by wateringSystem when a playerDailyState or notifyServerTime message
+ *  carries a bloom timestamp that has been converted to local time via clockSync. */
+export function setNextBloomLocalTime(localTime: number): void {
+  nextBloomLocalTime = localTime
+}
+
+// ---------------------------------------------------------------
 // Message formatters
 // ---------------------------------------------------------------
 
-/** Raw ms until the nearest upcoming bloom window (per BLOOM_WINDOWS in shared/config.ts). */
+/** Raw ms until the next bloom.
+ *  Uses server-synced timestamp when available; falls back to BLOOM_WINDOWS
+ *  calculation before the first server message arrives. */
 export function getMsUntilBloom(): number {
+  if (nextBloomLocalTime > 0) {
+    return Math.max(0, nextBloomLocalTime - Date.now())
+  }
+  // Fallback — only used before the first playerDailyState arrives
   const now = Date.now()
   const d   = new Date(now)
   const y   = d.getUTCFullYear()
