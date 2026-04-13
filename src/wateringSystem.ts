@@ -1030,7 +1030,7 @@ export function setupWateringSystem(): void {
     }
     if (wateredByLabel) {
       TextShape.getMutable(wateredByLabel).text = data.isWatered && data.wateredBy
-        ? `Watered by ${data.wateredBy}\n${formatTimeAgo(data.wateredAt)}`
+        ? `Last watered by ${data.wateredBy}\n${formatTimeAgo(data.wateredAt)}`
         : ''
     }
 
