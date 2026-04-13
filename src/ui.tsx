@@ -36,6 +36,53 @@ let bannerVisible   = true // player can dismiss; auto-restores on bloom/countdo
 let bannerHealth    = 0    // 0–1 — drives the right-hand side bar
 let playerCount     = 0
 
+// Banner animation
+let bannerOffsetY = 0   // slide-in from top
+let bannerOffsetX = 0   // wiggle
+let wiggleGen     = 0   // cancel stale wiggle chains
+
+function animateBannerIn(): void {
+  const STEPS   = 10
+  const STEP_MS = 25
+  let step = 0
+  bannerOffsetY = -20
+  function tick(): void {
+    step++
+    const t      = step / STEPS
+    const eased  = 1 - (1 - t) * (1 - t)   // ease-out quad
+    bannerOffsetY = Math.round(-20 * (1 - eased))
+    if (step < STEPS) timers.setTimeout(tick, STEP_MS)
+    else bannerOffsetY = 0
+  }
+  timers.setTimeout(tick, STEP_MS)
+}
+
+function startWiggleLoop(): void {
+  const myGen = ++wiggleGen
+  const SHAKE  = [0, 6, -6, 4, -4, 2, -2, 1, -1, 0]
+  const STEP_MS = 45
+  function runShake(): void {
+    let i = 0
+    function step(): void {
+      if (wiggleGen !== myGen) { bannerOffsetX = 0; return }
+      bannerOffsetX = SHAKE[i]
+      i++
+      if (i < SHAKE.length) timers.setTimeout(step, STEP_MS)
+      else {
+        bannerOffsetX = 0
+        timers.setTimeout(runShake, 9_000)  // next wiggle in 9s
+      }
+    }
+    step()
+  }
+  timers.setTimeout(runShake, 3_000)   // first wiggle 3s after appearing
+}
+
+function stopWiggleLoop(): void {
+  wiggleGen++
+  bannerOffsetX = 0
+}
+
 // ---------------------------------------------------------------
 // Public API — bottom pills
 // ---------------------------------------------------------------
@@ -64,18 +111,23 @@ export function hidePersistent(): void { persistVisible = false }
 // Public API — top banner
 // ---------------------------------------------------------------
 
-export function showBannerIdle(): void  { bannerState = 'idle' }
-export function showBannerBloom(): void { bannerState = 'bloom'; bannerVisible = true }
+export function showBannerIdle(): void  { stopWiggleLoop(); bannerState = 'idle' }
+export function showBannerBloom(): void { stopWiggleLoop(); bannerState = 'bloom'; bannerVisible = true; animateBannerIn() }
 
 export function showBannerCountdown(countdown: string): void {
+  const wasCountdown = bannerState === 'countdown'
   bannerState     = 'countdown'
   bannerCountdown = countdown
-  bannerVisible   = true   // always re-show when countdown starts
+  bannerVisible   = true
+  if (!wasCountdown) {
+    animateBannerIn()
+    startWiggleLoop()
+  }
 }
 export function updateBannerCountdown(countdown: string): void {
   bannerCountdown = countdown
 }
-function hideBanner(): void { bannerVisible = false }
+function hideBanner(): void { stopWiggleLoop(); bannerVisible = false }
 
 // ---------------------------------------------------------------
 // Public API — side health bar
@@ -194,6 +246,10 @@ function bannerLine1(): string {
     ? `Water the plants to see the garden bloom in ${bannerCountdown}`
     : 'Water the plants to see the garden bloom'
 }
+function bannerHealthLine(): string | null {
+  if (bannerState === 'bloom') return null
+  return `Garden Health: ${Math.round(bannerHealth * 100)}%`
+}
 function bannerFontSize(): number {
   return bannerState === 'bloom' ? BANNER_FONT_BLOOM : bannerState === 'countdown' ? BANNER_FONT_COUNTDOWN : BANNER_FONT_IDLE
 }
@@ -220,10 +276,11 @@ function uiComponent() {
   const toastBottom = dailyBottom    + (dailyLimitVisible ? PILL_STEP : 0)
   const toastH      = toastLarge ? PILL_H_LG : PILL_H_SM
 
-  const isCountdown = bannerState === 'countdown'
-  const isBloom     = bannerState === 'bloom'
-  // Banner height: one line, two lines for countdown, or two lines when not bloom
-  const bannerH     = isCountdown ? BANNER_H_COUNTDOWN : BANNER_H_SINGLE
+  const isCountdown  = bannerState === 'countdown'
+  const isBloom      = bannerState === 'bloom'
+  const healthLine   = bannerHealthLine()
+  // Two lines whenever health subtext is shown (all non-bloom states)
+  const bannerH      = healthLine ? BANNER_H_COUNTDOWN : BANNER_H_SINGLE
 
   // Side bar fill — grows from bottom, minimum SIDE_FILL_MIN px when health > 0
   const fillH       = bannerHealth > 0 ? Math.max(SIDE_FILL_MIN, Math.round(bannerHealth * SIDE_H)) : 0
@@ -250,7 +307,7 @@ function uiComponent() {
         uiTransform={{
           display:        bannerVisible ? 'flex' : 'none',
           positionType:   'absolute',
-          position:       { top: BANNER_TOP, left: BANNER_LEFT },
+          position:       { top: BANNER_TOP + bannerOffsetY, left: BANNER_LEFT + bannerOffsetX },
           width:          BANNER_W,
           height:         bannerH,
           flexDirection:  'row',
@@ -278,9 +335,9 @@ function uiComponent() {
             textAlign="middle-center"
             uiTransform={{ width: '100%', height: BANNER_LINE1_H }}
           />
-          {isCountdown && (
+          {healthLine && (
             <Label
-              value="Keep garden health at or above 80%"
+              value={healthLine}
               fontSize={BANNER_SUBTEXT_FONT}
               color={TEXT_SUBTEXT}
               textAlign="middle-center"

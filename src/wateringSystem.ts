@@ -37,7 +37,7 @@ import {
 import { getPlayer }              from '@dcl/sdk/players'
 import { onEnterSceneObservable } from '@dcl/sdk/observables'
 import { setupPetalSystem, petalParticleSystem }                                                                   from './petalSystem'
-import { setupBloomSystem, triggerBloomEvent, endBloom, isBloomActive }                                           from './bloomSystem'
+import { setupBloomSystem, triggerBloomEvent, endBloom, isBloomActive, playBloomAudioAccent }                     from './bloomSystem'
 import { startPreBloomEffects, startBloomPhases, startBloomCooldown, cancelPreBloom }                             from './bloomEvent'
 import { setupSparkleSystem, triggerSparkle, triggerWateringTribute, sparkleSystem, triggerBloomSparkles, endBloomSparkles, bloomSparkleSystem } from './sparkleSystem'
 import { setupAmbientFX, triggerGroundRipple, stopFireflies, ambientFXSystem }                                        from './ambientFX'
@@ -170,11 +170,18 @@ const bloomLabels:       Entity[] = []   // Image_6–9 placed in Creator Hub
 let hoverSoundEntity:    Entity
 let clickSoundEntity:    Entity
 let wateringSoundEntity: Entity
-let magicSoundEntity:    Entity
+const magicSoundEntities: Entity[] = []
+let magicSoundIdx = 0
 
 let playerWateredToday      = 0
 let dailyLimitReached       = false
 let lastLimitNotificationMs = 0
+
+// Tracks optimistic client-side waters awaiting server confirmation.
+// Key = plantId, value = the local Date.now() stamp used as wateredAt.
+// Lets waterRejected safely undo only OUR optimistic state, not another
+// player's live update that may have arrived on the same plant.
+const pendingWaters = new Map<string, number>()
 let initialLoadDone         = false
 let roomReady               = false
 
@@ -334,6 +341,7 @@ function updateProgressText() {
       // Start pre-bloom FX once, when threshold is first crossed this cycle
       if (!preBloomEffectsActive && !runtimeTestMode) {
         preBloomEffectsActive = true
+        playBloomAudioAccent()   // one-shot Swell accent at 80% threshold
         startPreBloomEffects(getMsUntilBloom())
       }
     } else {
@@ -349,9 +357,7 @@ function updateProgressText() {
 }
 
 function showWelcomeProgress() {
-  const count = computeWateredCount()
-  const pct   = Math.round((count / TOTAL_PLANTS) * 100)
-  showToast(`Water the plants! ${pct}% watered`, TOAST_WELCOME_MS)
+  // welcome toast removed — garden health is shown in the top banner
 }
 
 // ---------------------------------------------------------------
@@ -418,10 +424,19 @@ function playClickSound()    { playAtPlayer(clickSoundEntity)    }
 function playWateringSound() { playAtPlayer(wateringSoundEntity) }
 
 function playMagicFXSound() {
+  // Alternate between two entities — each call lands on a different one so DCL
+  // always sees a fresh AudioSource component, avoiding the alternating-skip bug.
+  magicSoundIdx = (magicSoundIdx + 1) % 2
+  const ent = magicSoundEntities[magicSoundIdx]
   const pos = Transform.getOrNull(engine.PlayerEntity)?.position ?? { x: 8, y: 1, z: 8 }
-  Transform.getMutable(magicSoundEntity).position = pos
-  AudioSource.getMutable(magicSoundEntity).playing = false
-  timers.setTimeout(() => { AudioSource.getMutable(magicSoundEntity).playing = true }, 0)
+  Transform.getMutable(ent).position = pos
+  AudioSource.createOrReplace(ent, {
+    audioClipUrl: SND_MAGIC,
+    playing:      true,
+    loop:         false,
+    volume:       VOL_MAGIC,
+    pitch:        1,
+  })
 }
 
 function stopWateringEmote() {
@@ -561,6 +576,7 @@ function waterPlant(entity: Entity, plantId: string) {
   }, WATER_ANIM_MS)
 
   room.send('waterPlant', { plantId })
+  pendingWaters.set(plantId, now)   // track for rejection rollback
 
   updateProgressText()
   const _pct = Math.round((computeWateredCount() / TOTAL_PLANTS) * 100)
@@ -785,9 +801,12 @@ export function setupWateringSystem(): void {
   wateringSoundEntity = engine.addEntity()
   Transform.create(wateringSoundEntity, { position: SND_INIT_POS })
   AudioSource.create(wateringSoundEntity, { audioClipUrl: SND_WATERING, playing: false, loop: false, volume: VOL_WATERING, pitch: 1 })
-  magicSoundEntity    = engine.addEntity()
-  Transform.create(magicSoundEntity,    { position: SND_INIT_POS })
-  AudioSource.create(magicSoundEntity,  { audioClipUrl: SND_MAGIC,    playing: false, loop: false, volume: VOL_MAGIC,    pitch: 1 })
+  for (let i = 0; i < 2; i++) {
+    const ent = engine.addEntity()
+    Transform.create(ent, { position: SND_INIT_POS })
+    AudioSource.create(ent, { audioClipUrl: SND_MAGIC, playing: false, loop: false, volume: VOL_MAGIC, pitch: 1 })
+    magicSoundEntities.push(ent)
+  }
 
   for (const name of PLANT_NAMES) setupPlant(name)
 
@@ -908,8 +927,34 @@ export function setupWateringSystem(): void {
   room.onMessage('waterRejected', (data) => {
     console.log(`[Client] Water rejected: ${data.plantId} (${data.reason})`)
 
+    // Roll back optimistic plant state if it was set by THIS click.
+    // The pendingTs guard ensures we don't undo a live update that arrived
+    // from another player's watering of the same plant.
+    const pendingTs = pendingWaters.get(data.plantId)
+    pendingWaters.delete(data.plantId)
+    if (pendingTs !== undefined) {
+      const rejEntity = plantNameToEntity.get(data.plantId)
+      if (rejEntity) {
+        const pd = PlantData.getMutable(rejEntity)
+        if (pd.isWatered && pd.wateredAt === pendingTs) {
+          // Still our optimistic state — revert cleanly.
+          // Setting isWatered=false / wateredAt=0 also cancels the pending
+          // animation timers (their guards check wateredAt === pendingTs).
+          pd.isWatered = false
+          pd.wateredAt = 0
+          hidePlant(rejEntity)
+          showRose(rejEntity)
+          setDropFade(rejEntity, 'in')
+          // Re-enable click only if the daily limit hasn't been hit
+          if (overrideDailyLimit || !dailyLimitReached) enablePlantClick(rejEntity)
+        }
+      }
+      stopWateringEmote()
+    }
+
+    playerWateredToday = Math.max(0, playerWateredToday - 1)
+
     if (data.reason === 'daily_limit') {
-      playerWateredToday = Math.max(0, playerWateredToday - 1)
       if (!dailyLimitReached) onDailyLimitReached()
       const now = Date.now()
       if (now - lastLimitNotificationMs > LIMIT_DEBOUNCE_MS) {
@@ -920,7 +965,6 @@ export function setupWateringSystem(): void {
     }
 
     if (data.reason === 'already_watered' || data.reason === 'bloom_active') {
-      playerWateredToday = Math.max(0, playerWateredToday - 1)
       if (dailyLimitReached && playerWateredToday < dailyWaterLimit) {
         dailyLimitReached = false
         for (const [entity] of plantRegistry) {
@@ -978,6 +1022,7 @@ export function setupWateringSystem(): void {
     }
 
     if (data.isWatered) {
+      pendingWaters.delete(data.plantId)   // server confirmed — no rollback needed
       PlantData.getMutable(entity).isWatered = true
       if (!wasWatered) PlantData.getMutable(entity).wateredAt = data.wateredAt
       disablePlantClick(entity)

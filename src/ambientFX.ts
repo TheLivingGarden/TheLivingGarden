@@ -100,6 +100,7 @@ function setupShockwaves() {
       albedoColor:       Color4.create(1, 0.95, 0.7, 0),
       emissiveColor:     { r: 1, g: 0.9, b: 0.5 },
       emissiveIntensity: 2.5,
+      castShadows:       false,
     })
     shockRings.push({ entity: ent, active: false, elapsed: 0, delay: i * SHOCK_STAGGER })
   }
@@ -199,6 +200,7 @@ function setupRipplePool(): void {
       albedoColor:       Color4.create(1.0, 0.88, 0.52, 0.0),  // start transparent
       emissiveColor:     { r: 1.0, g: 0.75, b: 0.32 },
       emissiveIntensity: 2.0,
+      castShadows:       false,
     })
     rippleSlots.push({ entity: ent, active: false, elapsed: 0 })
   }

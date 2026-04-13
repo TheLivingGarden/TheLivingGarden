@@ -177,10 +177,22 @@ export function startPreBloomEffects(msUntilBloom: number): void {
   // Visual warm-up
   at(300_000, () => setFairyLightsPreboom(true))
 
-  // Start loops at intensity 0 — lampposts → Low, slow flicker
-  setIntensity(0)
+  // Start loops at intensity 0 — only once we're inside the 5-min window.
+  // If the threshold is crossed hours early, delay until 5 min out so petals
+  // and effects don't start immediately.
   stopLoops()     // cancel any stale loops from previous threshold
-  startLoops()
+  const loopDelay = msUntilBloom - PRE_BLOOM_MS
+  if (loopDelay <= 0) {
+    // Already inside the window — start immediately
+    setIntensity(0)
+    startLoops()
+  } else {
+    timers.setTimeout(() => {
+      if (preGen !== gen) return
+      setIntensity(0)
+      startLoops()
+    }, loopDelay)
+  }
 
   // 120 s out → intensity 1, lampposts → Mid
   at(120_000, () => {
