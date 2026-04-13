@@ -46,7 +46,7 @@ import { setupGroundLights, updateGroundLights, triggerGroundLightBurst }       
 import { setupLeaderboardBoards, updateLeaderboardDisplay }   from './leaderboardSystem'
 import { setupFairyLights, setFairyLightsBloom }             from './fairyLightSystem'
 import { showToast, showDailyLimit, hideDailyLimit, showPersistent, hidePersistent, showBannerIdle, showBannerCountdown, updateBannerCountdown, showBannerBloom, updateBannerHealth, updatePlayerCount, formatBloomCountdown, formatDailyLimitMessage, getMsUntilBloom } from './notifications'
-import { movePlayerTo, triggerSceneEmote }  from '~system/RestrictedActions'
+import { triggerSceneEmote }               from '~system/RestrictedActions'
 import { room }                             from './shared/messages'
 import { TOTAL_PLANTS, BLOOM_THRESHOLD, DAILY_WATER_LIMIT, PLANT_NAMES } from './shared/config'
 
@@ -80,10 +80,9 @@ const ANIM_UNHEALTHY_IDLE = 'CloseIdle'  // idle loop in UnhealthyRose.glb
 // ── Emote ─────────────────────────────────────────────────────
 const EMOTE_SRC           = 'assets/scene/Models/Emotes/WateringCan_emote.glb'
 const EMOTE_TOTAL_MS      = 2933   // ms — full clip length (keeps emoteActive locked)
-const EMOTE_TRIGGER_MS    = 800    // delay before triggerSceneEmote — lets movePlayerTo's
-                                   // position update fully propagate through comms before
-                                   // the emote packet is sent, avoiding remote drop
-const WATER_DISTANCE      = 2      // metres — how close player steps to the plant
+const EMOTE_TRIGGER_MS    = 100    // short delay before triggerSceneEmote — one frame
+                                   // buffer to let ECS state settle; no movePlayerTo
+                                   // congestion to wait for any more
 
 // ── Watering choreography milestones ─────────────────────────
 // t=0           click — player steps to plant, emote fires
@@ -453,20 +452,14 @@ const EMOTE_STOP_ACTIONS = [
   InputAction.IA_JUMP,
 ] as const
 
-function triggerWateringEmote(plantEntity: Entity) {
-  const plantPos  = Transform.getOrNull(plantEntity)?.position
-  const playerPos = Transform.getOrNull(engine.PlayerEntity)?.position
-  if (plantPos && playerPos) {
-    const dx  = playerPos.x - plantPos.x
-    const dz  = playerPos.z - plantPos.z
-    const len = Math.sqrt(dx * dx + dz * dz)
-    const nx  = len > 0.001 ? dx / len : 0
-    const nz  = len > 0.001 ? dz / len : 1
-    movePlayerTo({
-      newRelativePosition: { x: plantPos.x + nx * WATER_DISTANCE, y: playerPos.y, z: plantPos.z + nz * WATER_DISTANCE },
-      avatarTarget: plantPos,
-    })
-  }
+function triggerWateringEmote(_plantEntity: Entity) {
+  // movePlayerTo is intentionally omitted. The pointer event already enforces
+  // maxDistance=3 so the player is always within reach. movePlayerTo sends its
+  // own position update through DCL's WebRTC comms layer; when triggerSceneEmote
+  // fires shortly after, the two messages race asymmetrically between peers —
+  // one direction sees the emote, the other doesn't, and no fixed delay fixes
+  // both. Removing movePlayerTo makes triggerSceneEmote the only comms event,
+  // so it broadcasts cleanly in both directions every time.
 
   emoteActive = true
 
