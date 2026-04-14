@@ -9,10 +9,11 @@ export const BLOOM_WINDOWS: ReadonlyArray<{ hour: number; minute: number }> = [
   { hour: 17, minute: 30 },   // 17:30 UTC
 ]
 
-export const TOTAL_PLANTS       = 32
-export const BLOOM_THRESHOLD    = Math.ceil(TOTAL_PLANTS * 0.8)  // 17
+export const TOTAL_PLANTS       = 38   // 32 regular + 6 fast
+export const BLOOM_THRESHOLD    = Math.ceil(TOTAL_PLANTS * 0.8)
 export const DAILY_WATER_LIMIT  = 8
 export const WATERED_EXPIRY_MS  = 30 * 60 * 1000        // 30 minutes
+export const FAST_PLANT_EXPIRY_MS = 75_000               // 75 seconds
 /** How long after bloom triggers before the server resets all plants.
  *  Matches the 10-min visual bloom so the reset coincides with the post-bloom cooldown start. */
 export const BLOOM_RESET_DELAY_MS = 11 * 60_000         // 10 minutes + 1min breather
@@ -33,5 +34,13 @@ export const PLANT_NAMES: string[] = [
   'Plant_17', 'Plant_18', 'Plant_19', 'Plant_20',
   'Plant_21', 'Plant_22', 'Plant_23', 'Plant_24',
   'Plant_25', 'Plant_26', 'Plant_27', 'Plant_28',
-  'Plant_29', 'Plant_30', 'Plant_31', 'Plant_32'
+  'Plant_29', 'Plant_30', 'Plant_31', 'Plant_32',
+  'FastPlant_1', 'FastPlant_2', 'FastPlant_3',
+  'FastPlant_4', 'FastPlant_5', 'FastPlant_6',
 ]
+
+/** Set of plant names that use FAST_PLANT_EXPIRY_MS instead of WATERED_EXPIRY_MS. */
+export const FAST_PLANT_NAMES = new Set([
+  'FastPlant_1', 'FastPlant_2', 'FastPlant_3',
+  'FastPlant_4', 'FastPlant_5', 'FastPlant_6',
+])

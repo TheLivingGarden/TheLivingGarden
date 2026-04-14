@@ -49,7 +49,7 @@ import { showToast, showDailyLimit, hideDailyLimit, showPersistent, hidePersiste
 import { clockSync } from './shared/clockSync'
 import { movePlayerTo, triggerSceneEmote }  from '~system/RestrictedActions'
 import { room }                             from './shared/messages'
-import { TOTAL_PLANTS, BLOOM_THRESHOLD, DAILY_WATER_LIMIT, PLANT_NAMES } from './shared/config'
+import { TOTAL_PLANTS, BLOOM_THRESHOLD, DAILY_WATER_LIMIT, PLANT_NAMES, FAST_PLANT_NAMES, FAST_PLANT_EXPIRY_MS } from './shared/config'
 
 // ===============================================================
 // ██████╗ ██████╗ ███╗   ██╗███████╗██╗ ██████╗
@@ -70,9 +70,10 @@ const TEST_MODE = false
 const ANIM_DROOPY_STATE  = 'CloseIdle'  // droopy idle loop
 const ANIM_TO_HEALTHY    = 'Play'       // droopy → healthy transition  (6.0 s)
 const ANIM_HEALTHY_STATE = 'OpenIdle'   // healthy idle loop
-const ANIM_CLOSE_PLAY    = 'ClosePlay'  // healthy → droopy transition  (6.033 s)
-const ANIM_TRANSITION_MS  = 6_000       // ms — duration of Play clip
-const ANIM_CLOSE_PLAY_MS  = 6_033       // ms — duration of ClosePlay clip
+const ANIM_CLOSE_PLAY       = 'ClosePlay'  // healthy → droopy transition  (6.033 s)
+const ANIM_CLOSE_PLAY_SPEED = 0.25         // playback speed — slow wilt
+const ANIM_TRANSITION_MS    = 6_000        // ms — duration of Play clip
+const ANIM_CLOSE_PLAY_MS    = Math.round(6_033 / ANIM_CLOSE_PLAY_SPEED)  // 24 132 ms at 0.25×
 const ANIMATOR_INIT_DELAY_MS = 1000     // ms — defer Animator.create until GLBs load
 
 // ── Unhealthy Rose (shown while plant is not watered) ─────────
@@ -82,7 +83,7 @@ const ANIM_UNHEALTHY_IDLE = 'CloseIdle'  // idle loop in UnhealthyRose.glb
 // ── Emote ─────────────────────────────────────────────────────
 const EMOTE_SRC           = 'assets/scene/Models/Emotes/WateringCan_emote.glb'
 const EMOTE_TOTAL_MS      = 2933   // ms — full clip length (keeps emoteActive locked)
-const EMOTE_TRIGGER_MS    = 500    // ms — delay before triggerSceneEmote after movePlayerTo
+const EMOTE_TRIGGER_MS    = 200    // ms — delay before triggerSceneEmote after movePlayerTo
 const WATER_DISTANCE      = 2      // metres — how close player steps to the plant
 
 // ── Watering choreography milestones ─────────────────────────
@@ -137,7 +138,7 @@ const LIVE_WATER_THRESHOLD_MS = 10_000   // plantStateUpdate < 10 s old = live w
 const LIMIT_DEBOUNCE_MS       = 5_000    // min gap between daily-limit toast notifications
 
 // ── Expiry ────────────────────────────────────────────────────
-const EXPIRY_PROD_MS = 30 * 60 * 1_000        // 30 minutes
+const EXPIRY_PROD_MS = 2.5 * 60 * 1_000        // 2.5 minutes
 const EXPIRY_TEST_MS = 5 * 60 * 1_000        // 5 minutes (TEST_MODE)
 
 // ── Bloom notification text ───────────────────────────────────
@@ -196,6 +197,7 @@ const SYNC_REQUEST_MIN_MS = 5_000   // don't flood server with requestFullSync o
 
 const wateredByLabelMap = new Map<Entity, Entity>()
 const wateredByNames    = new Map<Entity, string>()   // entity → display name
+const entityPlantId     = new Map<Entity, string>()   // entity → plantId (for expiry lookup)
 
 /** plant entity → its UnhealthyRose entity */
 const roseMap = new Map<Entity, Entity>()
@@ -445,12 +447,7 @@ function playMagicFXSound() {
 function stopWateringEmote() {
   if (!emoteActive) return
   emoteActive = false
-  // Do NOT call triggerSceneEmote({ src: '' }) here. The emote was started with
-  // loop: false so it ends naturally on every client. Broadcasting an explicit
-  // stop sends a second comms packet that can arrive out-of-order relative to
-  // the start packet on some peer connections — silently cancelling the animation
-  // before it renders on the remote side (the asymmetric "one player sees it,
-  // the other doesn't" bug). Non-looping emotes don't need an explicit stop.
+  triggerSceneEmote({ src: '', loop: false })
 }
 
 const EMOTE_STOP_ACTIONS = [
@@ -505,6 +502,12 @@ function triggerWateringEmote(plantEntity: Entity) {
 // Plant lifecycle
 // ---------------------------------------------------------------
 
+/** Returns the correct expiry duration for a plant — fast or standard. */
+function plantExpiryMs(plantId: string): number {
+  if (FAST_PLANT_NAMES.has(plantId)) return FAST_PLANT_EXPIRY_MS
+  return runtimeTestMode ? EXPIRY_TEST_MS : EXPIRY_PROD_MS
+}
+
 function scheduleExpiry(entity: Entity, sessionTimestamp: number, delayMs: number) {
   timers.setTimeout(() => {
     if (isBloomActive()) return
@@ -518,6 +521,11 @@ function scheduleExpiry(entity: Entity, sessionTimestamp: number, delayMs: numbe
     pd.wateredAt = 0
     updateProgressText()
     enablePlantClick(entity)
+
+    // Clear the "watered by" label immediately on expiry
+    wateredByNames.delete(entity)
+    const expiredLabel = wateredByLabelMap.get(entity)
+    if (expiredLabel) TextShape.getMutable(expiredLabel).text = ''
 
     // Only play ClosePlay if the healthy plant mesh is currently visible.
     // If it's not visible (e.g. the player loaded after this plant had already
@@ -625,8 +633,7 @@ function waterPlant(entity: Entity, plantId: string) {
     showDailyLimit(formatDailyLimitMessage(runtimeTestMode))
   }, TOAST_WATERED_MS)
 
-  const expiryMs = runtimeTestMode ? EXPIRY_TEST_MS : EXPIRY_PROD_MS
-  scheduleExpiry(entity, now, expiryMs)
+  scheduleExpiry(entity, now, plantExpiryMs(plantId))
 }
 
 export function resetAllPlants(): void {
@@ -690,11 +697,17 @@ function formatTimeAgo(wateredAtMs: number): string {
 }
 
 function refreshWateredByLabels(): void {
+  const now = Date.now()
   for (const [entity, labelEntity] of wateredByLabelMap) {
     const pd   = PlantData.getOrNull(entity)
     const name = wateredByNames.get(entity)
     if (!pd?.isWatered || !name) continue
-    TextShape.getMutable(labelEntity).text = `Watered by ${name}\n${formatTimeAgo(pd.wateredAt)}`
+    const pid      = entityPlantId.get(entity)
+    const expiryMs = plantExpiryMs(pid ?? '')
+    const alpha    = Math.max(0, 1 - (now - pd.wateredAt) / expiryMs)
+    const ts = TextShape.getMutable(labelEntity)
+    ts.text      = `Watered by ${name}\n${formatTimeAgo(pd.wateredAt)}`
+    ts.textColor = { ...WATERED_BY_COLOR, a: alpha }
   }
 }
 
@@ -738,6 +751,7 @@ function setupPlant(plantName: string) {
 
   plantRegistry.set(entity, { clickTarget, plantName, clickboxEntity })
   plantNameToEntity.set(plantName, entity)
+  entityPlantId.set(entity, plantName)
   enablePlantClick(entity)
 
   // ── Water drop indicator ─────────────────────────────────────
@@ -864,7 +878,7 @@ export function setupWateringSystem(): void {
           { clip: ANIM_DROOPY_STATE,  playing: false, loop: true  },
           { clip: ANIM_TO_HEALTHY,    playing: false, loop: false },
           { clip: ANIM_HEALTHY_STATE, playing: false, loop: true  },
-          { clip: ANIM_CLOSE_PLAY,    playing: false, loop: false },
+          { clip: ANIM_CLOSE_PLAY,    playing: false, loop: false, speed: ANIM_CLOSE_PLAY_SPEED },
         ],
       })
       Animator.playSingleAnimation(entity, isWatered ? ANIM_HEALTHY_STATE : ANIM_DROOPY_STATE, true)
@@ -916,11 +930,11 @@ export function setupWateringSystem(): void {
     updatePlayerCount(count)
   })
 
-  // Refresh "X min ago" timestamps on watered-by labels every 30 s
+  // Refresh "X min ago" timestamps and decay alpha on watered-by labels every 5 s
   let labelRefreshTimer = 0
   engine.addSystem((dt: number) => {
     labelRefreshTimer += dt
-    if (labelRefreshTimer < 30) return
+    if (labelRefreshTimer < 5) return
     labelRefreshTimer = 0
     refreshWateredByLabels()
   })
@@ -1084,9 +1098,16 @@ export function setupWateringSystem(): void {
       wateredByNames.delete(entity)
     }
     if (wateredByLabel) {
-      TextShape.getMutable(wateredByLabel).text = data.isWatered && data.wateredBy
-        ? `Last watered by ${data.wateredBy}\n${formatTimeAgo(data.wateredAt)}`
-        : ''
+      const ts = TextShape.getMutable(wateredByLabel)
+      if (data.isWatered && data.wateredBy) {
+        const pid      = entityPlantId.get(entity)
+        const expiryMs = plantExpiryMs(pid ?? '')
+        const alpha    = Math.max(0, 1 - (Date.now() - data.wateredAt) / expiryMs)
+        ts.text      = `Last watered by ${data.wateredBy}\n${formatTimeAgo(data.wateredAt)}`
+        ts.textColor = { ...WATERED_BY_COLOR, a: alpha }
+      } else {
+        ts.text = ''
+      }
     }
 
     if (data.isWatered) {
@@ -1111,8 +1132,7 @@ export function setupWateringSystem(): void {
         // The optimistic expiry (keyed on local `now`) will self-cancel because
         // pd.wateredAt is now data.wateredAt — schedule a fresh expiry from there.
         enablePlantClick(entity)
-        const expMs = runtimeTestMode ? EXPIRY_TEST_MS : EXPIRY_PROD_MS
-        const remaining = expMs - (Date.now() - data.wateredAt)
+        const remaining = plantExpiryMs(data.plantId) - (Date.now() - data.wateredAt)
         if (remaining > 0) scheduleExpiry(entity, data.wateredAt, remaining)
 
       } else if (!wasWatered) {
@@ -1155,9 +1175,25 @@ export function setupWateringSystem(): void {
       enablePlantClick(entity)
 
       if (wasWatered) {
-        hidePlant(entity)
-        showRose(entity)
-        setDropFade(entity, 'in')
+        // Mirror scheduleExpiry: play ClosePlay if the plant mesh is visible,
+        // snap immediately if not. This handles the race where the server's
+        // expiry broadcast arrives before the client-side timer fires (common
+        // on fast-decaying plants). The client-side timer will bail because
+        // pd.isWatered is already false by the time it fires.
+        const plantVisible = VisibilityComponent.getOrNull(entity)?.visible ?? false
+        if (plantVisible) {
+          Animator.playSingleAnimation(entity, ANIM_CLOSE_PLAY)
+          timers.setTimeout(() => {
+            if (PlantData.get(entity).isWatered) return
+            hidePlant(entity)
+            showRose(entity)
+            setDropFade(entity, 'in')
+          }, ANIM_CLOSE_PLAY_MS)
+        } else {
+          hidePlant(entity)
+          showRose(entity)
+          setDropFade(entity, 'in')
+        }
       }
     }
 

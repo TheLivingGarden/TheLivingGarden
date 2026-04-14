@@ -20,6 +20,8 @@ import {
   BLOOM_THRESHOLD,
   DAILY_WATER_LIMIT,
   WATERED_EXPIRY_MS,
+  FAST_PLANT_EXPIRY_MS,
+  FAST_PLANT_NAMES,
   BLOOM_RESET_DELAY_MS,
   BLOOM_WINDOWS,
 } from '../shared/config'
@@ -67,14 +69,15 @@ async function loadPlantStates(): Promise<void> {
     if (!entity) continue
     if (!rec.isWatered) continue
 
-    const elapsed = now - rec.wateredAt
-    if (elapsed >= WATERED_EXPIRY_MS) continue  // expired while server was down
+    const expiryMs = FAST_PLANT_NAMES.has(rec.plantId) ? FAST_PLANT_EXPIRY_MS : WATERED_EXPIRY_MS
+    const elapsed  = now - rec.wateredAt
+    if (elapsed >= expiryMs) continue  // expired while server was down
 
     const ps = PlantSync.getMutable(entity)
     ps.isWatered = true
     ps.wateredAt = rec.wateredAt
     if (rec.wateredBy) wateredByMap.set(rec.plantId, rec.wateredBy)
-    scheduleExpiry(rec.plantId, entity, rec.wateredAt, WATERED_EXPIRY_MS - elapsed)
+    scheduleExpiry(rec.plantId, entity, rec.wateredAt, expiryMs - elapsed)
     restored++
   }
   console.log(`[Server] Restored ${restored} watered plants from Storage`)
@@ -398,7 +401,7 @@ export async function server(): Promise<void> {
 
       await savePlantStates()
       await saveLeaderboard()
-      scheduleExpiry(plantId, entity, now, WATERED_EXPIRY_MS)
+      scheduleExpiry(plantId, entity, now, FAST_PLANT_NAMES.has(plantId) ? FAST_PLANT_EXPIRY_MS : WATERED_EXPIRY_MS)
 
       room.send('playerDailyState', dailyStatePayload(newCount), { to: [playerAddress] })
       room.send('plantStateUpdate', { plantId, isWatered: true, wateredAt: now, wateredBy: displayName })

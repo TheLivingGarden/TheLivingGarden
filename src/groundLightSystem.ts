@@ -187,8 +187,8 @@ function scheduleNext(g: Group, delayMs: number): void {
   timers.setTimeout(() => {
     if (g.gen !== myGen) return   // cancelled — a newer chain is running
 
-    // Group is Off and locked there (no flicker yet) — idle reschedule
-    if (g.baseLevel === -1 && g.flickerMode !== 'bloom') {
+    // No flicker outside bloom — idle reschedule
+    if (g.flickerMode !== 'bloom') {
       scheduleNext(g, rnd(NORMAL_MIN_MS, NORMAL_MAX_MS))
       return
     }
@@ -261,16 +261,12 @@ export function updateGroundLights(wateredCount: number): void {
   if (ratio === lastHealthRatio) return
   lastHealthRatio = ratio
 
-  // First watering — unlock normal flicker and lift ground lights Off → Low
+  // First watering — lift ground lights Off → Low (no flicker until bloom)
   if (ratio > 0 && globalFlickerMode === 'static') {
-    globalFlickerMode = 'normal'
     for (const g of groups) {
-      g.flickerMode = 'normal'
       if (g.id === 'ground' && g.baseLevel === -1) {
         g.baseLevel = 0
         applyLevel(g, 0)
-        g.gen++   // cancel idle chain, restart as flickering Low
-        scheduleNext(g, rnd(NORMAL_MIN_MS, NORMAL_MAX_MS))
       }
     }
   }
@@ -312,12 +308,7 @@ export function updateGroundLights(wateredCount: number): void {
  * Triggers a brief burst flicker across all active groups.
  */
 export function triggerGroundLightBurst(): void {
-  if (globalFlickerMode === 'bloom') return
-  const until = Date.now() + BURST_DURATION_MS
-  for (const g of groups) {
-    if (g.baseLevel === -1) continue   // don't burst Off groups
-    g.burstUntil = until
-  }
+  // Burst flicker disabled — only bloom triggers flicker
 }
 
 /**
@@ -330,7 +321,7 @@ export function setLamppostLevel(level: 0|1|2): void {
   if (!g) return
   g.baseLevel   = level
   g.minLevel    = level
-  g.flickerMode = 'normal'   // always return to normal flicker on explicit reset
+  g.flickerMode = 'static'   // no flicker outside bloom
   applyLevel(g, level)
   g.gen++
   const [minMs, maxMs] = timingFor(g)
@@ -361,9 +352,9 @@ export function setLamppostBloomIntensity(level: 0|1|2): void {
  * Reset: restore Off states, flicker continues as normal.
  */
 export function setGroundLightsBloom(active: boolean): void {
-  globalFlickerMode = active ? 'bloom' : 'normal'
+  globalFlickerMode = active ? 'bloom' : 'static'
   for (const g of groups) {
-    g.flickerMode = active ? 'bloom' : 'normal'
+    g.flickerMode = active ? 'bloom' : 'static'
     g.gen++   // cancel any in-flight timer chain for this group
  if (active) {
   g.baseLevel = 2
