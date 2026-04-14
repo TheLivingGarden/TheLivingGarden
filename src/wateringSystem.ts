@@ -74,6 +74,7 @@ const ANIM_CLOSE_PLAY       = 'ClosePlay'  // healthy → droopy transition  (6.
 const ANIM_CLOSE_PLAY_SPEED = 0.25         // playback speed — slow wilt
 const ANIM_TRANSITION_MS    = 6_000        // ms — duration of Play clip
 const ANIM_CLOSE_PLAY_MS    = Math.round(6_033 / ANIM_CLOSE_PLAY_SPEED)  // 24 132 ms at 0.25×
+const WILT_SOUND_DELAY_MS   = 5_000        // ms after ClosePlay starts before wilt sound plays
 const ANIMATOR_INIT_DELAY_MS = 1000     // ms — defer Animator.create until GLBs load
 
 // ── Unhealthy Rose (shown while plant is not watered) ─────────
@@ -107,10 +108,12 @@ const SND_HOVER    = 'assets/scene/Sounds/hover.mp3'
 const SND_CLICK    = 'assets/scene/Sounds/click.mp3'
 const SND_WATERING = 'assets/scene/Sounds/watering.mp3'
 const SND_MAGIC    = 'assets/scene/Sounds/MagicFX.mp3'
+const SND_WILT     = 'assets/scene/Sounds/PlantWiltSound.mp3'
 const VOL_HOVER    = 0.7
 const VOL_CLICK    = 0.9
 const VOL_WATERING = 0.7
 const VOL_MAGIC    = 0.9
+const VOL_WILT     = 0.8
 const SND_INIT_POS = { x: 8, y: 1, z: 8 }   // initial transform — overwritten on play
 
 // ── Clickbox (optional alternative pointer target) ────────────
@@ -174,6 +177,7 @@ const bloomLabels:       Entity[] = []   // Image_6–9 placed in Creator Hub
 let hoverSoundEntity:    Entity
 let clickSoundEntity:    Entity
 let wateringSoundEntity: Entity
+let wiltSoundEntity:     Entity
 const magicSoundEntities: Entity[] = []
 let magicSoundIdx = 0
 
@@ -425,6 +429,12 @@ function playAtPlayer(soundEntity: Entity) {
 }
 
 function playHoverSound()    { playAtPlayer(hoverSoundEntity)    }
+function playWiltSound(plantEntity: Entity) {
+  const pos = Transform.getOrNull(plantEntity)?.position ?? SND_INIT_POS
+  Transform.getMutable(wiltSoundEntity).position = pos
+  AudioSource.getMutable(wiltSoundEntity).playing = false
+  timers.setTimeout(() => { AudioSource.getMutable(wiltSoundEntity).playing = true }, 0)
+}
 function playClickSound()    { playAtPlayer(clickSoundEntity)    }
 function playWateringSound() { playAtPlayer(wateringSoundEntity) }
 
@@ -533,6 +543,7 @@ function scheduleExpiry(entity: Entity, sessionTimestamp: number, delayMs: numbe
     const plantVisible = VisibilityComponent.getOrNull(entity)?.visible ?? false
     if (plantVisible) {
       Animator.playSingleAnimation(entity, ANIM_CLOSE_PLAY)
+      timers.setTimeout(() => { if (!PlantData.get(entity).isWatered) playWiltSound(entity) }, WILT_SOUND_DELAY_MS)
       timers.setTimeout(() => {
         // Abort visual swap if re-watered during the animation
         if (PlantData.get(entity).isWatered) return
@@ -856,6 +867,9 @@ export function setupWateringSystem(): void {
   wateringSoundEntity = engine.addEntity()
   Transform.create(wateringSoundEntity, { position: SND_INIT_POS })
   AudioSource.create(wateringSoundEntity, { audioClipUrl: SND_WATERING, playing: false, loop: false, volume: VOL_WATERING, pitch: 1 })
+  wiltSoundEntity = engine.addEntity()
+  Transform.create(wiltSoundEntity,     { position: SND_INIT_POS })
+  AudioSource.create(wiltSoundEntity,   { audioClipUrl: SND_WILT,     playing: false, loop: false, volume: VOL_WILT,     pitch: 1 })
   for (let i = 0; i < 2; i++) {
     const ent = engine.addEntity()
     Transform.create(ent, { position: SND_INIT_POS })
@@ -1183,6 +1197,7 @@ export function setupWateringSystem(): void {
         const plantVisible = VisibilityComponent.getOrNull(entity)?.visible ?? false
         if (plantVisible) {
           Animator.playSingleAnimation(entity, ANIM_CLOSE_PLAY)
+          timers.setTimeout(() => { if (!PlantData.get(entity).isWatered) playWiltSound(entity) }, WILT_SOUND_DELAY_MS)
           timers.setTimeout(() => {
             if (PlantData.get(entity).isWatered) return
             hidePlant(entity)

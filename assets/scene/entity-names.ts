@@ -5,6 +5,7 @@
  * Object containing all entity names in the scene for autocomplete support.
  */
 export enum EntityNames {
+  Black_Chair = "Black Chair",
   Bloom = "Bloom",
   Circle1_High = "Circle1_High",
   Circle1_Low = "Circle1_Low",
@@ -85,6 +86,7 @@ export enum EntityNames {
   Sit_Spot_10 = "Sit Spot_10",
   Sit_Spot_11 = "Sit Spot_11",
   Sit_Spot_12 = "Sit Spot_12",
+  Sit_Spot_13 = "Sit Spot_13",
   Sit_Spot_2 = "Sit Spot_2",
   Sit_Spot_3 = "Sit Spot_3",
   Sit_Spot_4 = "Sit Spot_4",
