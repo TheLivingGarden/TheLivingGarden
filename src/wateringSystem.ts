@@ -45,7 +45,7 @@ import { setupProgressBars, updateProgressBars }              from './progressBa
 import { setupGroundLights, updateGroundLights, triggerGroundLightBurst }                       from './groundLightSystem'
 import { setupLeaderboardBoards, updateLeaderboardDisplay }   from './leaderboardSystem'
 import { setupFairyLights, setFairyLightsBloom }             from './fairyLightSystem'
-import { showToast, showDailyLimit, hideDailyLimit, showPersistent, hidePersistent, showBannerIdle, showBannerCountdown, updateBannerCountdown, showBannerBloom, updateBannerHealth, updatePlayerCount, formatBloomCountdown, formatDailyLimitMessage, getMsUntilBloom, setNextBloomLocalTime } from './notifications'
+import { showToast, showDailyLimit, hideDailyLimit, showPersistent, hidePersistent, showBannerIdle, showBannerCountdown, updateBannerCountdown, showBannerBloom, updateBannerHealth, updatePlayerCount, updateWaterCount, formatBloomCountdown, formatDailyLimitMessage, getMsUntilBloom, setNextBloomLocalTime } from './notifications'
 import { clockSync } from './shared/clockSync'
 import { movePlayerTo, triggerSceneEmote }  from '~system/RestrictedActions'
 import { room }                             from './shared/messages'
@@ -68,10 +68,11 @@ const TEST_MODE = false
 
 // ── Animation clip names (must match GLB exactly) ─────────────
 const ANIM_DROOPY_STATE  = 'CloseIdle'  // droopy idle loop
-const ANIM_TO_HEALTHY    = 'Play'       // droopy → healthy transition
+const ANIM_TO_HEALTHY    = 'Play'       // droopy → healthy transition  (6.0 s)
 const ANIM_HEALTHY_STATE = 'OpenIdle'   // healthy idle loop
-// Note: no reverse transition clip — reset snaps directly to CloseIdle
-const ANIM_TRANSITION_MS = 6_000        // ms — duration of Play clip
+const ANIM_CLOSE_PLAY    = 'ClosePlay'  // healthy → droopy transition  (6.033 s)
+const ANIM_TRANSITION_MS  = 6_000       // ms — duration of Play clip
+const ANIM_CLOSE_PLAY_MS  = 6_033       // ms — duration of ClosePlay clip
 const ANIMATOR_INIT_DELAY_MS = 1000     // ms — defer Animator.create until GLBs load
 
 // ── Unhealthy Rose (shown while plant is not watered) ─────────
@@ -92,10 +93,13 @@ const WATER_DISTANCE      = 2      // metres — how close player steps to the p
 const WATER_FX_MS   = 400
 const WATER_ANIM_MS = 1500
 
-// ── Water drop prop ───────────────────────────────────────────
+// ── Water drop indicator ──────────────────────────────────────
 const WATER_DROP_SRC = 'assets/scene/Models/waterDrop/waterDrop.glb'
 const WATER_DROP_Y   = 0.8   // local Y above plant pivot
-const DROP_FADE_MS   = 1600   // ms for scale-in / scale-out tween
+const DROP_FADE_MS   = 1600  // ms for scale-in / scale-out tween
+
+/** plant entity → its waterDrop entity */
+const waterDropMap = new Map<Entity, Entity>()
 
 // ── Sounds ────────────────────────────────────────────────────
 const SND_HOVER    = 'assets/scene/Sounds/hover.mp3'
@@ -177,10 +181,11 @@ let dailyLimitReached       = false
 let lastLimitNotificationMs = 0
 
 // Tracks optimistic client-side waters awaiting server confirmation.
-// Key = plantId, value = the local Date.now() stamp used as wateredAt.
-// Lets waterRejected safely undo only OUR optimistic state, not another
-// player's live update that may have arrived on the same plant.
-const pendingWaters = new Map<string, number>()
+// wasTopUp=true  → plant was already watered; rollback restores prevWateredAt
+// wasTopUp=false → plant was unwatered; rollback reverts to unwatered state
+// The ts guard prevents undoing a concurrent live update from another player.
+interface PendingWater { ts: number; prevWateredAt: number; wasTopUp: boolean }
+const pendingWaters = new Map<string, PendingWater>()
 let initialLoadDone         = false
 let roomReady               = false
 
@@ -189,8 +194,6 @@ let emoteActive          = false
 let lastSyncRequestMs    = 0
 const SYNC_REQUEST_MIN_MS = 5_000   // don't flood server with requestFullSync on rapid reloads
 
-/** plant entity → its drop GLB entity */
-const dropMap           = new Map<Entity, Entity>()
 const wateredByLabelMap = new Map<Entity, Entity>()
 const wateredByNames    = new Map<Entity, string>()   // entity → display name
 
@@ -207,7 +210,7 @@ function showPlant(entity: Entity) { VisibilityComponent.createOrReplace(entity,
 function hidePlant(entity: Entity) { VisibilityComponent.createOrReplace(entity, { visible: false }) }
 
 function setDropFade(plantEntity: Entity, direction: 'in' | 'out') {
-  const drop = dropMap.get(plantEntity)
+  const drop = waterDropMap.get(plantEntity)
   if (!drop) return
   if (direction === 'in') {
     Tween.setScale(drop,
@@ -330,6 +333,7 @@ function updateProgressText() {
   updateProgressBars(count, TOTAL_PLANTS)
   updateGroundLights(count)
   updateBannerHealth(count / TOTAL_PLANTS)
+  updateWaterCount(playerWateredToday, dailyWaterLimit)
   // Banner state: idle below threshold, countdown at/above threshold (unless bloom active)
   if (!isBloomActive()) {
     if (count >= BLOOM_THRESHOLD) {
@@ -507,15 +511,31 @@ function scheduleExpiry(entity: Entity, sessionTimestamp: number, delayMs: numbe
     const pd = PlantData.getMutable(entity)
     if (!pd.isWatered || pd.wateredAt !== sessionTimestamp) return
 
+    // Mark expired immediately so progress & clicks are correct.
+    // Another player can water during the ClosePlay animation — the timer
+    // below guards against applying the visual swap if that happens.
     pd.isWatered = false
     pd.wateredAt = 0
     updateProgressText()
-
-    // Swap back to unhealthy rose
-    hidePlant(entity)
-    showRose(entity)
     enablePlantClick(entity)
-    setDropFade(entity, 'in')
+
+    // Only play ClosePlay if the healthy plant mesh is currently visible.
+    // If it's not visible (e.g. the player loaded after this plant had already
+    // expired and the server sent isWatered=false on join), snap straight to droopy.
+    const plantVisible = VisibilityComponent.getOrNull(entity)?.visible ?? false
+    if (plantVisible) {
+      Animator.playSingleAnimation(entity, ANIM_CLOSE_PLAY)
+      timers.setTimeout(() => {
+        // Abort visual swap if re-watered during the animation
+        if (PlantData.get(entity).isWatered) return
+        hidePlant(entity)
+        showRose(entity)
+        setDropFade(entity, 'in')
+      }, ANIM_CLOSE_PLAY_MS)
+    } else {
+      showRose(entity)
+      setDropFade(entity, 'in')
+    }
   }, delayMs)
 }
 
@@ -524,7 +544,8 @@ function waterPlant(entity: Entity, plantId: string) {
   if (emoteActive)     return
 
   const pd = PlantData.getMutable(entity)
-  if (pd.isWatered) return
+  const wasAlreadyWatered = pd.isWatered   // true = top-up, false = fresh water
+  const prevWateredAt     = pd.wateredAt   // used to restore if server rejects top-up
 
   if (!overrideDailyLimit && playerWateredToday >= dailyWaterLimit) {
     const now = Date.now()
@@ -543,8 +564,8 @@ function waterPlant(entity: Entity, plantId: string) {
   const justHitLimit = !overrideDailyLimit && playerWateredToday >= dailyWaterLimit
   if (justHitLimit) onDailyLimitReached()
 
-  disablePlantClick(entity)
-  setDropFade(entity, 'out')
+  disablePlantClick(entity)     // prevent double-click while pending; re-enabled on confirmation
+  setDropFade(entity, 'out')    // hide drop when watering
 
   playClickSound()
   triggerWateringEmote(entity)
@@ -557,30 +578,45 @@ function waterPlant(entity: Entity, plantId: string) {
     triggerGroundLightBurst()
   }, WATER_FX_MS)
 
-  // t=WATER_ANIM_MS — swap rose→plant, animate to healthy, sparkles burst on swap
-  timers.setTimeout(() => {
-    const current = PlantData.get(entity)
-    if (!current.isWatered || current.wateredAt !== now) return
-    hideRose(entity)
-    showPlant(entity)
-    Animator.playSingleAnimation(entity, ANIM_TO_HEALTHY)
-    playMagicFXSound()
-    const plantPos = Transform.getOrNull(entity)?.position
-    if (plantPos) {
-      triggerSparkle(plantPos)
-      timers.setTimeout(() => triggerWateringTribute(plantPos), 650)
-    }
-    // t=WATER_ANIM_MS + ANIM_TRANSITION_MS — switch to idle pose
+  if (!wasAlreadyWatered) {
+    // ── Fresh water — swap rose → healthy plant ──────────────────
+    // t=WATER_ANIM_MS — hide rose, show plant, animate to healthy
     timers.setTimeout(() => {
-      const latest = PlantData.get(entity)
-      if (latest.isWatered && latest.wateredAt === now) {
-        Animator.playSingleAnimation(entity, ANIM_HEALTHY_STATE)
+      const current = PlantData.get(entity)
+      if (!current.isWatered || current.wateredAt !== now) return
+      hideRose(entity)
+      showPlant(entity)
+      Animator.playSingleAnimation(entity, ANIM_TO_HEALTHY)
+      playMagicFXSound()
+      const plantPos = Transform.getOrNull(entity)?.position
+      if (plantPos) {
+        triggerSparkle(plantPos)
+        timers.setTimeout(() => triggerWateringTribute(plantPos), 650)
       }
-    }, ANIM_TRANSITION_MS)
-  }, WATER_ANIM_MS)
+      // t=WATER_ANIM_MS + ANIM_TRANSITION_MS — switch to idle pose
+      timers.setTimeout(() => {
+        const latest = PlantData.get(entity)
+        if (latest.isWatered && latest.wateredAt === now) {
+          Animator.playSingleAnimation(entity, ANIM_HEALTHY_STATE)
+        }
+      }, ANIM_TRANSITION_MS)
+    }, WATER_ANIM_MS)
+  } else {
+    // ── Top-up — plant already healthy; just sparkle + magic FX ──
+    timers.setTimeout(() => {
+      const current = PlantData.get(entity)
+      if (!current.isWatered || current.wateredAt !== now) return
+      playMagicFXSound()
+      const plantPos = Transform.getOrNull(entity)?.position
+      if (plantPos) {
+        triggerSparkle(plantPos)
+        timers.setTimeout(() => triggerWateringTribute(plantPos), 650)
+      }
+    }, WATER_ANIM_MS)
+  }
 
   room.send('waterPlant', { plantId })
-  pendingWaters.set(plantId, now)   // track for rejection rollback
+  pendingWaters.set(plantId, { ts: now, prevWateredAt, wasTopUp: wasAlreadyWatered })
 
   updateProgressText()
   const _pct = Math.round((computeWateredCount() / TOTAL_PLANTS) * 100)
@@ -704,11 +740,12 @@ function setupPlant(plantName: string) {
   plantNameToEntity.set(plantName, entity)
   enablePlantClick(entity)
 
-  const drop = engine.addEntity()
-  Transform.create(drop, { position: { x: 0, y: WATER_DROP_Y, z: 0 }, scale: { x: 1, y: 1, z: 1 }, parent: entity })
-  GltfContainer.create(drop, { src: WATER_DROP_SRC })
-  Billboard.create(drop, { billboardMode: BillboardMode.BM_Y })
-  dropMap.set(entity, drop)
+  // ── Water drop indicator ─────────────────────────────────────
+  const dropEnt = engine.addEntity()
+  Transform.create(dropEnt, { position: { x: 0, y: WATER_DROP_Y, z: 0 }, scale: { x: 1, y: 1, z: 1 }, parent: entity })
+  GltfContainer.create(dropEnt, { src: WATER_DROP_SRC })
+  Billboard.create(dropEnt, { billboardMode: BillboardMode.BM_Y })
+  waterDropMap.set(entity, dropEnt)
 
   // "Watered by" label — hidden until plant is watered
   const wateredByLabel = engine.addEntity()
@@ -827,6 +864,7 @@ export function setupWateringSystem(): void {
           { clip: ANIM_DROOPY_STATE,  playing: false, loop: true  },
           { clip: ANIM_TO_HEALTHY,    playing: false, loop: false },
           { clip: ANIM_HEALTHY_STATE, playing: false, loop: true  },
+          { clip: ANIM_CLOSE_PLAY,    playing: false, loop: false },
         ],
       })
       Animator.playSingleAnimation(entity, isWatered ? ANIM_HEALTHY_STATE : ANIM_DROOPY_STATE, true)
@@ -835,7 +873,10 @@ export function setupWateringSystem(): void {
       const roseEntity = roseMap.get(entity)
       if (roseEntity) {
         Animator.createOrReplace(roseEntity, {
-          states: [{ clip: ANIM_UNHEALTHY_IDLE, playing: false, loop: true }],
+          states: [
+            { clip: ANIM_UNHEALTHY_IDLE, playing: false, loop: true  },
+            { clip: ANIM_CLOSE_PLAY,     playing: false, loop: false },
+          ],
         })
         Animator.playSingleAnimation(roseEntity, ANIM_UNHEALTHY_IDLE, true)
       }
@@ -941,25 +982,30 @@ export function setupWateringSystem(): void {
     console.log(`[Client] Water rejected: ${data.plantId} (${data.reason})`)
 
     // Roll back optimistic plant state if it was set by THIS click.
-    // The pendingTs guard ensures we don't undo a live update that arrived
-    // from another player's watering of the same plant.
-    const pendingTs = pendingWaters.get(data.plantId)
+    // The ts guard ensures we don't undo a live update from another player
+    // that arrived on the same plant concurrently.
+    const pending = pendingWaters.get(data.plantId)
     pendingWaters.delete(data.plantId)
-    if (pendingTs !== undefined) {
+    if (pending !== undefined) {
       const rejEntity = plantNameToEntity.get(data.plantId)
       if (rejEntity) {
         const pd = PlantData.getMutable(rejEntity)
-        if (pd.isWatered && pd.wateredAt === pendingTs) {
-          // Still our optimistic state — revert cleanly.
-          // Setting isWatered=false / wateredAt=0 also cancels the pending
-          // animation timers (their guards check wateredAt === pendingTs).
-          pd.isWatered = false
-          pd.wateredAt = 0
-          hidePlant(rejEntity)
-          showRose(rejEntity)
-          setDropFade(rejEntity, 'in')
-          // Re-enable click only if the daily limit hasn't been hit
-          if (overrideDailyLimit || !dailyLimitReached) enablePlantClick(rejEntity)
+        if (pd.isWatered && pd.wateredAt === pending.ts) {
+          if (pending.wasTopUp) {
+            // Top-up rollback — restore original wateredAt; drop stays hidden (plant still watered)
+            pd.wateredAt = pending.prevWateredAt
+            if (overrideDailyLimit || !dailyLimitReached) enablePlantClick(rejEntity)
+          } else {
+            // Fresh water rollback — revert to unwatered state.
+            // Setting wateredAt=0 cancels pending animation timers (they
+            // guard with wateredAt === pending.ts).
+            pd.isWatered = false
+            pd.wateredAt = 0
+            hidePlant(rejEntity)
+            showRose(rejEntity)
+            setDropFade(rejEntity, 'in')
+            if (overrideDailyLimit || !dailyLimitReached) enablePlantClick(rejEntity)
+          }
         }
       }
       stopWateringEmote()
@@ -977,7 +1023,7 @@ export function setupWateringSystem(): void {
       return
     }
 
-    if (data.reason === 'already_watered' || data.reason === 'bloom_active') {
+    if (data.reason === 'bloom_active') {
       if (dailyLimitReached && playerWateredToday < dailyWaterLimit) {
         dailyLimitReached = false
         for (const [entity] of plantRegistry) {
@@ -1021,6 +1067,15 @@ export function setupWateringSystem(): void {
     const wasWatered = local.isWatered
     const plantPos   = Transform.getOrNull(entity)?.position
 
+    // Consume any pending optimistic water — server has spoken.
+    // Four cases:
+    //   A  pending && !wasTopUp  = our own fresh water confirmed
+    //   B  pending &&  wasTopUp  = our own top-up confirmed
+    //   C  !pending && !wasWatered = remote player freshly watered
+    //   D  !pending &&  wasWatered = remote player topped up an already-watered plant
+    const pending = pendingWaters.get(data.plantId)
+    pendingWaters.delete(data.plantId)
+
     // Update "Watered by" label
     const wateredByLabel = wateredByLabelMap.get(entity)
     if (data.isWatered && data.wateredBy) {
@@ -1035,12 +1090,33 @@ export function setupWateringSystem(): void {
     }
 
     if (data.isWatered) {
-      pendingWaters.delete(data.plantId)   // server confirmed — no rollback needed
       PlantData.getMutable(entity).isWatered = true
-      if (!wasWatered) PlantData.getMutable(entity).wateredAt = data.wateredAt
-      disablePlantClick(entity)
 
-      if (!wasWatered) {
+      // Preserve local optimistic timestamp for Case A so the animation guards
+      // in waterPlant (which close over the local `now`) continue to pass.
+      // All other cases use the server-authoritative timestamp for accurate decay.
+      const isCaseA = pending !== undefined && !pending.wasTopUp
+      if (!isCaseA) {
+        PlantData.getMutable(entity).wateredAt = data.wateredAt
+      }
+
+      if (pending !== undefined && !pending.wasTopUp) {
+        // ── Case A: our fresh water confirmed ────────────────────
+        // Optimistic animations already running in waterPlant — just re-enable click.
+        enablePlantClick(entity)
+
+      } else if (pending !== undefined && pending.wasTopUp) {
+        // ── Case B: our top-up confirmed ─────────────────────────
+        // Plant already healthy; re-enable click. Drop stays hidden (plant watered).
+        // The optimistic expiry (keyed on local `now`) will self-cancel because
+        // pd.wateredAt is now data.wateredAt — schedule a fresh expiry from there.
+        enablePlantClick(entity)
+        const expMs = runtimeTestMode ? EXPIRY_TEST_MS : EXPIRY_PROD_MS
+        const remaining = expMs - (Date.now() - data.wateredAt)
+        if (remaining > 0) scheduleExpiry(entity, data.wateredAt, remaining)
+
+      } else if (!wasWatered) {
+        // ── Case C: remote player freshly watered this plant ─────
         const isLive = (Date.now() - data.wateredAt) < LIVE_WATER_THRESHOLD_MS
         if (isLive) {
           hideRose(entity)
@@ -1059,17 +1135,20 @@ export function setupWateringSystem(): void {
             if (plantPos) triggerSparkle(plantPos)
           }, ANIM_TRANSITION_MS)
         } else {
-          // State recovery on join — snap to healthy immediately, no fade
+          // State recovery on join — snap to healthy, drop hidden
           hideRose(entity)
           showPlant(entity)
           Animator.playSingleAnimation(entity, ANIM_HEALTHY_STATE)
-          const drop = dropMap.get(entity)
+          const drop = waterDropMap.get(entity)
           if (drop) {
             Tween.deleteFrom(drop)
             Transform.getMutable(drop).scale = { x: 0.001, y: 0.001, z: 0.001 }
           }
         }
+
       }
+      // Case D (remote top-up): drop already hidden, nothing to change visually
+
     } else {
       PlantData.getMutable(entity).isWatered = false
       PlantData.getMutable(entity).wateredAt = 0

@@ -114,6 +114,8 @@ export enum EntityNames {
   WaterDrop_90 = "WaterDrop_90",
   WaterDrop_95 = "WaterDrop_95",
   WaterDrops = "WaterDrops",
+  WateringCanUI = "WateringCanUI",
+  YellowRose_glb = "YellowRose.glb",
   centerTextBloom = "centerTextBloom",
   centerTextProgress = "centerTextProgress",
   lamppost = "lamppost",

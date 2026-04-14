@@ -370,12 +370,6 @@ export async function server(): Promise<void> {
         return
       }
 
-      // Reject if already watered
-      if (ps.isWatered) {
-        room.send('waterRejected', { plantId, reason: 'already_watered' }, { to: [playerAddress] })
-        return
-      }
-
       // Reject if daily limit reached (test-panel override bypasses this)
       const todayCount = await getPlayerDailyCount(playerAddress)
       if (!testOverrides.has(playerAddress) && todayCount >= DAILY_WATER_LIMIT) {

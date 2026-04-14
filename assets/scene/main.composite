@@ -2407,6 +2407,489 @@
               "y": 0,
               "z": 0
             },
+            "scale": {
+              "x": 1,
+              "y": 1,
+              "z": 1
+            },
+            "rotation": {
+              "x": 0,
+              "y": 0,
+              "z": 0,
+              "w": 1
+            },
+            "parent": 0
+          }
+        },
+        "625": {
+          "json": {
+            "position": {
+              "x": 8,
+              "y": 0,
+              "z": 24
+            },
+            "scale": {
+              "x": 1,
+              "y": 1,
+              "z": 1
+            },
+            "rotation": {
+              "x": 0,
+              "y": 0,
+              "z": 0,
+              "w": 1
+            },
+            "parent": 624
+          }
+        },
+        "626": {
+          "json": {
+            "position": {
+              "x": 8,
+              "y": 0,
+              "z": 24
+            },
+            "scale": {
+              "x": 1,
+              "y": 1,
+              "z": 1
+            },
+            "rotation": {
+              "x": 0,
+              "y": 0,
+              "z": 0,
+              "w": 1
+            },
+            "parent": 624
+          }
+        },
+        "627": {
+          "json": {
+            "position": {
+              "x": 8,
+              "y": 0,
+              "z": 24
+            },
+            "scale": {
+              "x": 1,
+              "y": 1,
+              "z": 1
+            },
+            "rotation": {
+              "x": 0,
+              "y": 0,
+              "z": 0,
+              "w": 1
+            },
+            "parent": 624
+          }
+        },
+        "628": {
+          "json": {
+            "position": {
+              "x": 8,
+              "y": 0,
+              "z": 24
+            },
+            "scale": {
+              "x": 1,
+              "y": 1,
+              "z": 1
+            },
+            "rotation": {
+              "x": 0,
+              "y": 0,
+              "z": 0,
+              "w": 1
+            },
+            "parent": 624
+          }
+        },
+        "629": {
+          "json": {
+            "position": {
+              "x": 8,
+              "y": 0,
+              "z": 24
+            },
+            "scale": {
+              "x": 1,
+              "y": 1,
+              "z": 1
+            },
+            "rotation": {
+              "x": 0,
+              "y": 0,
+              "z": 0,
+              "w": 1
+            },
+            "parent": 624
+          }
+        },
+        "630": {
+          "json": {
+            "position": {
+              "x": 8,
+              "y": 0,
+              "z": 24
+            },
+            "scale": {
+              "x": 1,
+              "y": 1,
+              "z": 1
+            },
+            "rotation": {
+              "x": 0,
+              "y": 0,
+              "z": 0,
+              "w": 1
+            },
+            "parent": 624
+          }
+        },
+        "631": {
+          "json": {
+            "position": {
+              "x": 8,
+              "y": 0,
+              "z": 24
+            },
+            "scale": {
+              "x": 1,
+              "y": 1,
+              "z": 1
+            },
+            "rotation": {
+              "x": 0,
+              "y": 0,
+              "z": 0,
+              "w": 1
+            },
+            "parent": 624
+          }
+        },
+        "632": {
+          "json": {
+            "position": {
+              "x": 8,
+              "y": 0,
+              "z": 24
+            },
+            "scale": {
+              "x": 1,
+              "y": 1,
+              "z": 1
+            },
+            "rotation": {
+              "x": 0,
+              "y": 0,
+              "z": 0,
+              "w": 1
+            },
+            "parent": 624
+          }
+        },
+        "633": {
+          "json": {
+            "position": {
+              "x": 8,
+              "y": 0,
+              "z": 24
+            },
+            "scale": {
+              "x": 1,
+              "y": 1,
+              "z": 1
+            },
+            "rotation": {
+              "x": 0,
+              "y": 0,
+              "z": 0,
+              "w": 1
+            },
+            "parent": 624
+          }
+        },
+        "634": {
+          "json": {
+            "position": {
+              "x": 8,
+              "y": 0,
+              "z": 24
+            },
+            "scale": {
+              "x": 1,
+              "y": 1,
+              "z": 1
+            },
+            "rotation": {
+              "x": 0,
+              "y": 0,
+              "z": 0,
+              "w": 1
+            },
+            "parent": 624
+          }
+        },
+        "635": {
+          "json": {
+            "position": {
+              "x": 8,
+              "y": 0,
+              "z": 24
+            },
+            "scale": {
+              "x": 1,
+              "y": 1,
+              "z": 1
+            },
+            "rotation": {
+              "x": 0,
+              "y": 0,
+              "z": 0,
+              "w": 1
+            },
+            "parent": 624
+          }
+        },
+        "636": {
+          "json": {
+            "position": {
+              "x": 8,
+              "y": 0,
+              "z": 24
+            },
+            "scale": {
+              "x": 1,
+              "y": 1,
+              "z": 1
+            },
+            "rotation": {
+              "x": 0,
+              "y": 0,
+              "z": 0,
+              "w": 1
+            },
+            "parent": 624
+          }
+        },
+        "637": {
+          "json": {
+            "position": {
+              "x": 8,
+              "y": 0,
+              "z": 24
+            },
+            "scale": {
+              "x": 1,
+              "y": 1,
+              "z": 1
+            },
+            "rotation": {
+              "x": 0,
+              "y": 0,
+              "z": 0,
+              "w": 1
+            },
+            "parent": 624
+          }
+        },
+        "638": {
+          "json": {
+            "position": {
+              "x": 8,
+              "y": 0,
+              "z": 24
+            },
+            "scale": {
+              "x": 1,
+              "y": 1,
+              "z": 1
+            },
+            "rotation": {
+              "x": 0,
+              "y": 0,
+              "z": 0,
+              "w": 1
+            },
+            "parent": 624
+          }
+        },
+        "639": {
+          "json": {
+            "position": {
+              "x": 8,
+              "y": 0,
+              "z": 24
+            },
+            "scale": {
+              "x": 1,
+              "y": 1,
+              "z": 1
+            },
+            "rotation": {
+              "x": 0,
+              "y": 0,
+              "z": 0,
+              "w": 1
+            },
+            "parent": 624
+          }
+        },
+        "640": {
+          "json": {
+            "position": {
+              "x": 8,
+              "y": 0,
+              "z": 24
+            },
+            "scale": {
+              "x": 1,
+              "y": 1,
+              "z": 1
+            },
+            "rotation": {
+              "x": 0,
+              "y": 0,
+              "z": 0,
+              "w": 1
+            },
+            "parent": 624
+          }
+        },
+        "641": {
+          "json": {
+            "position": {
+              "x": 8,
+              "y": 0,
+              "z": 24
+            },
+            "scale": {
+              "x": 1,
+              "y": 1,
+              "z": 1
+            },
+            "rotation": {
+              "x": 0,
+              "y": 0,
+              "z": 0,
+              "w": 1
+            },
+            "parent": 624
+          }
+        },
+        "642": {
+          "json": {
+            "position": {
+              "x": 8,
+              "y": 0,
+              "z": 24
+            },
+            "scale": {
+              "x": 1,
+              "y": 1,
+              "z": 1
+            },
+            "rotation": {
+              "x": 0,
+              "y": 0,
+              "z": 0,
+              "w": 1
+            },
+            "parent": 624
+          }
+        },
+        "643": {
+          "json": {
+            "position": {
+              "x": 8,
+              "y": 0,
+              "z": 24
+            },
+            "scale": {
+              "x": 1,
+              "y": 1,
+              "z": 1
+            },
+            "rotation": {
+              "x": 0,
+              "y": 0,
+              "z": 0,
+              "w": 1
+            },
+            "parent": 624
+          }
+        },
+        "644": {
+          "json": {
+            "position": {
+              "x": 8,
+              "y": 0,
+              "z": 24
+            },
+            "scale": {
+              "x": 1,
+              "y": 1,
+              "z": 1
+            },
+            "rotation": {
+              "x": 0,
+              "y": 0,
+              "z": 0,
+              "w": 1
+            },
+            "parent": 624
+          }
+        },
+        "645": {
+          "json": {
+            "position": {
+              "x": 8,
+              "y": 0,
+              "z": 24
+            },
+            "scale": {
+              "x": 1,
+              "y": 1,
+              "z": 1
+            },
+            "rotation": {
+              "x": 0,
+              "y": 0,
+              "z": 0,
+              "w": 1
+            },
+            "parent": 624
+          }
+        },
+        "646": {
+          "json": {
+            "position": {
+              "x": 6.25,
+              "y": 0,
+              "z": 4.5
+            },
+            "scale": {
+              "x": 1,
+              "y": 1,
+              "z": 1
+            },
+            "rotation": {
+              "x": 0,
+              "y": 0,
+              "z": 0,
+              "w": 1
+            },
+            "parent": 0
+          }
+        },
+        "647": {
+          "json": {
+            "position": {
+              "x": 6,
+              "y": 0,
+              "z": 6.5
+            },
             "rotation": {
               "x": 0,
               "y": 0,
@@ -2419,447 +2902,6 @@
               "z": 1
             },
             "parent": 0
-          }
-        },
-        "625": {
-          "json": {
-            "position": {
-              "x": 8,
-              "y": 0,
-              "z": 24
-            },
-            "rotation": {
-              "x": 0,
-              "y": 0,
-              "z": 0,
-              "w": 1
-            },
-            "scale": {
-              "x": 1,
-              "y": 1,
-              "z": 1
-            },
-            "parent": 624
-          }
-        },
-        "626": {
-          "json": {
-            "position": {
-              "x": 8,
-              "y": 0,
-              "z": 24
-            },
-            "rotation": {
-              "x": 0,
-              "y": 0,
-              "z": 0,
-              "w": 1
-            },
-            "scale": {
-              "x": 1,
-              "y": 1,
-              "z": 1
-            },
-            "parent": 624
-          }
-        },
-        "627": {
-          "json": {
-            "position": {
-              "x": 8,
-              "y": 0,
-              "z": 24
-            },
-            "rotation": {
-              "x": 0,
-              "y": 0,
-              "z": 0,
-              "w": 1
-            },
-            "scale": {
-              "x": 1,
-              "y": 1,
-              "z": 1
-            },
-            "parent": 624
-          }
-        },
-        "628": {
-          "json": {
-            "position": {
-              "x": 8,
-              "y": 0,
-              "z": 24
-            },
-            "rotation": {
-              "x": 0,
-              "y": 0,
-              "z": 0,
-              "w": 1
-            },
-            "scale": {
-              "x": 1,
-              "y": 1,
-              "z": 1
-            },
-            "parent": 624
-          }
-        },
-        "629": {
-          "json": {
-            "position": {
-              "x": 8,
-              "y": 0,
-              "z": 24
-            },
-            "rotation": {
-              "x": 0,
-              "y": 0,
-              "z": 0,
-              "w": 1
-            },
-            "scale": {
-              "x": 1,
-              "y": 1,
-              "z": 1
-            },
-            "parent": 624
-          }
-        },
-        "630": {
-          "json": {
-            "position": {
-              "x": 8,
-              "y": 0,
-              "z": 24
-            },
-            "rotation": {
-              "x": 0,
-              "y": 0,
-              "z": 0,
-              "w": 1
-            },
-            "scale": {
-              "x": 1,
-              "y": 1,
-              "z": 1
-            },
-            "parent": 624
-          }
-        },
-        "631": {
-          "json": {
-            "position": {
-              "x": 8,
-              "y": 0,
-              "z": 24
-            },
-            "rotation": {
-              "x": 0,
-              "y": 0,
-              "z": 0,
-              "w": 1
-            },
-            "scale": {
-              "x": 1,
-              "y": 1,
-              "z": 1
-            },
-            "parent": 624
-          }
-        },
-        "632": {
-          "json": {
-            "position": {
-              "x": 8,
-              "y": 0,
-              "z": 24
-            },
-            "rotation": {
-              "x": 0,
-              "y": 0,
-              "z": 0,
-              "w": 1
-            },
-            "scale": {
-              "x": 1,
-              "y": 1,
-              "z": 1
-            },
-            "parent": 624
-          }
-        },
-        "633": {
-          "json": {
-            "position": {
-              "x": 8,
-              "y": 0,
-              "z": 24
-            },
-            "rotation": {
-              "x": 0,
-              "y": 0,
-              "z": 0,
-              "w": 1
-            },
-            "scale": {
-              "x": 1,
-              "y": 1,
-              "z": 1
-            },
-            "parent": 624
-          }
-        },
-        "634": {
-          "json": {
-            "position": {
-              "x": 8,
-              "y": 0,
-              "z": 24
-            },
-            "rotation": {
-              "x": 0,
-              "y": 0,
-              "z": 0,
-              "w": 1
-            },
-            "scale": {
-              "x": 1,
-              "y": 1,
-              "z": 1
-            },
-            "parent": 624
-          }
-        },
-        "635": {
-          "json": {
-            "position": {
-              "x": 8,
-              "y": 0,
-              "z": 24
-            },
-            "rotation": {
-              "x": 0,
-              "y": 0,
-              "z": 0,
-              "w": 1
-            },
-            "scale": {
-              "x": 1,
-              "y": 1,
-              "z": 1
-            },
-            "parent": 624
-          }
-        },
-        "636": {
-          "json": {
-            "position": {
-              "x": 8,
-              "y": 0,
-              "z": 24
-            },
-            "rotation": {
-              "x": 0,
-              "y": 0,
-              "z": 0,
-              "w": 1
-            },
-            "scale": {
-              "x": 1,
-              "y": 1,
-              "z": 1
-            },
-            "parent": 624
-          }
-        },
-        "637": {
-          "json": {
-            "position": {
-              "x": 8,
-              "y": 0,
-              "z": 24
-            },
-            "rotation": {
-              "x": 0,
-              "y": 0,
-              "z": 0,
-              "w": 1
-            },
-            "scale": {
-              "x": 1,
-              "y": 1,
-              "z": 1
-            },
-            "parent": 624
-          }
-        },
-        "638": {
-          "json": {
-            "position": {
-              "x": 8,
-              "y": 0,
-              "z": 24
-            },
-            "rotation": {
-              "x": 0,
-              "y": 0,
-              "z": 0,
-              "w": 1
-            },
-            "scale": {
-              "x": 1,
-              "y": 1,
-              "z": 1
-            },
-            "parent": 624
-          }
-        },
-        "639": {
-          "json": {
-            "position": {
-              "x": 8,
-              "y": 0,
-              "z": 24
-            },
-            "rotation": {
-              "x": 0,
-              "y": 0,
-              "z": 0,
-              "w": 1
-            },
-            "scale": {
-              "x": 1,
-              "y": 1,
-              "z": 1
-            },
-            "parent": 624
-          }
-        },
-        "640": {
-          "json": {
-            "position": {
-              "x": 8,
-              "y": 0,
-              "z": 24
-            },
-            "rotation": {
-              "x": 0,
-              "y": 0,
-              "z": 0,
-              "w": 1
-            },
-            "scale": {
-              "x": 1,
-              "y": 1,
-              "z": 1
-            },
-            "parent": 624
-          }
-        },
-        "641": {
-          "json": {
-            "position": {
-              "x": 8,
-              "y": 0,
-              "z": 24
-            },
-            "rotation": {
-              "x": 0,
-              "y": 0,
-              "z": 0,
-              "w": 1
-            },
-            "scale": {
-              "x": 1,
-              "y": 1,
-              "z": 1
-            },
-            "parent": 624
-          }
-        },
-        "642": {
-          "json": {
-            "position": {
-              "x": 8,
-              "y": 0,
-              "z": 24
-            },
-            "rotation": {
-              "x": 0,
-              "y": 0,
-              "z": 0,
-              "w": 1
-            },
-            "scale": {
-              "x": 1,
-              "y": 1,
-              "z": 1
-            },
-            "parent": 624
-          }
-        },
-        "643": {
-          "json": {
-            "position": {
-              "x": 8,
-              "y": 0,
-              "z": 24
-            },
-            "rotation": {
-              "x": 0,
-              "y": 0,
-              "z": 0,
-              "w": 1
-            },
-            "scale": {
-              "x": 1,
-              "y": 1,
-              "z": 1
-            },
-            "parent": 624
-          }
-        },
-        "644": {
-          "json": {
-            "position": {
-              "x": 8,
-              "y": 0,
-              "z": 24
-            },
-            "rotation": {
-              "x": 0,
-              "y": 0,
-              "z": 0,
-              "w": 1
-            },
-            "scale": {
-              "x": 1,
-              "y": 1,
-              "z": 1
-            },
-            "parent": 624
-          }
-        },
-        "645": {
-          "json": {
-            "position": {
-              "x": 8,
-              "y": 0,
-              "z": 24
-            },
-            "rotation": {
-              "x": 0,
-              "y": 0,
-              "z": 0,
-              "w": 1
-            },
-            "scale": {
-              "x": 1,
-              "y": 1,
-              "z": 1
-            },
-            "parent": 624
           }
         }
       }
@@ -4533,6 +4575,60 @@
               }
             ]
           }
+        },
+        "647": {
+          "json": {
+            "states": [
+              {
+                "clip": "Close",
+                "playing": false,
+                "weight": 1,
+                "speed": 1,
+                "loop": false,
+                "shouldReset": false
+              },
+              {
+                "clip": "CloseIdle",
+                "playing": false,
+                "weight": 1,
+                "speed": 1,
+                "loop": false,
+                "shouldReset": false
+              },
+              {
+                "clip": "ClosePlay",
+                "playing": false,
+                "weight": 1,
+                "speed": 1,
+                "loop": false,
+                "shouldReset": false
+              },
+              {
+                "clip": "Open",
+                "playing": false,
+                "weight": 1,
+                "speed": 1,
+                "loop": false,
+                "shouldReset": false
+              },
+              {
+                "clip": "OpenIdle",
+                "playing": false,
+                "weight": 1,
+                "speed": 1,
+                "loop": false,
+                "shouldReset": false
+              },
+              {
+                "clip": "Play",
+                "playing": false,
+                "weight": 1,
+                "speed": 1,
+                "loop": false,
+                "shouldReset": false
+              }
+            ]
+          }
         }
       }
     },
@@ -5272,6 +5368,13 @@
             "visibleMeshesCollisionMask": 0,
             "invisibleMeshesCollisionMask": 3
           }
+        },
+        "647": {
+          "json": {
+            "src": "assets/scene/Models/YellowRose/YellowRose.glb",
+            "visibleMeshesCollisionMask": 0,
+            "invisibleMeshesCollisionMask": 3
+          }
         }
       }
     },
@@ -5940,6 +6043,79 @@
               }
             }
           }
+        },
+        "646": {
+          "json": {
+            "material": {
+              "$case": "pbr",
+              "pbr": {
+                "texture": {
+                  "tex": {
+                    "$case": "texture",
+                    "texture": {
+                      "src": "assets/scene/Images/WateringCanRender.png",
+                      "wrapMode": 0,
+                      "filterMode": 0
+                    }
+                  }
+                },
+                "alphaTest": 0.5,
+                "castShadows": true,
+                "alphaTexture": {
+                  "tex": {
+                    "$case": "texture",
+                    "texture": {
+                      "src": "",
+                      "wrapMode": 0,
+                      "filterMode": 0
+                    }
+                  }
+                },
+                "emissiveTexture": {
+                  "tex": {
+                    "$case": "texture",
+                    "texture": {
+                      "src": "",
+                      "wrapMode": 0,
+                      "filterMode": 0
+                    }
+                  }
+                },
+                "bumpTexture": {
+                  "tex": {
+                    "$case": "texture",
+                    "texture": {
+                      "src": "",
+                      "wrapMode": 0,
+                      "filterMode": 0
+                    }
+                  }
+                },
+                "albedoColor": {
+                  "r": 1,
+                  "g": 1,
+                  "b": 1,
+                  "a": 1
+                },
+                "emissiveColor": {
+                  "r": 1,
+                  "g": 1,
+                  "b": 1
+                },
+                "reflectivityColor": {
+                  "r": 1,
+                  "g": 1,
+                  "b": 1
+                },
+                "transparencyMode": 4,
+                "metallic": 0.5,
+                "roughness": 0.5,
+                "specularIntensity": 1,
+                "emissiveIntensity": 0,
+                "directIntensity": 1
+              }
+            }
+          }
         }
       }
     },
@@ -6140,6 +6316,15 @@
               "box": {}
             }
           }
+        },
+        "646": {
+          "json": {
+            "collisionMask": 1,
+            "mesh": {
+              "$case": "plane",
+              "plane": {}
+            }
+          }
         }
       }
     },
@@ -6233,6 +6418,16 @@
           }
         },
         "562": {
+          "json": {
+            "mesh": {
+              "$case": "plane",
+              "plane": {
+                "uvs": []
+              }
+            }
+          }
+        },
+        "646": {
           "json": {
             "mesh": {
               "$case": "plane",
@@ -6916,6 +7111,16 @@
           "json": {
             "value": "WaterDrop_100"
           }
+        },
+        "646": {
+          "json": {
+            "value": "WateringCanUI"
+          }
+        },
+        "647": {
+          "json": {
+            "value": "YellowRose.glb"
+          }
         }
       }
     },
@@ -7267,7 +7472,7 @@
         "serializationType": "map"
       },
       "data": {
-        "645": {
+        "647": {
           "json": {
             "gizmo": 0
           }
@@ -7386,7 +7591,9 @@
                   599,
                   612,
                   613,
-                  624
+                  624,
+                  646,
+                  647
                 ]
               },
               {
@@ -7399,6 +7606,7 @@
               },
               {
                 "entity": 533,
+                "open": true,
                 "children": [
                   535,
                   536,
@@ -7993,6 +8201,14 @@
               {
                 "entity": 645,
                 "children": []
+              },
+              {
+                "entity": 646,
+                "children": []
+              },
+              {
+                "entity": 647,
+                "children": []
               }
             ]
           }
@@ -8416,6 +8632,12 @@
           "json": {}
         },
         "645": {
+          "json": {}
+        },
+        "646": {
+          "json": {}
+        },
+        "647": {
           "json": {}
         }
       }
@@ -9406,6 +9628,33 @@
             ],
             "helpTooltip": {
               "text": "Enter a Discord server URL to open when the item is clicked."
+            },
+            "version": 2
+          }
+        },
+        "646": {
+          "json": {
+            "isBasicViewEnabled": true,
+            "componentName": "",
+            "fields": [],
+            "assetId": "37460a1e-affc-4f87-b725-118cc11d86fc",
+            "label": "Image",
+            "sections": [
+              {
+                "id": "texture",
+                "items": [
+                  {
+                    "component": "core::Material",
+                    "widget": "FileUploadField",
+                    "label": "Path",
+                    "path": "material.pbr.texture.tex.texture.src",
+                    "props": {}
+                  }
+                ]
+              }
+            ],
+            "helpTooltip": {
+              "text": "Upload a .png or .jpg image file, or paste a URL to use as a texture on this item."
             },
             "version": 2
           }

@@ -41,6 +41,10 @@ let bannerOffsetY = 0   // slide-in from top
 let bannerOffsetX = 0   // wiggle
 let wiggleGen     = 0   // cancel stale wiggle chains
 
+// Waters counter
+let waterUsed  = 0
+let waterLimit = 5   // overwritten by updateWaterCount once server syncs
+
 function animateBannerIn(): void {
   const STEPS   = 10
   const STEP_MS = 25
@@ -143,6 +147,12 @@ export function updatePlayerCount(n: number): void {
   playerCount = n
 }
 
+/** Update the top-left waters-remaining counter. */
+export function updateWaterCount(used: number, limit: number): void {
+  waterUsed  = used
+  waterLimit = limit
+}
+
 // ---------------------------------------------------------------
 // Layout constants  (virtual canvas 1920 × 1080)
 // ---------------------------------------------------------------
@@ -210,10 +220,29 @@ const GARDEN_TITLE_FONT = 10
 const SIDE_PILL_PAD_Y   = 5   // vertical padding inside the dark pill
 const SIDE_PILL_GAP     = 6   // gap between pill and bar
 const SIDE_PILL_H       = PLAYER_COUNT_H + 4 + GARDEN_TITLE_H + 4 + SIDE_LABEL_H + SIDE_PILL_PAD_Y * 2
-const SIDE_TOTAL_H      = SIDE_PILL_H + SIDE_PILL_GAP + SIDE_H
+
+// Watering can image — sits above the dark pill
+const WATERING_CAN_SRC  = 'assets/scene/Images/WateringCanRender.png'
+const CAN_IMG_SIZE       = 72    // square display size
+const CAN_IMG_GAP        = 8     // gap between image and dark pill
+const CAN_BADGE_SIZE     = 26    // count badge diameter
+const CAN_BADGE_FONT     = 13
+
+const SIDE_COL_W    = Math.max(SIDE_W, CAN_IMG_SIZE)   // 72 — column wide enough for image
+const SIDE_TOTAL_H  = CAN_IMG_SIZE + CAN_IMG_GAP + SIDE_PILL_H + SIDE_PILL_GAP + SIDE_H
 const SIDE_RIGHT_PAD  = 44    // distance from right edge
-const SIDE_LEFT       = 1920 - SIDE_RIGHT_PAD - SIDE_W
+const SIDE_LEFT       = 1920 - SIDE_RIGHT_PAD - SIDE_COL_W
 const SIDE_TOP        = Math.round((1080 - SIDE_TOTAL_H) / 2)
+
+// ── Top-left waters counter ───────────────────────────────────
+const WATER_CTR_TOP      = 28    // same top as banner
+const WATER_CTR_LEFT     = 28
+const WATER_CTR_H        = 52
+const WATER_CTR_W        = 132
+const WATER_CTR_ICON_SZ  = 34
+const WATER_CTR_FONT     = 19
+const WATER_CTR_PAD_X    = 12
+const WATER_CTR_GAP      = 8    // gap between icon and text
 
 // Tick marks (match the 3D boards: 25%, 50%, 80%)
 const TICK_W           = SIDE_W + 10   // slightly wider than bar (overhangs 5px each side)
@@ -282,6 +311,9 @@ function uiComponent() {
   // Two lines whenever health subtext is shown (all non-bloom states)
   const bannerH      = healthLine ? BANNER_H_COUNTDOWN : BANNER_H_SINGLE
 
+  // Waters remaining
+  const watersLeft  = Math.max(0, waterLimit - waterUsed)
+
   // Side bar fill — grows from bottom, minimum SIDE_FILL_MIN px when health > 0
   const fillH       = bannerHealth > 0 ? Math.max(SIDE_FILL_MIN, Math.round(bannerHealth * SIDE_H)) : 0
   const fillTop     = SIDE_H - fillH   // top offset within track (bottom-anchored)
@@ -299,6 +331,34 @@ function uiComponent() {
 
       {/* ── Test Panel ─────────────────────────────────────────── */}
       <TestPanelUi />
+
+      {/* ── Waters remaining — top-left corner ─────────────────── */}
+      <UiEntity
+        uiTransform={{
+          positionType:   'absolute',
+          position:       { top: WATER_CTR_TOP, left: WATER_CTR_LEFT },
+          width:          WATER_CTR_W,
+          height:         WATER_CTR_H,
+          flexDirection:  'row',
+          alignItems:     'center',
+          justifyContent: 'center',
+          padding:        { left: WATER_CTR_PAD_X, right: WATER_CTR_PAD_X },
+        }}
+        uiBackground={{ color: DARK }}
+      >
+        <UiEntity
+          uiTransform={{ width: WATER_CTR_ICON_SZ, height: WATER_CTR_ICON_SZ, flexShrink: 0 }}
+          uiBackground={{ textureMode: 'stretch', texture: { src: WATERING_CAN_SRC }, color: Color4.White() }}
+        />
+        <UiEntity uiTransform={{ width: WATER_CTR_GAP, flexShrink: 0 }} />
+        <Label
+          value={`${watersLeft}/${waterLimit}`}
+          fontSize={WATER_CTR_FONT}
+          color={WHITE}
+          textAlign="middle-left"
+          uiTransform={{ flexGrow: 1, height: '100%' }}
+        />
+      </UiEntity>
 
       {/* ═══════════════════════════════════════════════════════════
           TOP BANNER — always dark, compact, player-dismissible
@@ -368,12 +428,44 @@ function uiComponent() {
         uiTransform={{
           positionType:   'absolute',
           position:       { top: SIDE_TOP, left: SIDE_LEFT },
-          width:          SIDE_W,
+          width:          SIDE_COL_W,
           height:         SIDE_TOTAL_H,
           flexDirection:  'column',
           alignItems:     'center',
         }}
       >
+        {/* Watering can image + waters-left badge */}
+        <UiEntity
+          uiTransform={{ width: CAN_IMG_SIZE, height: CAN_IMG_SIZE, flexShrink: 0, positionType: 'relative' }}
+        >
+          {/* Can image fills the wrapper */}
+          <UiEntity
+            uiTransform={{ positionType: 'absolute', position: { top: 0, left: 0 }, width: CAN_IMG_SIZE, height: CAN_IMG_SIZE }}
+            uiBackground={{ textureMode: 'stretch', texture: { src: WATERING_CAN_SRC }, color: Color4.White() }}
+          />
+          {/* Count badge — bottom-right corner */}
+          <UiEntity
+            uiTransform={{
+              positionType:   'absolute',
+              position:       { top: CAN_IMG_SIZE - CAN_BADGE_SIZE, left: CAN_IMG_SIZE - CAN_BADGE_SIZE },
+              width:          CAN_BADGE_SIZE,
+              height:         CAN_BADGE_SIZE,
+              alignItems:     'center',
+              justifyContent: 'center',
+            }}
+            uiBackground={{ color: DARK }}
+          >
+            <Label
+              value={`${watersLeft}`}
+              fontSize={CAN_BADGE_FONT}
+              color={WHITE}
+              textAlign="middle-center"
+              uiTransform={{ width: '100%', height: '100%' }}
+            />
+          </UiEntity>
+        </UiEntity>
+        <UiEntity uiTransform={{ width: SIDE_COL_W, height: CAN_IMG_GAP, flexShrink: 0 }} />
+
         {/* Dark pill — player count + title + % */}
         <UiEntity
           uiTransform={{
