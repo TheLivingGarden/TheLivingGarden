@@ -23,6 +23,7 @@ import {
   FAST_PLANT_EXPIRY_MS,
   FAST_PLANT_NAMES,
   BLOOM_RESET_DELAY_MS,
+  BLOOM_SUSTAIN_MS,
   BLOOM_WINDOWS,
 } from '../shared/config'
 
@@ -176,36 +177,57 @@ function getWateredCount(): number {
 }
 
 // ── Sustained-health bloom trigger ───────────────────────────
-/** How long health must stay ≥ BLOOM_THRESHOLD before bloom fires. */
-const BLOOM_SUSTAIN_MS = 60_000
 
-let bloomSustainTimer: ReturnType<typeof setTimeout> | null = null
+let bloomSustainTimer:     ReturnType<typeof setTimeout> | null = null
+let bloomSustainStartedAt: number | null = null   // wall-clock ms when current run began
+let bloomSustainElapsedMs: number        = 0      // ms accumulated before current run
 
+/** Pause the sustain countdown (health dipped below threshold).
+ *  Preserves elapsed time so the timer resumes from where it left off. */
+function pauseBloomSustain(): void {
+  if (bloomSustainTimer !== null) {
+    clearTimeout(bloomSustainTimer)
+    bloomSustainTimer = null
+    if (bloomSustainStartedAt !== null) {
+      bloomSustainElapsedMs += Date.now() - bloomSustainStartedAt
+      bloomSustainStartedAt  = null
+    }
+    console.log(`[Server] Bloom sustain paused — ${Math.round(bloomSustainElapsedMs / 1_000)}s elapsed so far`)
+  }
+}
+
+/** Full reset — called when bloom fires or garden resets. */
 function cancelBloomSustain(): void {
   if (bloomSustainTimer !== null) {
     clearTimeout(bloomSustainTimer)
     bloomSustainTimer = null
-    console.log('[Server] Bloom sustain timer cancelled — health dropped below threshold')
   }
+  bloomSustainStartedAt = null
+  bloomSustainElapsedMs = 0
 }
 
 /** Call after any change to watered count.
- *  Starts the 60 s countdown when health ≥ threshold; cancels it if health falls back. */
+ *  Resumes (or starts) the sustain countdown when health ≥ threshold;
+ *  pauses it — without resetting — if health dips below. */
 function checkBloomThreshold(): void {
   if (bloomActive) return
   const count = getWateredCount()
   if (count >= BLOOM_THRESHOLD) {
     if (bloomSustainTimer === null) {
-      console.log(`[Server] Health ${count}/${BLOOM_THRESHOLD} ≥ threshold — bloom fires in ${BLOOM_SUSTAIN_MS / 1_000}s if sustained`)
+      const remaining = BLOOM_SUSTAIN_MS - bloomSustainElapsedMs
+      bloomSustainStartedAt = Date.now()
+      console.log(`[Server] Health ${count}/${BLOOM_THRESHOLD} ≥ threshold — bloom fires in ${Math.ceil(remaining / 1_000)}s (${Math.round(bloomSustainElapsedMs / 1_000)}s already elapsed)`)
       bloomSustainTimer = setTimeout(() => {
         executeTask(async () => {
-          bloomSustainTimer = null
+          bloomSustainTimer     = null
+          bloomSustainStartedAt = null
+          bloomSustainElapsedMs = 0
           if (!bloomActive && getWateredCount() >= BLOOM_THRESHOLD) triggerBloom()
         })
-      }, BLOOM_SUSTAIN_MS)
+      }, remaining)
     }
   } else {
-    cancelBloomSustain()
+    pauseBloomSustain()
   }
 }
 
@@ -259,9 +281,9 @@ function scheduleExpiry(
       await savePlantStates()
       room.send('plantStateUpdate', { plantId, isWatered: false, wateredAt: 0, wateredBy: '' })
       console.log(`[Server] Plant expired: ${plantId}`)
-      // Only cancel — expiry events must not start the sustain timer.
-      // The timer should only begin from active watering events.
-      if (getWateredCount() < BLOOM_THRESHOLD) cancelBloomSustain()
+      // Pause (not cancel) — preserves elapsed progress; timer resumes when health recovers.
+      // Expiry must never start the sustain timer, only pause it.
+      if (getWateredCount() < BLOOM_THRESHOLD) pauseBloomSustain()
     })
   }, delayMs)
 }
@@ -453,6 +475,34 @@ export async function server(): Promise<void> {
   // ── Message: forceBloom ─────────────────────────────────────
   onRoomMessage<Record<string, never>>('forceBloom', async (_data, _address) => {
     triggerBloom()
+  })
+
+  // ── Message: forceWater80 (test panel) ──────────────────────
+  onRoomMessage<Record<string, never>>('forceWater80', async (_data, _address) => {
+    if (bloomActive) return
+    const needed = Math.max(0, BLOOM_THRESHOLD - getWateredCount())
+    if (needed === 0) {
+      console.log('[Server] forceWater80: already at/above threshold')
+      return
+    }
+    const now = Date.now()
+    let watered = 0
+    for (const [plantId, entity] of plantEntities) {
+      if (watered >= needed) break
+      const ps = PlantSync.getOrNull(entity)
+      if (ps && !ps.isWatered) {
+        const mutable     = PlantSync.getMutable(entity)
+        mutable.isWatered = true
+        mutable.wateredAt = now
+        wateredByMap.set(plantId, '[Test Mode]')
+        scheduleExpiry(plantId, entity, now, FAST_PLANT_NAMES.has(plantId) ? FAST_PLANT_EXPIRY_MS : WATERED_EXPIRY_MS)
+        room.send('plantStateUpdate', { plantId, isWatered: true, wateredAt: now, wateredBy: '[Test Mode]' })
+        watered++
+      }
+    }
+    if (watered > 0) await savePlantStates()
+    console.log(`[Server] forceWater80: watered ${watered} plants (${getWateredCount()}/${BLOOM_THRESHOLD} total)`)
+    checkBloomThreshold()
   })
 
   // ── Message: requestFullSync ─────────────────────────────────

@@ -555,20 +555,20 @@
         "534": {
           "json": {
             "position": {
-              "x": 5.519545555114746,
-              "y": -0.7041280269622803,
+              "x": 5.812947750091553,
+              "y": -0.7880269885063171,
               "z": 23.912195205688477
+            },
+            "rotation": {
+              "x": -0.13493484258651733,
+              "y": -0.7298657298088074,
+              "z": -0.1516256481409073,
+              "w": 0.6527620553970337
             },
             "scale": {
               "x": 1,
               "y": 1,
               "z": 1
-            },
-            "rotation": {
-              "x": -0.15765193104743958,
-              "y": -0.6921501755714417,
-              "z": -0.15641887485980988,
-              "w": 0.6867365837097168
             },
             "parent": 0
           }
@@ -851,18 +851,18 @@
             "position": {
               "x": 5.642045021057129,
               "y": 0,
-              "z": 16.071706771850586
-            },
-            "scale": {
-              "x": 1,
-              "y": 1,
-              "z": 1
+              "z": 16.14828109741211
             },
             "rotation": {
               "x": 0,
               "y": 0.23697859048843384,
               "z": 0,
               "w": 0.971514880657196
+            },
+            "scale": {
+              "x": 1,
+              "y": 1,
+              "z": 1
             },
             "parent": 0
           }
@@ -2405,7 +2405,7 @@
             "position": {
               "x": 6.25,
               "y": 0,
-              "z": 4.5
+              "z": 23
             },
             "scale": {
               "x": 1,
@@ -2546,48 +2546,6 @@
             },
             "parent": 533
           }
-        },
-        "656": {
-          "json": {
-            "position": {
-              "x": 0.5604848861694336,
-              "y": 0.13999998569488525,
-              "z": 0.3724861145019531
-            },
-            "rotation": {
-              "x": 0,
-              "y": 0,
-              "z": 0,
-              "w": 1
-            },
-            "scale": {
-              "x": 1,
-              "y": 1,
-              "z": 1
-            },
-            "parent": 657
-          }
-        },
-        "657": {
-          "json": {
-            "position": {
-              "x": 8.75,
-              "y": 0.5602221488952637,
-              "z": 13
-            },
-            "rotation": {
-              "x": 0,
-              "y": 0,
-              "z": 0,
-              "w": 1
-            },
-            "scale": {
-              "x": 1,
-              "y": 1,
-              "z": 1
-            },
-            "parent": 0
-          }
         }
       }
     },
@@ -2678,12 +2636,6 @@
           "json": {
             "networkId": 0,
             "entityId": 8013
-          }
-        },
-        "656": {
-          "json": {
-            "networkId": 0,
-            "entityId": 8014
           }
         }
       }
@@ -5224,13 +5176,6 @@
             "visibleMeshesCollisionMask": 0,
             "invisibleMeshesCollisionMask": 3
           }
-        },
-        "657": {
-          "json": {
-            "src": "assets/scene/Models/Beanbag/Beanbag.glb",
-            "visibleMeshesCollisionMask": 0,
-            "invisibleMeshesCollisionMask": 3
-          }
         }
       }
     },
@@ -6892,16 +6837,6 @@
           "json": {
             "value": "FastPlant_6"
           }
-        },
-        "656": {
-          "json": {
-            "value": "Sit Spot_13"
-          }
-        },
-        "657": {
-          "json": {
-            "value": "Black Chair"
-          }
         }
       }
     },
@@ -7105,22 +7040,6 @@
               }
             ]
           }
-        },
-        "657": {
-          "json": {
-            "pointerEvents": [
-              {
-                "eventType": 1,
-                "eventInfo": {
-                  "button": 1,
-                  "hoverText": "Sit Here",
-                  "maxDistance": 10,
-                  "showFeedback": true,
-                  "showHighlight": true
-                }
-              }
-            ]
-          }
         }
       }
     },
@@ -7224,13 +7143,6 @@
               2709697014
             ]
           }
-        },
-        "656": {
-          "json": {
-            "componentIds": [
-              2709697014
-            ]
-          }
         }
       }
     },
@@ -7276,7 +7188,7 @@
         "serializationType": "map"
       },
       "data": {
-        "656": {
+        "534": {
           "json": {
             "gizmo": 1
           }
@@ -7395,8 +7307,7 @@
                   599,
                   612,
                   613,
-                  646,
-                  657
+                  646
                 ]
               },
               {
@@ -7409,7 +7320,6 @@
               },
               {
                 "entity": 533,
-                "open": true,
                 "children": [
                   535,
                   536,
@@ -7927,17 +7837,6 @@
               {
                 "entity": 652,
                 "children": []
-              },
-              {
-                "entity": 656,
-                "children": []
-              },
-              {
-                "entity": 657,
-                "open": true,
-                "children": [
-                  656
-                ]
               }
             ]
           }
@@ -8316,12 +8215,6 @@
           "json": {}
         },
         "652": {
-          "json": {}
-        },
-        "656": {
-          "json": {}
-        },
-        "657": {
           "json": {}
         }
       }
@@ -9341,30 +9234,6 @@
               "text": "Upload a .png or .jpg image file, or paste a URL to use as a texture on this item."
             },
             "version": 2
-          }
-        },
-        "656": {
-          "json": {
-            "isBasicViewEnabled": false,
-            "componentName": "Sit Spot",
-            "fields": [],
-            "assetId": "51c9fa4a-4317-4be5-a6e2-21643b793414",
-            "helpTooltip": {
-              "text": "Configure the sit spot's hover text and actions. Players can click to sit here. The spot tracks whether it's free or taken and shows a message when occupied."
-            },
-            "version": 1
-          }
-        },
-        "657": {
-          "json": {
-            "isBasicViewEnabled": false,
-            "componentName": "Chair",
-            "fields": [],
-            "assetId": "51c9fa4a-4317-4be5-a6e2-21643b793414",
-            "helpTooltip": {
-              "text": "A chair that players can sit on. Click to sit down at this location."
-            },
-            "version": 1
           }
         }
       }
@@ -10841,65 +10710,6 @@
               }
             ]
           }
-        },
-        "656": {
-          "json": {
-            "id": 36,
-            "value": [
-              {
-                "name": "Move here",
-                "type": "move_player_here",
-                "jsonPayload": "{}"
-              },
-              {
-                "name": "Sit anim1",
-                "type": "play_default_emote",
-                "jsonPayload": "{\"emote\":\"sittingChair1\"}"
-              },
-              {
-                "name": "Mark as taken",
-                "type": "set_state",
-                "jsonPayload": "{\"state\":\"Taken\"}"
-              },
-              {
-                "name": "Mark as free",
-                "type": "set_state",
-                "jsonPayload": "{\"state\":\"Free\"}",
-                "allowedInBasicView": true
-              },
-              {
-                "name": "Sit Here",
-                "type": "batch",
-                "jsonPayload": "{\"actions\":[\"Move here\",\"Mark as taken\",\"Random sit anim\"]}",
-                "allowedInBasicView": true
-              },
-              {
-                "name": "Sit anim2",
-                "type": "play_default_emote",
-                "jsonPayload": "{\"emote\":\"sittingChair2\"}"
-              },
-              {
-                "name": "Random sit anim",
-                "type": "random",
-                "jsonPayload": "{\"actions\":[\"Sit anim1\",\"Sit anim2\"]}"
-              },
-              {
-                "name": "Print text",
-                "type": "show_text",
-                "jsonPayload": "{\"text\":\"Seat is taken\",\"hideAfterSeconds\":2,\"font\":0,\"fontSize\":40,\"textAlign\":7}"
-              },
-              {
-                "name": "Hide text",
-                "type": "hide_text",
-                "jsonPayload": "{}"
-              },
-              {
-                "name": "Show text",
-                "type": "batch",
-                "jsonPayload": "{\"actions\":[\"Hide text\",\"Print text\"]}"
-              }
-            ]
-          }
         }
       }
     },
@@ -10923,7 +10733,7 @@
         "0": {
           "json": {
             "id": 0,
-            "value": 37
+            "value": 39
           }
         }
       }
@@ -11825,69 +11635,6 @@
               }
             ]
           }
-        },
-        "656": {
-          "json": {
-            "value": [
-              {
-                "type": "on_player_leaves_area",
-                "conditions": [
-                  {
-                    "id": 37,
-                    "type": "when_state_is",
-                    "value": "Taken"
-                  }
-                ],
-                "operation": "and",
-                "actions": [
-                  {
-                    "id": 36,
-                    "name": "Mark as free"
-                  }
-                ]
-              }
-            ]
-          }
-        },
-        "657": {
-          "json": {
-            "value": [
-              {
-                "type": "on_input_action",
-                "conditions": [
-                  {
-                    "id": 37,
-                    "type": "when_state_is",
-                    "value": "Free"
-                  }
-                ],
-                "operation": "and",
-                "actions": [
-                  {
-                    "id": 36,
-                    "name": "Sit Here"
-                  }
-                ]
-              },
-              {
-                "type": "on_input_action",
-                "conditions": [
-                  {
-                    "id": 37,
-                    "type": "when_state_is",
-                    "value": "Taken"
-                  }
-                ],
-                "operation": "and",
-                "actions": [
-                  {
-                    "id": 36,
-                    "name": "Show text"
-                  }
-                ]
-              }
-            ]
-          }
         }
       }
     },
@@ -12049,16 +11796,6 @@
         "573": {
           "json": {
             "id": 28,
-            "value": [
-              "Free",
-              "Taken"
-            ],
-            "defaultValue": "Free"
-          }
-        },
-        "656": {
-          "json": {
-            "id": 37,
             "value": [
               "Free",
               "Taken"

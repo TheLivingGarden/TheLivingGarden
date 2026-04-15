@@ -12,6 +12,11 @@ import {
   getUseClickbox,
   resetAllPlants,
   forceTriggerBloom,
+  forceWaterToThreshold,
+  forceStartPlayerTrail,
+  forceStopPlayerTrail,
+  forceStartBloomFlower,
+  forceStopBloomFlower,
   getWateringStatus,
 } from './wateringSystem'
 import { isBloomActive } from './bloomSystem'
@@ -23,6 +28,7 @@ const WARN_BG    = Color4.create(0.22, 0.16, 0.03, 0.90)
 const BTN_ON     = Color4.create(0.13, 0.50, 0.26, 1.0)   // green — active
 const BTN_OFF    = Color4.create(0.20, 0.20, 0.24, 1.0)   // grey  — inactive
 const BTN_DANGER = Color4.create(0.46, 0.15, 0.15, 1.0)   // red
+const BTN_WATER  = Color4.create(0.10, 0.38, 0.52, 1.0)   // teal
 const BTN_BLOOM  = Color4.create(0.36, 0.16, 0.48, 1.0)   // purple
 const DIVIDER    = Color4.create(0.22, 0.22, 0.26, 1.0)
 const WHITE      = Color4.White()
@@ -36,12 +42,14 @@ const PANEL_W      = 390
 const PANEL_LEFT   = 1920 - PANEL_W - 20   // 1510
 const PANEL_TOP    = 20
 const HEADER_H     = 46
-const PANEL_H_OPEN = 380
+const PANEL_H_OPEN = 547
 
 // ── Panel state ──────────────────────────────────────────────────
 let panelOpen     = false
 let overrideLimit = false                  // mirrors overrideDailyLimit
 let clickboxMode  = getUseClickbox()       // mirrors useClickbox
+let trailActive   = false                  // sparkle trail toggle
+let flowerActive  = false                  // plant-in-hand toggle
 
 // ── Helpers ──────────────────────────────────────────────────────
 
@@ -186,11 +194,47 @@ export function TestPanelUi() {
         </UiEntity>
 
         <UiEntity
+          uiTransform={{ width: '100%', height: 34, alignItems: 'center', justifyContent: 'center', margin: { bottom: 5 } }}
+          uiBackground={{ color: BTN_WATER }}
+          onMouseDown={forceWaterToThreshold}
+        >
+          <Label value="Water 80% of Plants" fontSize={12} color={WHITE} textAlign="middle-center" />
+        </UiEntity>
+
+        <UiEntity
           uiTransform={{ width: '100%', height: 34, alignItems: 'center', justifyContent: 'center', margin: { bottom: 8 } }}
           uiBackground={{ color: BTN_BLOOM }}
           onMouseDown={forceTriggerBloom}
         >
           <Label value="Force Bloom Now" fontSize={12} color={WHITE} textAlign="middle-center" />
+        </UiEntity>
+
+        {/* Divider */}
+        <UiEntity uiTransform={{ width: '100%', height: 1, margin: { bottom: 8 } }} uiBackground={{ color: DIVIDER }} />
+
+        {/* ── Post-Bloom Effects ────────────────────────────────── */}
+        <Label value="POST-BLOOM EFFECTS" fontSize={10} color={MUTED} uiTransform={{ margin: { bottom: 6 } }} />
+
+        <UiEntity uiTransform={{ width: '100%', height: 40, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', margin: { bottom: 6 } }}>
+          <Label value="Sparkle Trail" fontSize={12} color={WHITE} uiTransform={{ flexGrow: 1 }} />
+          <ToggleButton
+            value={trailActive}
+            onChange={v => {
+              trailActive = v
+              if (v) forceStartPlayerTrail(); else forceStopPlayerTrail()
+            }}
+          />
+        </UiEntity>
+
+        <UiEntity uiTransform={{ width: '100%', height: 40, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', margin: { bottom: 6 } }}>
+          <Label value="Plant in Hand" fontSize={12} color={WHITE} uiTransform={{ flexGrow: 1 }} />
+          <ToggleButton
+            value={flowerActive}
+            onChange={v => {
+              flowerActive = v
+              if (v) forceStartBloomFlower(); else forceStopBloomFlower()
+            }}
+          />
         </UiEntity>
 
         {/* Divider */}

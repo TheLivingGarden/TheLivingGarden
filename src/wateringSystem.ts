@@ -45,11 +45,13 @@ import { setupProgressBars, updateProgressBars }              from './progressBa
 import { setupGroundLights, updateGroundLights, triggerGroundLightBurst }                       from './groundLightSystem'
 import { setupLeaderboardBoards, updateLeaderboardDisplay }   from './leaderboardSystem'
 import { setupFairyLights, setFairyLightsBloom }             from './fairyLightSystem'
-import { showToast, showDailyLimit, hideDailyLimit, showPersistent, hidePersistent, showBannerIdle, showBannerCountdown, updateBannerCountdown, showBannerBloom, updateBannerHealth, updatePlayerCount, updateWaterCount, formatBloomCountdown, formatDailyLimitMessage, getMsUntilBloom, setNextBloomLocalTime } from './notifications'
+import { showToast, showDailyLimit, hideDailyLimit, showPersistent, hidePersistent, showBannerIdle, showBannerCountdown, updateBannerCountdown, showBannerBloom, updateBannerHealth, updatePlayerCount, updateWaterCount, triggerCanErrorEffect, formatBloomCountdown, formatDailyLimitMessage, getMsUntilBloom, setNextBloomLocalTime } from './notifications'
 import { clockSync } from './shared/clockSync'
 import { movePlayerTo, triggerSceneEmote }  from '~system/RestrictedActions'
 import { room }                             from './shared/messages'
-import { TOTAL_PLANTS, BLOOM_THRESHOLD, DAILY_WATER_LIMIT, PLANT_NAMES, FAST_PLANT_NAMES, FAST_PLANT_EXPIRY_MS } from './shared/config'
+import { TOTAL_PLANTS, BLOOM_THRESHOLD, BLOOM_SUSTAIN_MS, BLOOM_CENTER, DAILY_WATER_LIMIT, PLANT_NAMES, FAST_PLANT_NAMES, FAST_PLANT_EXPIRY_MS } from './shared/config'
+import { setupPlayerTrailSystem, startPlayerTrail, stopPlayerTrail } from './playerTrailSystem'
+import { startBloomFlower, stopBloomFlower } from './bloomFlowerSystem'
 
 // ===============================================================
 // ██████╗ ██████╗ ███╗   ██╗███████╗██╗ ██████╗
@@ -128,9 +130,14 @@ const FONT_WATERED_BY     = 1.2  // "Watered by" label above each plant
 const WATERED_BY_Y        = 2.5  // local Y above plant pivot
 // TextShape has no emissiveIntensity — colour only.
 const TEXT_LABEL_COLOR    = { r: 1.0, g: 0.78, b: 0.5, a: 1 }  // gold/amber
-const WATERED_BY_COLOR    = { r: 1.0, g: 0.95, b: 0.8, a: 1 }  // soft warm white
+const WATERED_BY_COLOR    = { r: 1.0, g: 0.95, b: 0.8, a: 1 }  // soft warm white / cream
 const SCALE_PCT_LABEL   = 0.6   // uniform scale applied to Image_2–5 + wateringPercentage
 const SCALE_BLOOM_LABEL = 1.4   // uniform scale applied to Image_6–9
+
+// ── Contributor thank-you label (above bloom model during the bloom event) ───
+const CONTRIBUTOR_LABEL_FONT = 1.5      // world-space font size
+const CONTRIBUTOR_LABEL_Y    = 5.5      // world-space Y (above bloom model)
+const CONTRIBUTOR_DISPLAY_MS = 15_000   // ms each player name is shown
 
 // ── Timers & durations ────────────────────────────────────────
 const WELCOME_DELAY_MS        = 1_500    // wait for server sync before first welcome toast
@@ -184,6 +191,8 @@ let magicSoundIdx = 0
 let playerWateredToday      = 0
 let dailyLimitReached       = false
 let lastLimitNotificationMs = 0
+let lastBlockedClickMs      = 0         // throttle for blocked-click feedback (wiggle / toast)
+const BLOCKED_CLICK_COOLDOWN_MS = 750   // ms — min gap between repeated blocked-click feedback
 
 // Tracks optimistic client-side waters awaiting server confirmation.
 // wasTopUp=true  → plant was already watered; rollback restores prevWateredAt
@@ -201,6 +210,10 @@ const SYNC_REQUEST_MIN_MS = 5_000   // don't flood server with requestFullSync o
 
 const wateredByLabelMap = new Map<Entity, Entity>()
 const wateredByNames    = new Map<Entity, string>()   // entity → display name
+
+const bloomContributors = new Set<string>()           // unique waterer names this bloom cycle
+let   contributorLabelEntity: Entity | null = null
+let   contributorLabelGen = 0
 const entityPlantId     = new Map<Entity, string>()   // entity → plantId (for expiry lookup)
 
 /** plant entity → its UnhealthyRose entity */
@@ -265,13 +278,18 @@ function setVisible(entity: Entity | null, visible: boolean) {
 
 function updateSceneAssets() {
   resolveSceneAssets()
-  // Show bloom state whenever threshold is met OR bloom has been force-triggered
-  const bloomMode = isBloomActive() || computeWateredCount() >= BLOOM_THRESHOLD
+  // Show bloom state whenever: bloom active, threshold currently met, OR countdown
+  // was previously unlocked this cycle (keeps labels visible while paused below threshold)
+  const aboveThreshold = computeWateredCount() >= BLOOM_THRESHOLD
+  const bloomMode = isBloomActive() || aboveThreshold || countdownUnlocked
   setVisible(_centerTextBloom,    bloomMode)
   setVisible(_centerTextProgress, !bloomMode)
   setVisible(percentageEntity, !bloomMode)
   for (const e of wateringLabels) setVisible(e, !bloomMode)
-  if (bloomMode && !isBloomActive()) setBloomLabelText(formatBloomCountdown(runtimeTestMode))
+  if (bloomMode && !isBloomActive()) {
+    // Only refresh label text when above threshold; below threshold = frozen (paused)
+    if (aboveThreshold) setBloomLabelText(formatSustainCountdown())
+  }
 }
 
 // ---------------------------------------------------------------
@@ -293,21 +311,74 @@ function clearBloomLabels() {
   }
 }
 
+// ── Contributor thank-you label — cycles through waterer names during bloom ──
+
+/** Show "The Living Garden Blooms / Thanks to <name>" for each contributor in turn.
+ *  Each name is visible for CONTRIBUTOR_DISPLAY_MS, then the next appears.
+ *  Label hides automatically after the final name. */
+function startContributorCycle(names: string[]): void {
+  if (!contributorLabelEntity || names.length === 0) return
+  const myGen = ++contributorLabelGen
+  let i = 0
+  function showNext(): void {
+    if (contributorLabelGen !== myGen) {
+      if (contributorLabelEntity) TextShape.getMutable(contributorLabelEntity).text = ''
+      return
+    }
+    TextShape.getMutable(contributorLabelEntity!).text =
+      `The Living Garden Blooms\nThanks to ${names[i]}`
+    i++
+    if (i < names.length) {
+      timers.setTimeout(showNext, CONTRIBUTOR_DISPLAY_MS)
+    } else {
+      // All names shown — hide after the final display period
+      timers.setTimeout(() => {
+        if (contributorLabelGen !== myGen) return
+        TextShape.getMutable(contributorLabelEntity!).text = ''
+      }, CONTRIBUTOR_DISPLAY_MS)
+    }
+  }
+  showNext()
+}
+
+function stopContributorCycle(): void {
+  contributorLabelGen++
+  if (contributorLabelEntity) TextShape.getMutable(contributorLabelEntity).text = ''
+}
+
 // ── Pre-bloom ticker — counts down while health >= threshold, bloom not yet active ──
 let preBloomTickerGen = 0
+// Set when threshold is first crossed this cycle; keeps bloom labels visible (paused)
+// even if health briefly dips below.  Cleared only on bloomReset.
+let countdownUnlocked = false
+
+// ── Client-side 60 s sustain countdown ───────────────────────
+// Mirrors the server's pauseable sustain timer so the 3D labels show
+// exactly how long until bloom fires (not the scheduled window time).
+let clientSustainStartMs:  number | null = null   // wall-clock ms when current run started
+let clientSustainElapsedMs: number       = 0      // ms accumulated across paused segments
+
+function formatSustainCountdown(): string {
+  const elapsed     = clientSustainElapsedMs
+                    + (clientSustainStartMs !== null ? Date.now() - clientSustainStartMs : 0)
+  const remainingMs = Math.max(0, BLOOM_SUSTAIN_MS - elapsed)
+  return `${Math.ceil(remainingMs / 1_000)}s`
+}
+
+function resetClientSustain(): void {
+  clientSustainStartMs  = null
+  clientSustainElapsedMs = 0
+}
 
 function startPreBloomTicker(): void {
   if (runtimeTestMode) return
   const myGen = ++preBloomTickerGen
   function tick() {
-    if (preBloomTickerGen !== myGen) return        // cancelled (bloom started)
-    if (isBloomActive()) return                    // bloom took over — bloom updater handles text
-    const countdown = formatBloomCountdown(false)
-    updateBannerCountdown(countdown)               // always keep top banner in sync
-    if (computeWateredCount() >= BLOOM_THRESHOLD) {
-      setBloomLabelText(countdown)                 // 3D labels only when above threshold
-    }
-    // When countdown hits 0 server is about to fire bloomTriggered — keep ticking until it does
+    if (preBloomTickerGen !== myGen) return   // cancelled — bloom fired or health dropped
+    if (isBloomActive()) return               // bloom took over; bloom updater handles labels
+    const countdown = formatSustainCountdown()
+    updateBannerCountdown(countdown)          // keep banner in sync
+    setBloomLabelText(countdown)              // ticker only runs while health ≥ threshold
     timers.setTimeout(tick, BLOOM_LABEL_TICK_MS)
   }
   timers.setTimeout(tick, BLOOM_LABEL_TICK_MS)
@@ -343,7 +414,10 @@ function updateProgressText() {
   // Banner state: idle below threshold, countdown at/above threshold (unless bloom active)
   if (!isBloomActive()) {
     if (count >= BLOOM_THRESHOLD) {
-      const countdown = formatBloomCountdown(runtimeTestMode)
+      countdownUnlocked = true   // latches on; only cleared by bloomReset
+      // Resume (or start) the client sustain clock
+      if (clientSustainStartMs === null) clientSustainStartMs = Date.now()
+      const countdown = formatSustainCountdown()
       showBannerCountdown(countdown)
       setBloomLabelText(countdown)
       startPreBloomTicker()   // keeps banner + 3D labels ticking every second
@@ -354,12 +428,18 @@ function updateProgressText() {
         startPreBloomEffects(getMsUntilBloom())
       }
     } else {
+      // Pause the sustain clock — preserve elapsed so countdown resumes from same point
+      if (clientSustainStartMs !== null) {
+        clientSustainElapsedMs += Date.now() - clientSustainStartMs
+        clientSustainStartMs    = null
+      }
       if (preBloomEffectsActive) {
         preBloomEffectsActive = false
         cancelPreBloom(true)   // threshold dropped — stop FX + fireflies
       }
-      stopPreBloomTicker()
-      showBannerIdle()
+      stopPreBloomTicker()   // ticker stops; 3D labels and banner freeze at last value
+      // Only show idle banner if countdown was never started this cycle
+      if (!countdownUnlocked) showBannerIdle()
     }
   }
   updateSceneAssets()
@@ -377,7 +457,6 @@ const plantRegistry     = new Map<Entity, { clickTarget: Entity; plantName: stri
 const plantNameToEntity = new Map<string, Entity>()
 
 function enablePlantClick(entity: Entity) {
-  if (!overrideDailyLimit && dailyLimitReached) return
   const info = plantRegistry.get(entity)
   if (!info) return
   pointerEventsSystem.onPointerDown(
@@ -399,9 +478,7 @@ function disablePlantClick(entity: Entity) {
 
 function onDailyLimitReached() {
   dailyLimitReached = true
-  for (const [entity] of plantRegistry) {
-    if (!PlantData.get(entity).isWatered) disablePlantClick(entity)
-  }
+  triggerCanErrorEffect()   // scale-up + shake to signal the limit has been reached
   updateProgressText()
 }
 
@@ -409,9 +486,6 @@ export function resetDailyLimit(): void {
   playerWateredToday = 0
   dailyLimitReached  = false
   hideDailyLimit()
-  for (const [entity] of plantRegistry) {
-    if (!PlantData.get(entity).isWatered) enablePlantClick(entity)
-  }
   updateProgressText()
   console.log('[TEST] Daily limit reset to 0')
 }
@@ -562,18 +636,30 @@ function waterPlant(entity: Entity, plantId: string) {
   if (isBloomActive()) return
   if (emoteActive)     return
 
-  const pd = PlantData.getMutable(entity)
-  const wasAlreadyWatered = pd.isWatered   // true = top-up, false = fresh water
-  const prevWateredAt     = pd.wateredAt   // used to restore if server rejects top-up
-
-  if (!overrideDailyLimit && playerWateredToday >= dailyWaterLimit) {
+  // Gate: plant already watered — inform without using water or wiggling
+  if (PlantData.get(entity).isWatered) {
     const now = Date.now()
-    if (now - lastLimitNotificationMs > LIMIT_DEBOUNCE_MS) {
-      lastLimitNotificationMs = now
-      showDailyLimit(formatDailyLimitMessage(runtimeTestMode))
+    if (now - lastBlockedClickMs > BLOCKED_CLICK_COOLDOWN_MS) {
+      lastBlockedClickMs = now
+      showToast('This plant is already watered', TOAST_WATERED_MS, false)
     }
     return
   }
+
+  // Gate: daily limit reached — wiggle + inform
+  if (!overrideDailyLimit && playerWateredToday >= dailyWaterLimit) {
+    const now = Date.now()
+    if (now - lastBlockedClickMs > BLOCKED_CLICK_COOLDOWN_MS) {
+      lastBlockedClickMs = now
+      triggerCanErrorEffect()
+      showToast('No daily waters remaining', TOAST_WATERED_MS, false)
+    }
+    return
+  }
+
+  const pd = PlantData.getMutable(entity)
+  const wasAlreadyWatered = false   // top-up path no longer reachable
+  const prevWateredAt     = pd.wateredAt
 
   const now = Date.now()
   pd.isWatered = true
@@ -640,9 +726,12 @@ function waterPlant(entity: Entity, plantId: string) {
   updateProgressText()
   const _pct = Math.round((computeWateredCount() / TOTAL_PLANTS) * 100)
   showToast(`Plant Watered! ${_pct}%`, TOAST_WATERED_MS, true)
-  if (justHitLimit) timers.setTimeout(() => {
-    showDailyLimit(formatDailyLimitMessage(runtimeTestMode))
-  }, TOAST_WATERED_MS)
+  if (justHitLimit) {
+    lastBlockedClickMs = now   // prime throttle so first post-limit click gets feedback
+    timers.setTimeout(() => {
+      showDailyLimit(formatDailyLimitMessage(runtimeTestMode))
+    }, TOAST_WATERED_MS)
+  }
 
   scheduleExpiry(entity, now, plantExpiryMs(plantId))
 }
@@ -830,6 +919,19 @@ export function setupWateringSystem(): void {
     console.log('[WateringSystem] centerTextBloom not found')
   }
 
+  // ── Contributor thank-you label — floats above the bloom model, billboard Y ──
+  contributorLabelEntity = engine.addEntity()
+  Transform.create(contributorLabelEntity, {
+    position: { x: BLOOM_CENTER.x, y: CONTRIBUTOR_LABEL_Y, z: BLOOM_CENTER.z },
+  })
+  Billboard.create(contributorLabelEntity, { billboardMode: BillboardMode.BM_Y })
+  TextShape.create(contributorLabelEntity, {
+    text:         '',
+    fontSize:     CONTRIBUTOR_LABEL_FONT,
+    textColor:    WATERED_BY_COLOR,   // cream / soft warm white
+    textWrapping: false,
+  })
+
   setupLeaderboardBoards()
 
   setupBloomSystem({
@@ -922,6 +1024,7 @@ export function setupWateringSystem(): void {
 
   setupPetalSystem()
   setupSparkleSystem()
+  setupPlayerTrailSystem()
   setupAmbientFX()
   setupFairyLights()
   setupProgressBars()
@@ -1064,8 +1167,12 @@ export function setupWateringSystem(): void {
 
   room.onMessage('bloomTriggered', () => {
     stopWateringEmote()
+    stopPreBloomTicker()   // stop immediately — prevents stale "1s" from being re-written
+    resetClientSustain()   // sustain complete — bloom is firing
+    showBannerBloom()      // switch banner from countdown → bloom before visual effects ramp up
     if (!isBloomActive()) {
       triggerBloomEvent()
+      startContributorCycle([...bloomContributors])   // thank each waterer in turn
       updateSceneAssets()
     }
   })
@@ -1073,8 +1180,14 @@ export function setupWateringSystem(): void {
   room.onMessage('bloomReset', () => {
     stopPreBloomTicker()
     preBloomEffectsActive = false
+    countdownUnlocked = false   // full cycle reset — labels and banner return to idle
+    resetClientSustain()
+    stopContributorCycle()
+    startBloomFlower([...bloomContributors])  // attach hand flower to contributors — must run BEFORE clear()
+    bloomContributors.clear()
     resetAllPlants()         // stops bloom, resets visuals + audio via endBloom()
     startBloomCooldown()     // gradual 5-min wind-down of lights + audio
+    startPlayerTrail()       // 10-min sparkle trail on all players after bloom
     clearBloomLabels()
     showBannerIdle()
     updateBannerHealth(0)
@@ -1104,10 +1217,11 @@ export function setupWateringSystem(): void {
     const pending = pendingWaters.get(data.plantId)
     pendingWaters.delete(data.plantId)
 
-    // Update "Watered by" label
+    // Update "Watered by" label + accumulate bloom contributors
     const wateredByLabel = wateredByLabelMap.get(entity)
     if (data.isWatered && data.wateredBy) {
       wateredByNames.set(entity, data.wateredBy)
+      bloomContributors.add(data.wateredBy)   // tracks everyone who contributed this cycle
     } else {
       wateredByNames.delete(entity)
     }
@@ -1236,12 +1350,6 @@ export function setupWateringSystem(): void {
 export function setOverrideDailyLimit(val: boolean): void {
   overrideDailyLimit = val
   room.send('setTestOverride', { enabled: val })
-  // Re-enable plant clicks that were disabled when the daily limit was hit
-  if (val && dailyLimitReached) {
-    for (const [entity] of plantRegistry) {
-      if (!PlantData.get(entity).isWatered) enablePlantClick(entity)
-    }
-  }
   updateProgressText()
 }
 
@@ -1273,7 +1381,7 @@ export function setUseClickbox(val: boolean): void {
       info.clickboxEntity = null
       info.clickTarget    = plantEntity
     }
-    if (!PlantData.get(plantEntity).isWatered) enablePlantClick(plantEntity)
+    enablePlantClick(plantEntity)
   }
 }
 
@@ -1300,3 +1408,22 @@ export function forceTriggerBloom(): void {
     triggerBloomEvent()
   }
 }
+
+/** Test-panel: asks the server to water exactly enough plants to hit the 80% bloom threshold.
+ *  Plants watered this way use normal expiry and appear as "[Test Mode]" in contributor labels. */
+export function forceWaterToThreshold(): void {
+  if (room.isReady()) room.send('forceWater80', {})
+}
+
+// ── Post-bloom effect test toggles ────────────────────────────
+export function forceStartPlayerTrail(): void { startPlayerTrail() }
+export function forceStopPlayerTrail():  void { stopPlayerTrail()  }
+
+export function forceStartBloomFlower(): void {
+  const lp = getPlayer()
+  const ids: string[] = []
+  if (lp?.name)   ids.push(lp.name)
+  if (lp?.userId) ids.push(lp.userId)
+  startBloomFlower(ids.length > 0 ? ids : ['__test__'])
+}
+export function forceStopBloomFlower(): void { stopBloomFlower() }

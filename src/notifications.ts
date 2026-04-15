@@ -10,7 +10,7 @@
 export {
   showToast, showDailyLimit, hideDailyLimit, showPersistent, hidePersistent,
   showBannerIdle, showBannerCountdown, updateBannerCountdown, showBannerBloom, updateBannerHealth,
-  updatePlayerCount, updateWaterCount,
+  updatePlayerCount, updateWaterCount, triggerCanErrorEffect,
 } from './ui'
 export { setupUi as setupNotifications } from './ui'
 import { BLOOM_WINDOWS } from './shared/config'

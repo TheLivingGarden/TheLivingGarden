@@ -1,5 +1,22 @@
 // =============================================================
 // The Living Garden — Petal Particle System
+//
+// Phase state machine per petal — eliminates all mid-air
+// disappearances and pop-in:
+//
+//   idle  ──► spawning ──► falling ──► grounded ──► shrinking
+//              ▲                                        │
+//              └──────── (relaunch if petalActive) ─────┘
+//
+// Rules:
+//   • Petals materialise gently in-air (spawning: scale 0 → full).
+//   • The ONLY exit from 'falling' is hitting the ground (y ≤ 0).
+//     Petals never teleport or vanish while airborne.
+//   • Grounded petals rest at full scale for PETAL_REST_MS.
+//   • Shrinking petals fade out on the ground over PETAL_SHRINK_MS.
+//   • After shrinking: auto-relaunch if petalActive, else go idle.
+//   • startPetalSettle() cancels any petal still waiting to spawn,
+//     lets every airborne petal land naturally, then idles them.
 // =============================================================
 
 import { engine, Entity, GltfContainer, Transform } from '@dcl/sdk/ecs'
@@ -9,45 +26,67 @@ import { BLOOM_CENTER } from './shared/config'
 // Configuration
 // ---------------------------------------------------------------
 
-const PETAL_COUNT        = 20
+const PETAL_COUNT = 20
 const PETAL_SPAWN_RADIUS = 7
-const PETAL_HEIGHT_MAX   = 9      // max spawn height (m)
-const PETAL_HEIGHT_MIN   = 1      // min spawn height (m)
-const PETAL_FALL_MIN     = 0.4    // m/s min fall speed
-const PETAL_FALL_MAX     = 1.0    // m/s max fall speed
-const PETAL_DRIFT_MAX    = 0.3    // m/s max horizontal drift
-const PETAL_LIFE_MIN_MS  = 3_000
-const PETAL_LIFE_MAX_MS  = 7_000
-const PETAL_SCALE        = 1.5
-const PETAL_REST_MS      = 2_000  // time resting on ground before shrinking
-const PETAL_SHRINK_MS    = 600    // duration of scale-to-zero shrink
+const PETAL_HEIGHT_MAX = 9      // max spawn height (m)
+const PETAL_HEIGHT_MIN = 1      // min spawn height (m)
+const PETAL_FALL_MIN = 0.4    // m/s
+const PETAL_FALL_MAX = 1.0    // m/s
+const PETAL_DRIFT_MAX = 0.3    // m/s max horizontal drift
+const PETAL_SCALE = 1.5
+const GROUND_HEIGHT = 0.3
+
+/** Duration of the gentle scale-in at spawn (ms). */
+const PETAL_SPAWN_MS = 600
+/** Duration the petal rests on the ground at full scale (ms). */
+const PETAL_REST_MS = 2_000
+/** Duration of the ground shrink-out (ms). */
+const PETAL_SHRINK_MS = 700
+
+/** Max pre-spawn stagger on the very first rain call (all petals idle). */
+const STAGGER_FIRST_MS = 2_000
+/** Max pre-spawn stagger when relaunching during ongoing or burst rain. */
+const STAGGER_BURST_MS = 500
+
+// ---------------------------------------------------------------
+// Types
+// ---------------------------------------------------------------
+
+type PetalPhase = 'idle' | 'spawning' | 'falling' | 'grounded' | 'shrinking'
+
+interface PetalState {
+  entity: Entity
+  phase: PetalPhase
+  pos: { x: number; y: number; z: number }
+  vel: { x: number; y: number; z: number }
+  rotY: number
+  rotSpeed: number
+  /** Elapsed ms in the current phase.  Negative = pre-spawn delay
+   *  (petal is ready to enter 'spawning' but waiting for its stagger slot). */
+  phaseMs: number
+}
 
 // ---------------------------------------------------------------
 // State
 // ---------------------------------------------------------------
 
-interface PetalState {
-  entity:      Entity
-  pos:         { x: number; y: number; z: number }
-  vel:         { x: number; y: number; z: number }
-  rotY:        number
-  rotSpeed:    number
-  lifetime:    number   // ms remaining
-  maxLifetime: number   // ms total
-  grounded:    boolean  // true once petal has landed during settle
-  groundedMs:  number   // ms since landing
-}
-
-const petalPool:    PetalState[] = []
-let   petalActive   = false
-let   petalSettling = false
+const petalPool: PetalState[] = []
+let petalActive = false
+let petalSettling = false
 
 // ---------------------------------------------------------------
 // Internal helpers
 // ---------------------------------------------------------------
 
-function randomizePetal(p: PetalState) {
-  const angle  = Math.random() * Math.PI * 2
+function smoothstep(t: number): number {
+  const c = Math.max(0, Math.min(1, t))
+  return c * c * (3 - 2 * c)
+}
+
+/** Re-randomise a petal's position + velocity + rotation and set phase to
+ *  'spawning'.  Caller must set phaseMs for stagger delay (negative = wait). */
+function randomizePetal(p: PetalState): void {
+  const angle = Math.random() * Math.PI * 2
   const radius = Math.random() * PETAL_SPAWN_RADIUS
   p.pos = {
     x: BLOOM_CENTER.x + Math.cos(angle) * radius,
@@ -59,20 +98,18 @@ function randomizePetal(p: PetalState) {
     y: -(PETAL_FALL_MIN + Math.random() * (PETAL_FALL_MAX - PETAL_FALL_MIN)),
     z: (Math.random() - 0.5) * PETAL_DRIFT_MAX * 2,
   }
-  p.rotY        = Math.random() * Math.PI * 2
-  p.rotSpeed    = (Math.random() - 0.5) * 4
-  p.maxLifetime = PETAL_LIFE_MIN_MS + Math.random() * (PETAL_LIFE_MAX_MS - PETAL_LIFE_MIN_MS)
-  p.lifetime    = p.maxLifetime
-  p.grounded    = false
-  p.groundedMs  = 0
+  p.rotY = Math.random() * Math.PI * 2
+  p.rotSpeed = (Math.random() - 0.5) * 4
+  p.phase = 'spawning'
+  p.phaseMs = 0   // caller overrides for stagger
 }
 
 // ---------------------------------------------------------------
 // Public API
 // ---------------------------------------------------------------
 
-/** Call once at scene startup — finds the 'Petal' scene entity, hides it,
- *  and fills the pool with pooled GltfContainer instances ready for bloom. */
+/** Call once at scene startup.  Finds the 'Petal' scene entity, hides it,
+ *  and fills the pool with cloned GltfContainer instances. */
 export function setupPetalSystem(): void {
   const petalSource = engine.getEntityOrNullByName('Petal')
   if (!petalSource) {
@@ -81,9 +118,8 @@ export function setupPetalSystem(): void {
   }
 
   const gltf = GltfContainer.getOrNull(petalSource)
-  const src  = gltf?.src ?? ''
+  const src = gltf?.src ?? ''
 
-  // Hide the original scene entity
   Transform.getMutable(petalSource).scale = { x: 0, y: 0, z: 0 }
 
   for (let i = 0; i < PETAL_COUNT; i++) {
@@ -91,113 +127,150 @@ export function setupPetalSystem(): void {
     GltfContainer.create(ent, { src })
     Transform.create(ent, {
       position: { x: 0, y: -10, z: 0 },
-      scale:    { x: 0, y: 0, z: 0 },     // hidden until bloom
+      scale: { x: 0, y: 0, z: 0 },
     })
     petalPool.push({
-      entity:      ent,
-      pos:         { x: 0, y: -10, z: 0 },
-      vel:         { x: 0, y: -1,  z: 0 },
-      rotY:        0,
-      rotSpeed:    1,
-      lifetime:    0,
-      maxLifetime: PETAL_LIFE_MAX_MS,
-      grounded:    false,
-      groundedMs:  0,
+      entity: ent,
+      phase: 'idle',
+      pos: { x: 0, y: -10, z: 0 },
+      vel: { x: 0, y: -1, z: 0 },
+      rotY: 0,
+      rotSpeed: 1,
+      phaseMs: 0,
     })
   }
 
   console.log(`[Petals] Pool ready — ${PETAL_COUNT} instances from "${src}"`)
 }
 
-/** Start the petal rain (call when bloom triggers).
- *  Safe to call while petals are already falling — in-flight petals are
- *  left alone so they don't teleport. Only parked or grounded petals are
- *  relaunched, giving each call an additive burst rather than a hard reset. */
+/** Start (or re-burst) the petal rain.
+ *  Only idle petals are relaunched — petals in any active phase (spawning,
+ *  falling, grounded, shrinking) are left undisturbed so they don't teleport.
+ *  Active petals auto-relaunch themselves after their shrink cycle. */
 export function startPetalRain(): void {
-  const wasActive = petalActive
-  petalSettling   = false
-  petalActive     = true
+  const firstLaunch = !petalActive && !petalSettling
+  petalSettling = false
+  petalActive = true
   for (const p of petalPool) {
-    // Leave airborne petals alone — they'll continue falling naturally
-    if (wasActive && !p.grounded && p.pos.y > 0) continue
+    if (p.phase !== 'idle') continue
     randomizePetal(p)
-    p.lifetime = Math.random() * p.maxLifetime   // stagger so they don't all spawn at once
-    const t = Transform.getMutable(p.entity)
-    t.scale = { x: PETAL_SCALE, y: PETAL_SCALE, z: PETAL_SCALE }
+    p.phaseMs = -(Math.random() * (firstLaunch ? STAGGER_FIRST_MS : STAGGER_BURST_MS))
   }
 }
 
-/** Begin the settle phase — petals fall to the ground and fade away (call on bloom reset). */
+/** Begin the settle phase — in-flight petals fall to the ground and fade away.
+ *  Petals still in their pre-spawn delay are cancelled immediately. */
 export function startPetalSettle(): void {
-  petalActive   = false
+  petalActive = false
   petalSettling = true
 }
 
-/** ECS system — register with engine.addSystem once at startup. */
+/** ECS system — register once with engine.addSystem at scene startup. */
 export function petalParticleSystem(dt: number): void {
   if (!petalActive && !petalSettling) return
 
-  const dtMs      = dt * 1000
-  let   allSettled = true
+  //const dtMs     = dt * 1_000
+  const dtClamped = Math.min(dt, 0.05) // cap at 50ms
+  const dtMs = dtClamped * 1_000
+  let allSettled = true
 
   for (const p of petalPool) {
-    const t = Transform.getMutable(p.entity)
+    const tf = Transform.getMutable(p.entity)
 
-    // ── Grounded phase (settling only) ───────────────────────────
-    if (p.grounded) {
-      p.groundedMs += dtMs
+    // ── Idle — off-screen, not counted as unsettled ───────────────
+    if (p.phase === 'idle') continue
 
-      if (p.groundedMs >= PETAL_REST_MS + PETAL_SHRINK_MS) {
-        // Fully gone
-        t.scale = { x: 0, y: 0, z: 0 }
-      } else if (p.groundedMs >= PETAL_REST_MS) {
-        // Shrinking — ease out so the last moment lingers
-        const progress = (p.groundedMs - PETAL_REST_MS) / PETAL_SHRINK_MS
-        const s = PETAL_SCALE * (1 - progress * progress)
-        t.scale = { x: s, y: s, z: s }
-        allSettled = false
-      } else {
-        // Resting on the ground — still visible
-        allSettled = false
+    // ── Pre-spawn delay ───────────────────────────────────────────
+    // Petal is 'spawning' but phaseMs < 0 = still waiting in the stagger queue.
+  if (p.phase === 'spawning' && p.phaseMs < 0) {
+  p.phaseMs += dtMs
+  tf.scale    = { x: 0, y: 0, z: 0 }
+  tf.position = { x: 0, y: -10, z: 0 }
+  allSettled  = false
+  continue
+}
+
+    // ── Spawning: gentle scale-in from 0 → PETAL_SCALE ───────────
+    if (p.phase === 'spawning') {
+      allSettled = false
+      p.phaseMs += dtMs
+      const t = Math.min(p.phaseMs / PETAL_SPAWN_MS, 1)
+      const sc = PETAL_SCALE * smoothstep(t)
+      const half = p.rotY * 0.5
+      tf.position = { x: p.pos.x, y: p.pos.y, z: p.pos.z }
+      tf.rotation = { x: 0, y: Math.sin(half), z: 0, w: Math.cos(half) }
+      tf.scale = { x: sc, y: sc, z: sc }
+      if (p.phaseMs >= PETAL_SPAWN_MS) p.phase = 'falling'
+      continue
+    }
+
+    // ── Falling: physics — ONLY exit is hitting the ground ────────
+    if (p.phase === 'falling') {
+      allSettled = false
+      p.pos.x += p.vel.x * dtClamped
+      p.pos.y += p.vel.y * dtClamped
+      p.pos.z += p.vel.z * dtClamped
+      p.rotY += p.rotSpeed * dtClamped
+
+      if (p.pos.y <= GROUND_HEIGHT) {
+        // Land: freeze position on the floor and enter rest phase
+        p.pos.y = GROUND_HEIGHT
+        p.vel = { x: 0, y: 0, z: 0 }
+        p.rotSpeed = 0
+        p.phase = 'grounded'
+        p.phaseMs = 0
+      }
+
+      const half = p.rotY * 0.5
+      tf.position = { x: p.pos.x, y: p.pos.y, z: p.pos.z }
+      tf.rotation = { x: 0, y: Math.sin(half), z: 0, w: Math.cos(half) }
+      tf.scale = { x: PETAL_SCALE, y: PETAL_SCALE, z: PETAL_SCALE }
+      continue
+    }
+
+    // ── Grounded: rest on the floor at full scale ─────────────────
+    if (p.phase === 'grounded') {
+      allSettled = false
+    p.phaseMs = Math.min(p.phaseMs + dtMs, PETAL_REST_MS)
+      //  p.phaseMs += dtMs
+      tf.position = { x: p.pos.x, y: GROUND_HEIGHT, z: p.pos.z }
+      tf.scale = { x: PETAL_SCALE, y: PETAL_SCALE, z: PETAL_SCALE }
+      if (p.phaseMs >= PETAL_REST_MS) {
+        p.phase = 'shrinking'
+        p.phaseMs = 0
       }
       continue
     }
 
-    // ── In-air phase ─────────────────────────────────────────────
-    allSettled  = false
-    p.pos.x    += p.vel.x * dt
-    p.pos.y    += p.vel.y * dt
-    p.pos.z    += p.vel.z * dt
-    p.rotY     += p.rotSpeed * dt
-    p.lifetime -= dtMs
+    // ── Shrinking: fade out on the ground ────────────────────────
+    if (p.phase === 'shrinking') {
+      allSettled = false
+    p.phaseMs = Math.min(p.phaseMs + dtMs, PETAL_SHRINK_MS)
+    //  p.phaseMs += dtMs
+      const t = Math.min(p.phaseMs / PETAL_SHRINK_MS, 1)
+      // Ease-in curve: scale lingers at full size then melts away quickly
+      const sc = PETAL_SCALE * (1 - t * t)
+      tf.position = { x: p.pos.x, y: GROUND_HEIGHT, z: p.pos.z }
+      tf.scale = { x: sc, y: sc, z: sc }
 
-    if (p.pos.y < 0) {
-      if (petalActive) {
-        // Normal rain: respawn above the garden
-        randomizePetal(p)
-      } else {
-        // Settling: land on the floor and begin the rest timer
-        p.pos.y      = 0
-        p.vel        = { x: 0, y: 0, z: 0 }
-        p.rotSpeed   = 0
-        p.grounded   = true
-        p.groundedMs = 0
+      if (p.phaseMs >= PETAL_SHRINK_MS) {
+        tf.scale = { x: 0, y: 0, z: 0 }
+        if (petalActive) {
+          // Continuous rain — relaunch with a small burst stagger for variety
+          randomizePetal(p)
+          p.phaseMs = -(Math.random() * STAGGER_BURST_MS)
+        } else {
+          // Settling — go idle; don't block the allSettled check
+          p.phase = 'idle'
+          tf.position = { x: 0, y: -10, z: 0 }
+        }
       }
-    } else if (petalActive && p.lifetime <= 0) {
-      // Lifetime expired mid-air during normal rain — respawn
-      randomizePetal(p)
+      continue
     }
-
-    // Apply to renderer — rotation as Y-axis quaternion
-    const half = p.rotY * 0.5
-    t.position = { x: p.pos.x, y: p.pos.y, z: p.pos.z }
-    t.rotation = { x: 0, y: Math.sin(half), z: 0, w: Math.cos(half) }
-    t.scale    = { x: PETAL_SCALE, y: PETAL_SCALE, z: PETAL_SCALE }
   }
 
-  // Once every petal has shrunk away, idle the system
   if (petalSettling && allSettled) {
     petalSettling = false
-    console.log('[Petals] all settled')
+    console.log('[Petals] All settled')
   }
 }

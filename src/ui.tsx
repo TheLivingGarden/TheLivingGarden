@@ -45,6 +45,11 @@ let wiggleGen     = 0   // cancel stale wiggle chains
 let waterUsed  = 0
 let waterLimit = 5   // overwritten by updateWaterCount once server syncs
 
+// Watering-can error animation (daily limit hit / attempt while at limit)
+let canWiggleGen     = 0
+let canWiggleOffsetX = 0
+let canErrorScale    = 1   // 1 = normal; 2 = scaled-up error state
+
 function animateBannerIn(): void {
   const STEPS   = 10
   const STEP_MS = 25
@@ -153,6 +158,29 @@ export function updateWaterCount(used: number, limit: number): void {
   waterLimit = limit
 }
 
+/** One-shot error pulse on the watering-can counter.
+ *  Scales the pill to 2× and shakes it horizontally, then resets.
+ *  Safe to call while already animating — bumps the gen to restart. */
+export function triggerCanErrorEffect(): void {
+  canErrorScale = 2
+  const myGen   = ++canWiggleGen
+  const SHAKE   = [0, 8, -8, 6, -6, 4, -4, 2, -2, 0]
+  const STEP_MS = 45
+  let i = 0
+  function step(): void {
+    if (canWiggleGen !== myGen) { canWiggleOffsetX = 0; canErrorScale = 1; return }
+    canWiggleOffsetX = SHAKE[i]
+    i++
+    if (i < SHAKE.length) {
+      timers.setTimeout(step, STEP_MS)
+    } else {
+      canWiggleOffsetX = 0
+      canErrorScale    = 1
+    }
+  }
+  step()
+}
+
 // ---------------------------------------------------------------
 // Layout constants  (virtual canvas 1920 × 1080)
 // ---------------------------------------------------------------
@@ -233,16 +261,6 @@ const SIDE_TOTAL_H  = CAN_IMG_SIZE + CAN_IMG_GAP + SIDE_PILL_H + SIDE_PILL_GAP +
 const SIDE_RIGHT_PAD  = 44    // distance from right edge
 const SIDE_LEFT       = 1920 - SIDE_RIGHT_PAD - SIDE_COL_W
 const SIDE_TOP        = Math.round((1080 - SIDE_TOTAL_H) / 2)
-
-// ── Top-left waters counter ───────────────────────────────────
-const WATER_CTR_TOP      = 28    // same top as banner
-const WATER_CTR_LEFT     = 28
-const WATER_CTR_H        = 52
-const WATER_CTR_W        = 132
-const WATER_CTR_ICON_SZ  = 34
-const WATER_CTR_FONT     = 19
-const WATER_CTR_PAD_X    = 12
-const WATER_CTR_GAP      = 8    // gap between icon and text
 
 // Tick marks (match the 3D boards: 25%, 50%, 80%)
 const TICK_W           = SIDE_W + 10   // slightly wider than bar (overhangs 5px each side)
@@ -332,34 +350,6 @@ function uiComponent() {
       {/* ── Test Panel ─────────────────────────────────────────── */}
       <TestPanelUi />
 
-      {/* ── Waters remaining — top-left corner ─────────────────── */}
-      <UiEntity
-        uiTransform={{
-          positionType:   'absolute',
-          position:       { top: WATER_CTR_TOP, left: WATER_CTR_LEFT },
-          width:          WATER_CTR_W,
-          height:         WATER_CTR_H,
-          flexDirection:  'row',
-          alignItems:     'center',
-          justifyContent: 'center',
-          padding:        { left: WATER_CTR_PAD_X, right: WATER_CTR_PAD_X },
-        }}
-        uiBackground={{ color: DARK }}
-      >
-        <UiEntity
-          uiTransform={{ width: WATER_CTR_ICON_SZ, height: WATER_CTR_ICON_SZ, flexShrink: 0 }}
-          uiBackground={{ textureMode: 'stretch', texture: { src: WATERING_CAN_SRC }, color: Color4.White() }}
-        />
-        <UiEntity uiTransform={{ width: WATER_CTR_GAP, flexShrink: 0 }} />
-        <Label
-          value={`${watersLeft}/${waterLimit}`}
-          fontSize={WATER_CTR_FONT}
-          color={WHITE}
-          textAlign="middle-left"
-          uiTransform={{ flexGrow: 1, height: '100%' }}
-        />
-      </UiEntity>
-
       {/* ═══════════════════════════════════════════════════════════
           TOP BANNER — always dark, compact, player-dismissible
       ══════════════════════════════════════════════════════════════ */}
@@ -427,7 +417,7 @@ function uiComponent() {
       <UiEntity
         uiTransform={{
           positionType:   'absolute',
-          position:       { top: SIDE_TOP, left: SIDE_LEFT },
+          position:       { top: SIDE_TOP, left: SIDE_LEFT + canWiggleOffsetX },
           width:          SIDE_COL_W,
           height:         SIDE_TOTAL_H,
           flexDirection:  'column',
@@ -436,18 +426,18 @@ function uiComponent() {
       >
         {/* Watering can image + waters-left badge */}
         <UiEntity
-          uiTransform={{ width: CAN_IMG_SIZE, height: CAN_IMG_SIZE, flexShrink: 0, positionType: 'relative' }}
+          uiTransform={{ width: CAN_IMG_SIZE * canErrorScale, height: CAN_IMG_SIZE * canErrorScale, flexShrink: 0, positionType: 'relative' }}
         >
           {/* Can image fills the wrapper */}
           <UiEntity
-            uiTransform={{ positionType: 'absolute', position: { top: 0, left: 0 }, width: CAN_IMG_SIZE, height: CAN_IMG_SIZE }}
+            uiTransform={{ positionType: 'absolute', position: { top: 0, left: 0 }, width: CAN_IMG_SIZE * canErrorScale, height: CAN_IMG_SIZE * canErrorScale }}
             uiBackground={{ textureMode: 'stretch', texture: { src: WATERING_CAN_SRC }, color: Color4.White() }}
           />
           {/* Count badge — bottom-right corner */}
           <UiEntity
             uiTransform={{
               positionType:   'absolute',
-              position:       { top: CAN_IMG_SIZE - CAN_BADGE_SIZE, left: CAN_IMG_SIZE - CAN_BADGE_SIZE },
+              position:       { top: CAN_IMG_SIZE * canErrorScale - CAN_BADGE_SIZE, left: CAN_IMG_SIZE * canErrorScale - CAN_BADGE_SIZE },
               width:          CAN_BADGE_SIZE,
               height:         CAN_BADGE_SIZE,
               alignItems:     'center',
