@@ -39,7 +39,7 @@ import { BLOOM_CENTER } from './shared/config'
 // Public constant — used by wateringSystem to know how far ahead to
 // start pre-bloom effects.
 // ---------------------------------------------------------------
-export const PRE_BLOOM_MS = 5 * 60_000
+export const PRE_BLOOM_MS = 60_000 // shorter bloom window to match new trigger conditions
 
 // ---------------------------------------------------------------
 // Cancellation counters
@@ -124,7 +124,7 @@ function petalBurst(): void {
 // ---------------------------------------------------------------
 
 function scheduleNextEffect(gen: number): void {
-  const base = bloomIntensity === 2 ?  8_000
+  const base = bloomIntensity === 2 ?  5_000
              : bloomIntensity === 1 ? 14_000
              :                        22_000
   timers.setTimeout(() => {
@@ -193,31 +193,22 @@ export function startPreBloomEffects(msUntilBloom: number): void {
       startLoops()
     }, loopDelay)
   }
+// 40s out → start building
+at(40_000, () => {
+  setIntensity(1)
+  triggerGroundRipple(BLOOM_CENTER)
+})
 
-  // 120 s out → intensity 1, lampposts → Mid
-  at(120_000, () => {
-    setIntensity(1)
-    triggerGroundRipple(BLOOM_CENTER)
-  })
+// 20s out → peak anticipation
+at(20_000, () => {
+  setIntensity(2)
+  triggerGroundLightBurst()
+})
 
-  // 60 s out — extra push
-  at(60_000, () => {
-    triggerBloomShockwave()
-    triggerGroundLightBurst()
-  })
-
-  // 30 s out → intensity 2, lampposts → High + fast bloom twinkle
-  at(30_000, () => {
-    setIntensity(2)
-    triggerGroundRipple(BLOOM_CENTER)
-    triggerGroundLightBurst()
-  })
-
-  // 10 s out
-  at(10_000, () => {
-    triggerBloomShockwave()
-    triggerGroundLightBurst()
-  })
+// 5s out → final hit
+at(5_000, () => {
+  triggerBloomShockwave()
+})
 
   // Fireflies join ~2 min before
   at(120_000, () => {
@@ -272,33 +263,31 @@ export function startBloomPhases(): void {
   startLoops()
 
   // ── Intensity timeline ───────────────────────────────────────
-  after( 60, () => setIntensity(1))
-  after(180, () => setIntensity(0))
-  after(240, () => setIntensity(1))
-  after(360, () => {
-    setIntensity(2)
-    triggerBloomShockwave()
-    triggerGroundLightBurst()
-  })
-  after(420, () => setIntensity(1))
-  after(540, () => {
-    setIntensity(2)
-    triggerBloomShockwave()
-    triggerGroundLightBurst()
-  })
+ after( 20, () => setIntensity(1))     // was 60
+after( 80, () => setIntensity(0))     // was 180
+after(100, () => setIntensity(1))     // was 240
 
-  // ── Big moment at 360 s — double petal burst ──────────────────
-  after(360, () => {
-    startPetalRain()
-    timers.setTimeout(startPetalRain, 500)
-  })
+after(150, () => {
+  setIntensity(2)
+  triggerBloomShockwave()
+  triggerGroundLightBurst()
+  startPetalRain()
+  timers.setTimeout(startPetalRain, 500)
+})
 
-  // ── Finale sparkle waves ─────────────────────────────────────
-  after(535, () => {
-    const waves = [0, 1200, 2600, 4200]
-    waves.forEach(d => timers.setTimeout(triggerBloomShockwave, jitter(d)))
-  })
-  after(560, () => endBloomSparkles())
+after(180, () => setIntensity(1))     // was 420
+
+after(220, () => {
+  setIntensity(2)
+  triggerBloomShockwave()
+  triggerGroundLightBurst()
+})
+after(230, () => {
+  const waves = [0, 800, 1600, 2400]
+  waves.forEach(d => timers.setTimeout(triggerBloomShockwave, jitter(d)))
+})
+
+after(235, () => endBloomSparkles())
 }
 
 // ---------------------------------------------------------------
@@ -319,26 +308,23 @@ export function startBloomCooldown(): void {
 
   // Phase 1: gentle wind-down with audio still running
   setIntensity(1)
-  step(20, () => triggerGroundRipple(BLOOM_CENTER))
-  step(40, () => triggerGroundRipple(BLOOM_CENTER))
+  step(10, () => triggerGroundRipple(BLOOM_CENTER))
+step(20, () => {
+  setIntensity(0)
+  triggerGroundRipple(BLOOM_CENTER)
+})
 
-  // Phase 2: fade to quiet
-  step(60, () => {
-    setIntensity(0)
-    triggerGroundRipple(BLOOM_CENTER)
-  })
-  step(90,  () => { stopFireflies(); triggerGroundRipple(BLOOM_CENTER) })
-  step(120, () => {
-    setFairyLightsBloom(false)
-    setGroundLightsBloom(false)   // exits bloom flicker mode on all groups
-    triggerGroundRipple(BLOOM_CENTER)
-  })
+step(30, () => {
+  stopFireflies()
+  setFairyLightsBloom(false)
+  setGroundLightsBloom(false)
+})
 
-  // Phase 3: silence — lampposts return to Low, audio off
-  step(180, () => {
-    setBloomAudioIntensity(0)   // ensure pulse is off
-    setLamppostLevel(0)         // lampposts back to Low (normal flicker)
-    bloomIntensity = 0
-  })
-  step(300, () => updateGroundLights(0))   // reset ground circles
+step(45, () => {
+  setBloomAudioIntensity(0)
+  setLamppostLevel(0)
+  bloomIntensity = 0
+})
+
+step(60, () => updateGroundLights(0))
 }

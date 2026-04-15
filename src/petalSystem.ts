@@ -35,7 +35,7 @@ const PETAL_FALL_MAX = 1.0    // m/s
 const PETAL_DRIFT_MAX = 0.3    // m/s max horizontal drift
 const PETAL_SCALE = 1.5
 const GROUND_HEIGHT = 0.3
-
+const PETAL_SETTLE_TIME = 5000
 /** Duration of the gentle scale-in at spawn (ms). */
 const PETAL_SPAWN_MS = 600
 /** Duration the petal rests on the ground at full scale (ms). */
@@ -64,6 +64,7 @@ interface PetalState {
   /** Elapsed ms in the current phase.  Negative = pre-spawn delay
    *  (petal is ready to enter 'spawning' but waiting for its stagger slot). */
   phaseMs: number
+  targetFlip: number
 }
 
 // ---------------------------------------------------------------
@@ -73,7 +74,7 @@ interface PetalState {
 const petalPool: PetalState[] = []
 let petalActive = false
 let petalSettling = false
-
+let time = 0
 // ---------------------------------------------------------------
 // Internal helpers
 // ---------------------------------------------------------------
@@ -102,6 +103,7 @@ function randomizePetal(p: PetalState): void {
   p.rotSpeed = (Math.random() - 0.5) * 4
   p.phase = 'spawning'
   p.phaseMs = 0   // caller overrides for stagger
+p.targetFlip = 0
 }
 
 // ---------------------------------------------------------------
@@ -137,6 +139,7 @@ export function setupPetalSystem(): void {
       rotY: 0,
       rotSpeed: 1,
       phaseMs: 0,
+      targetFlip: 0
     })
   }
 
@@ -167,6 +170,7 @@ export function startPetalSettle(): void {
 
 /** ECS system — register once with engine.addSystem at scene startup. */
 export function petalParticleSystem(dt: number): void {
+  time += dt
   if (!petalActive && !petalSettling) return
 
   //const dtMs     = dt * 1_000
@@ -206,25 +210,59 @@ export function petalParticleSystem(dt: number): void {
 
     // ── Falling: physics — ONLY exit is hitting the ground ────────
     if (p.phase === 'falling') {
+      p.phaseMs += dtMs
       allSettled = false
+      // height factor (1 = high, 0 = near ground)
+const heightT = Math.max(0, Math.min(1, (p.pos.y - GROUND_HEIGHT) / PETAL_HEIGHT_MAX))
+
+// slow down near ground (air drag)
+const fallSpeed = p.vel.y * (0.4 + 0.6 * heightT)
       p.pos.x += p.vel.x * dtClamped
       p.pos.y += p.vel.y * dtClamped
       p.pos.z += p.vel.z * dtClamped
-      p.rotY += p.rotSpeed * dtClamped
+      // slow spin as it gets close to ground
+const groundProximity = Math.max(0, Math.min(1, (p.pos.y - GROUND_HEIGHT) / 2))
 
+const spin = p.rotSpeed * groundProximity
+
+p.rotY += spin * dtClamped
+const wobbleX = Math.sin(time * 2 + p.rotY) * 0.01
+const wobbleZ = Math.cos(time * 1.5 + p.rotY) * 0.01
+
+p.pos.x += wobbleX
+p.pos.z += wobbleZ
       if (p.pos.y <= GROUND_HEIGHT) {
         // Land: freeze position on the floor and enter rest phase
         p.pos.y = GROUND_HEIGHT
         p.vel = { x: 0, y: 0, z: 0 }
-        p.rotSpeed = 0
+        //p.rotSpeed = 0
         p.phase = 'grounded'
         p.phaseMs = 0
+        p.phaseMs = -1000
+       // p.rotY = p.targetFlip
       }
 
-      const half = p.rotY * 0.5
+    //  const half = p.rotY * 0.5
       tf.position = { x: p.pos.x, y: p.pos.y, z: p.pos.z }
-      tf.rotation = { x: 0, y: Math.sin(half), z: 0, w: Math.cos(half) }
+   //   tf.rotation = { x: 0, y: Math.sin(half), z: 0, w: Math.cos(half) }
       tf.scale = { x: PETAL_SCALE, y: PETAL_SCALE, z: PETAL_SCALE }
+      // how close to ground (0 = high, 1 = near ground)
+// how long we've been falling (0 → 1 over time)
+const fallT = Math.min(p.phaseMs / PETAL_SETTLE_TIME, 1)  // ← THIS controls speed
+
+
+
+// slowly rotate to flat over time
+//p.rotY += (0 - p.rotY) * 0.02
+const halfY = p.rotY * 0.5
+
+tf.rotation = {
+  x: 0,
+  y: Math.sin(halfY),
+  z: 0,
+  w: Math.cos(halfY)
+}
+      
       continue
     }
 
@@ -235,10 +273,50 @@ export function petalParticleSystem(dt: number): void {
       //  p.phaseMs += dtMs
       tf.position = { x: p.pos.x, y: GROUND_HEIGHT, z: p.pos.z }
       tf.scale = { x: PETAL_SCALE, y: PETAL_SCALE, z: PETAL_SCALE }
+      // if we are basically settled, force perfect flat
+if (p.phaseMs > 400) {
+  p.rotY = 0
+
+  tf.rotation = {
+    x: 0,
+    y: 0,
+    z: 0,
+    w: 1
+  }
+
+  continue
+}
       if (p.phaseMs >= PETAL_REST_MS) {
         p.phase = 'shrinking'
         p.phaseMs = 0
       }
+// keep easing toward final flat rotation
+p.rotY += (p.targetFlip - p.rotY) * 0.05
+
+// how far through settling we are (0 → 1)
+const settleT = Math.min(Math.max(p.phaseMs / 500, 0), 1)
+
+// tilt fades out completely as it settles
+const tilt = Math.sin(p.rotY * 2) * 0.1 * (1 - settleT)
+
+const halfY = p.rotY * 0.5
+
+tf.rotation = {
+  x: Math.sin(tilt * 0.5),
+  y: Math.sin(halfY),
+  z: Math.cos(tilt * 0.5),
+  w: Math.cos(halfY)
+}
+      /*
+      const halfY = p.rotY * 0.5
+      
+      tf.rotation = {
+        x: 0,
+        y: Math.sin(halfY),
+        z: 0,
+        w: Math.cos(halfY)
+      }
+      */
       continue
     }
 
