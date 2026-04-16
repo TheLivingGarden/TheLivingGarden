@@ -15,7 +15,7 @@ export const BLOOM_THRESHOLD    = Math.ceil(TOTAL_PLANTS * 0.8)
  *  Shared by server (sustain timer) and client (countdown display). */
 export const BLOOM_SUSTAIN_MS   = 60_000
 export const DAILY_WATER_LIMIT  = 8
-export const WATERED_EXPIRY_MS  = 30 * 60 * 1000        // 30 minutes
+export const WATERED_EXPIRY_MS  = 3 * 60 * 1000        // 3 minutes
 export const FAST_PLANT_EXPIRY_MS = 75_000               // 75 seconds
 /** How long after bloom triggers before the server resets all plants.
  *  Matches the 10-min visual bloom so the reset coincides with the post-bloom cooldown start. */

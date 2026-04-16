@@ -204,6 +204,7 @@ let initialLoadDone         = false
 let roomReady               = false
 
 let preBloomEffectsActive = false  // true once startPreBloomEffects has been called for this cycle
+let bloomActive           = false  // true from startBloomPhases() until end of startBloomCooldown()
 let emoteActive          = false
 let lastSyncRequestMs    = 0
 const SYNC_REQUEST_MIN_MS = 5_000   // don't flood server with requestFullSync on rapid reloads
@@ -412,7 +413,7 @@ function updateProgressText() {
   updateBannerHealth(count / TOTAL_PLANTS)
   updateWaterCount(playerWateredToday, dailyWaterLimit)
   // Banner state: idle below threshold, countdown at/above threshold (unless bloom active)
-  if (!isBloomActive()) {
+  if (!isBloomActive() && !bloomActive) {
     if (count >= BLOOM_THRESHOLD) {
       countdownUnlocked = true   // latches on; only cleared by bloomReset
       // Resume (or start) the client sustain clock
@@ -956,6 +957,7 @@ export function setupWateringSystem(): void {
 
       // All VFX, audio, petals, and lights driven by intensity system
       startBloomPhases()
+      bloomActive = true
     },
   })
 
@@ -1187,6 +1189,7 @@ export function setupWateringSystem(): void {
     bloomContributors.clear()
     resetAllPlants()         // stops bloom, resets visuals + audio via endBloom()
     startBloomCooldown()     // gradual 5-min wind-down of lights + audio
+    timers.setTimeout(() => { bloomActive = false }, 65_000)  // matches step(60) — last cooldown step
     startPlayerTrail()       // 10-min sparkle trail on all players after bloom
     clearBloomLabels()
     showBannerIdle()

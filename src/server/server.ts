@@ -37,7 +37,8 @@ const playerAddresses = new Map<Entity, string>()    // entity → address (for 
 const testOverrides   = new Set<string>()            // addresses with daily-limit bypass (test panel)
 const syncRateLimits  = new Map<string, number>()    // address → last requestFullSync ms
 const SYNC_RATE_MS    = 5_000                        // min ms between full syncs per player
-let   bloomActive    = false
+let   bloomActive      = false
+let   countdownPaused  = false
 
 // ── Leaderboard ──────────────────────────────────────────────
 interface LeaderboardEntry { displayName: string; total: number }
@@ -204,6 +205,7 @@ function cancelBloomSustain(): void {
   }
   bloomSustainStartedAt = null
   bloomSustainElapsedMs = 0
+  countdownPaused       = false
 }
 
 /** Call after any change to watered count.
@@ -213,6 +215,7 @@ function checkBloomThreshold(): void {
   if (bloomActive) return
   const count = getWateredCount()
   if (count >= BLOOM_THRESHOLD) {
+    countdownPaused = false
     if (bloomSustainTimer === null) {
       const remaining = BLOOM_SUSTAIN_MS - bloomSustainElapsedMs
       bloomSustainStartedAt = Date.now()
@@ -222,11 +225,12 @@ function checkBloomThreshold(): void {
           bloomSustainTimer     = null
           bloomSustainStartedAt = null
           bloomSustainElapsedMs = 0
-          if (!bloomActive && getWateredCount() >= BLOOM_THRESHOLD) triggerBloom()
+          if (!bloomActive && !countdownPaused && getWateredCount() >= BLOOM_THRESHOLD) triggerBloom()
         })
       }, remaining)
     }
   } else {
+    countdownPaused = true
     pauseBloomSustain()
   }
 }

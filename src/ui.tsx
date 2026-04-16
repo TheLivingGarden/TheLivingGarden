@@ -417,7 +417,7 @@ function uiComponent() {
       <UiEntity
         uiTransform={{
           positionType:   'absolute',
-          position:       { top: SIDE_TOP, left: SIDE_LEFT + canWiggleOffsetX },
+          position:       { top: SIDE_TOP, left: SIDE_LEFT },
           width:          SIDE_COL_W,
           height:         SIDE_TOTAL_H,
           flexDirection:  'column',
@@ -426,7 +426,7 @@ function uiComponent() {
       >
         {/* Watering can image + waters-left badge */}
         <UiEntity
-          uiTransform={{ width: CAN_IMG_SIZE * canErrorScale, height: CAN_IMG_SIZE * canErrorScale, flexShrink: 0, positionType: 'relative' }}
+          uiTransform={{ width: CAN_IMG_SIZE * canErrorScale, height: CAN_IMG_SIZE * canErrorScale, flexShrink: 0, positionType: 'relative', position: { left: canWiggleOffsetX } }}
         >
           {/* Can image fills the wrapper */}
           <UiEntity
@@ -446,7 +446,7 @@ function uiComponent() {
             uiBackground={{ color: DARK }}
           >
             <Label
-              value={`${watersLeft}`}
+              value={`${watersLeft}/${waterLimit}`}
               fontSize={CAN_BADGE_FONT}
               color={WHITE}
               textAlign="middle-center"
