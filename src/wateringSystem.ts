@@ -45,7 +45,7 @@ import { setupProgressBars, updateProgressBars }              from './progressBa
 import { setupGroundLights, updateGroundLights, triggerGroundLightBurst }                       from './groundLightSystem'
 import { setupLeaderboardBoards, updateLeaderboardDisplay }   from './leaderboardSystem'
 import { setupFairyLights, setFairyLightsBloom }             from './fairyLightSystem'
-import { showToast, showDailyLimit, hideDailyLimit, showPersistent, hidePersistent, showBannerIdle, showBannerCountdown, updateBannerCountdown, showBannerBloom, updateBannerHealth, updatePlayerCount, updateWaterCount, triggerCanErrorEffect, formatBloomCountdown, formatDailyLimitMessage, getMsUntilBloom, setNextBloomLocalTime } from './notifications'
+import { showToast, showDailyLimit, hideDailyLimit, showPersistent, hidePersistent, showBannerIdle, showBannerCountdown, updateBannerCountdown, showBannerBloom, updateBannerHealth, updatePlayerCount, updateWaterCount, triggerCanErrorEffect, triggerCanRegenEffect, formatBloomCountdown, formatDailyLimitMessage, getMsUntilBloom, setNextBloomLocalTime } from './notifications'
 import { clockSync } from './shared/clockSync'
 import { movePlayerTo, triggerSceneEmote }  from '~system/RestrictedActions'
 import { room }                             from './shared/messages'
@@ -104,6 +104,23 @@ const DROP_FADE_MS   = 1600  // ms for scale-in / scale-out tween
 
 /** plant entity → its waterDrop entity */
 const waterDropMap = new Map<Entity, Entity>()
+
+// ── Droplet idle float animation ──────────────────────────────
+const DROP_ANIM_AMPLITUDE = 0.065   // metres (within 0.05–0.08)
+const DROP_ANIM_SPEED     = 1.1     // radians / second — slow, calm
+
+interface DropletAnim { entity: Entity; phase: number }
+const dropletAnims: DropletAnim[] = []
+let   dropletTime = 0
+
+function dropletIdleSystem(dt: number): void {
+  dropletTime += dt
+  for (const d of dropletAnims) {
+    const tf = Transform.getMutableOrNull(d.entity)
+    if (!tf) continue
+    tf.position.y = WATER_DROP_Y + Math.sin(dropletTime * DROP_ANIM_SPEED + d.phase) * DROP_ANIM_AMPLITUDE
+  }
+}
 
 // ── Sounds ────────────────────────────────────────────────────
 const SND_HOVER    = 'assets/scene/Sounds/hover.mp3'
@@ -543,6 +560,17 @@ const EMOTE_STOP_ACTIONS = [
   InputAction.IA_JUMP,
 ] as const
 
+// Persistent system — registered once in setupWateringSystem, runs only while emote is active.
+function emoteWatchSystem(): void {
+  if (!emoteActive) return
+  for (const action of EMOTE_STOP_ACTIONS) {
+    if (inputSystem.isTriggered(action, PointerEventType.PET_DOWN)) {
+      stopWateringEmote()
+      return
+    }
+  }
+}
+
 function triggerWateringEmote(plantEntity: Entity) {
   const plantPos  = Transform.getOrNull(plantEntity)?.position
   const playerPos = Transform.getOrNull(engine.PlayerEntity)?.position
@@ -560,24 +588,10 @@ function triggerWateringEmote(plantEntity: Entity) {
 
   emoteActive = true
 
-  // Exit on any movement/jump key — matches creator's reference implementation
-  const systemName = `emote-watch-${Date.now()}`
-  engine.addSystem(() => {
-    if (!emoteActive) { engine.removeSystem(systemName); return }
-    for (const action of EMOTE_STOP_ACTIONS) {
-      if (inputSystem.isTriggered(action, PointerEventType.PET_DOWN)) {
-        engine.removeSystem(systemName)
-        stopWateringEmote()
-        return
-      }
-    }
-  }, undefined, systemName)
-
   timers.setTimeout(() => {
     if (!emoteActive) return
     triggerSceneEmote({ src: EMOTE_SRC, loop: false })
     timers.setTimeout(() => {
-      engine.removeSystem(systemName)
       stopWateringEmote()
     }, EMOTE_TOTAL_MS)
   }, EMOTE_TRIGGER_MS)
@@ -595,7 +609,6 @@ function plantExpiryMs(plantId: string): number {
 
 function scheduleExpiry(entity: Entity, sessionTimestamp: number, delayMs: number) {
   timers.setTimeout(() => {
-    if (isBloomActive()) return
     const pd = PlantData.getMutable(entity)
     if (!pd.isWatered || pd.wateredAt !== sessionTimestamp) return
 
@@ -861,6 +874,7 @@ function setupPlant(plantName: string) {
   GltfContainer.create(dropEnt, { src: WATER_DROP_SRC })
   Billboard.create(dropEnt, { billboardMode: BillboardMode.BM_Y })
   waterDropMap.set(entity, dropEnt)
+  dropletAnims.push({ entity: dropEnt, phase: Math.random() * Math.PI * 2 })
 
   // "Watered by" label — hidden until plant is watered
   const wateredByLabel = engine.addEntity()
@@ -1033,6 +1047,8 @@ export function setupWateringSystem(): void {
   setupGroundLights()
 
   engine.addSystem(resetAnimSystem)
+  engine.addSystem(emoteWatchSystem)
+  engine.addSystem(dropletIdleSystem)
   engine.addSystem(petalParticleSystem)
   engine.addSystem(sparkleSystem)
   engine.addSystem(bloomSparkleSystem)
@@ -1099,7 +1115,26 @@ export function setupWateringSystem(): void {
       const lp = getPlayer()
       room.send('registerPlayer', { displayName: lp?.name ?? lp?.userId ?? 'unknown' })
     }
+    const prevWateredToday = playerWateredToday
     playerWateredToday = data.wateredToday
+
+    // Always keep the UI count in sync with server state
+    updateWaterCount(playerWateredToday, dailyWaterLimit)
+
+    // Regen: server decremented wateredToday
+    if (data.wateredToday < prevWateredToday) {
+      // Restore watering ability whenever the player is now below the limit —
+      // do NOT gate on dailyLimitReached; it may be false after a reload
+      if (playerWateredToday < dailyWaterLimit) {
+        dailyLimitReached = false
+        hideDailyLimit()
+        for (const [entity] of plantRegistry) {
+          if (!PlantData.get(entity).isWatered) enablePlantClick(entity)
+        }
+      }
+      triggerCanRegenEffect()
+      showToast('+1 water', 900, false)
+    }
     if (!initialLoadDone) {
       initialLoadDone = true
       timers.setTimeout(showWelcomeProgress, WELCOME_DELAY_MS)

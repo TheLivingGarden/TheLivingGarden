@@ -49,6 +49,9 @@ let waterLimit = 5   // overwritten by updateWaterCount once server syncs
 let canWiggleGen     = 0
 let canWiggleOffsetX = 0
 let canErrorScale    = 1   // 1 = normal; 2 = scaled-up error state
+//s aaw  asserts
+// Watering-can regen highlight (brief green flash when +1 water is gained)
+let canRegenActive = false
 
 function animateBannerIn(): void {
   const STEPS   = 10
@@ -158,6 +161,12 @@ export function updateWaterCount(used: number, limit: number): void {
   waterLimit = limit
 }
 
+/** Brief green flash on the badge when passive regen grants +1 water. */
+export function triggerCanRegenEffect(): void {
+  canRegenActive = true
+  timers.setTimeout(() => { canRegenActive = false }, 700)
+}
+
 /** One-shot error pulse on the watering-can counter.
  *  Scales the pill to 2× and shakes it horizontally, then resets.
  *  Safe to call while already animating — bumps the gen to restart. */
@@ -185,7 +194,8 @@ export function triggerCanErrorEffect(): void {
 // Layout constants  (virtual canvas 1920 × 1080)
 // ---------------------------------------------------------------
 
-const DARK    = { r: 0.13, g: 0.13, b: 0.13, a: 0.88 }   // DCL default dark
+const DARK         = { r: 0.13, g: 0.13, b: 0.13, a: 0.88 }   // DCL default dark
+const REGEN_BADGE  = Color4.create(0.13, 0.52, 0.22, 1.0)      // green flash on +1 regen
 const WHITE   = Color4.White()
 const GREY    = Color4.create(0.65, 0.65, 0.65, 1)
 
@@ -253,8 +263,10 @@ const SIDE_PILL_H       = PLAYER_COUNT_H + 4 + GARDEN_TITLE_H + 4 + SIDE_LABEL_H
 const WATERING_CAN_SRC  = 'assets/scene/Images/WateringCanRender.png'
 const CAN_IMG_SIZE       = 72    // square display size
 const CAN_IMG_GAP        = 8     // gap between image and dark pill
-const CAN_BADGE_SIZE     = 26    // count badge diameter
-const CAN_BADGE_FONT     = 13
+const CAN_BADGE_H     = 22
+const CAN_BADGE_MIN_W = 34
+const CAN_BADGE_PAD_X = 6
+const CAN_BADGE_FONT  = 12
 
 const SIDE_COL_W    = Math.max(SIDE_W, CAN_IMG_SIZE)   // 72 — column wide enough for image
 const SIDE_TOTAL_H  = CAN_IMG_SIZE + CAN_IMG_GAP + SIDE_PILL_H + SIDE_PILL_GAP + SIDE_H
@@ -305,7 +317,9 @@ function bannerTextColor(): Color4 {
   if (bannerState === 'countdown') return TEXT_COUNTDOWN
   return TEXT_IDLE
 }
-
+function showPlusOneWater(): void {
+  showToast('+1 water', 900, false)
+}
 // ---------------------------------------------------------------
 // Setup
 // ---------------------------------------------------------------
@@ -435,24 +449,28 @@ function uiComponent() {
           />
           {/* Count badge — bottom-right corner */}
           <UiEntity
-            uiTransform={{
-              positionType:   'absolute',
-              position:       { top: CAN_IMG_SIZE * canErrorScale - CAN_BADGE_SIZE, left: CAN_IMG_SIZE * canErrorScale - CAN_BADGE_SIZE },
-              width:          CAN_BADGE_SIZE,
-              height:         CAN_BADGE_SIZE,
-              alignItems:     'center',
-              justifyContent: 'center',
-            }}
-            uiBackground={{ color: DARK }}
-          >
-            <Label
-              value={`${watersLeft}/${waterLimit}`}
-              fontSize={CAN_BADGE_FONT}
-              color={WHITE}
-              textAlign="middle-center"
-              uiTransform={{ width: '100%', height: '100%' }}
-            />
-          </UiEntity>
+  uiTransform={{
+    positionType: 'absolute',
+    position: {
+      top: CAN_IMG_SIZE * canErrorScale - CAN_BADGE_H,
+      left: CAN_IMG_SIZE * canErrorScale - CAN_BADGE_MIN_W
+    },
+    minWidth: CAN_BADGE_MIN_W,
+    height: CAN_BADGE_H,
+    padding: { left: CAN_BADGE_PAD_X, right: CAN_BADGE_PAD_X },
+    alignItems: 'center',
+    justifyContent: 'center',
+  }}
+  uiBackground={{ color: canRegenActive ? REGEN_BADGE : DARK }}
+>
+  <Label
+    value={`${watersLeft}/${waterLimit}`}
+    fontSize={CAN_BADGE_FONT}
+    color={WHITE}
+    textAlign="middle-center"
+    uiTransform={{ width: 'auto', height: '100%' }}
+  />
+</UiEntity>
         </UiEntity>
         <UiEntity uiTransform={{ width: SIDE_COL_W, height: CAN_IMG_GAP, flexShrink: 0 }} />
 

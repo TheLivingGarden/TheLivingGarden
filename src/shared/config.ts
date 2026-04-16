@@ -17,9 +17,8 @@ export const BLOOM_SUSTAIN_MS   = 60_000
 export const DAILY_WATER_LIMIT  = 8
 export const WATERED_EXPIRY_MS  = 3 * 60 * 1000        // 3 minutes
 export const FAST_PLANT_EXPIRY_MS = 75_000               // 75 seconds
-/** How long after bloom triggers before the server resets all plants.
- *  Matches the 10-min visual bloom so the reset coincides with the post-bloom cooldown start. */
-export const BLOOM_RESET_DELAY_MS = 11 * 60_000         // 10 minutes + 1min breather
+/** How long after bloom triggers before the server resets all plants. */
+export const BLOOM_RESET_DELAY_MS = 6 * 60_000          // 6 minutes
 
 // ── Scene-wide spatial / asset constants ─────────────────────
 /** World-space centre of the Bloom model — used for sound, sparkles, shockwaves. */

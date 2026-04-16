@@ -74,6 +74,10 @@ const SHOCK_COUNT   = 3
 const SHOCK_DUR_MS  = 1400
 const SHOCK_STAGGER = 280
 const SHOCK_R_MAX   = 12
+const SHOCK_Y_BLOOM  = 0.3   // central bloom (higher, more dramatic)
+const SHOCK_Y_PLANT  = 0.15   // per-plant (closer to ground)
+
+//const SHOCK_THICKNESS = 0.25
 
 interface ShockRing {
   entity:  Entity
@@ -88,7 +92,7 @@ function setupShockwaves() {
   for (let i = 0; i < SHOCK_COUNT; i++) {
     const ent = engine.addEntity()
     Transform.create(ent, {
-      position:   { x: BLOOM_CENTER.x, y: BLOOM_CENTER.y +2, z: BLOOM_CENTER.z},
+      position:   { x: BLOOM_CENTER.x, y: BLOOM_CENTER.y + SHOCK_Y_BLOOM, z: BLOOM_CENTER.z},
       rotation: Quaternion.fromEulerDegrees(90, 0, 0),
       scale:    { x: 0.001, y: 0.001, z: 0.001 },
     })
@@ -212,7 +216,7 @@ export function triggerGroundRipple(pos: { x: number; y: number; z: number }): v
   slot.active  = true
   slot.elapsed = 0
   const tf = Transform.getMutable(slot.entity)
-  tf.position = { x: pos.x, y: pos.y + 0.5, z: pos.z }
+  tf.position = { x: pos.x, y: pos.y + SHOCK_Y_PLANT, z: pos.z }
   tf.scale    = { x: 0.001, y: 0.001, z: 0.001 }
   const mat = Material.getFlatMutable(slot.entity)
   if (mat.albedoColor) mat.albedoColor.a = 0.75
@@ -234,7 +238,11 @@ function tickRipples(dt: number) {
 
     const sc    = (1 - (1 - t) * (1 - t)) * RIPPLE_R_MAX
     const alpha = (1 - t) * (1 - t) * 0.75
-    Transform.getMutable(slot.entity).scale = { x: sc, y: sc, z: sc }
+    Transform.getMutable(slot.entity).scale = { 
+  x: sc, 
+  y: sc, 
+  z: sc 
+}
     const mat = Material.getFlatMutable(slot.entity)
     if (mat.albedoColor) mat.albedoColor.a = alpha
   }
@@ -277,7 +285,11 @@ export function ambientFXSystem(dt: number): void {
       continue
     }
     const sc = (1 - (1 - t) * (1 - t)) * SHOCK_R_MAX
-    Transform.getMutable(ring.entity).scale = { x: sc, y: sc, z: sc }
+    Transform.getMutable(ring.entity).scale = { 
+  x: sc, 
+  y: sc, 
+  z: sc 
+}
     const mat = Material.getFlatMutable(ring.entity)
     if (mat.albedoColor) mat.albedoColor.a = (1 - t) * (1 - t) * 0.85
   }

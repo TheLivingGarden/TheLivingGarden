@@ -38,7 +38,12 @@ const testOverrides   = new Set<string>()            // addresses with daily-lim
 const syncRateLimits  = new Map<string, number>()    // address → last requestFullSync ms
 const SYNC_RATE_MS    = 5_000                        // min ms between full syncs per player
 let   bloomActive      = false
+let   bloomStartedAt:  number | null = null   // ms timestamp when current bloom began
 let   countdownPaused  = false
+
+// ── Passive water regeneration ───────────────────────────────
+const REGEN_INTERVAL_MS = 75_000
+const regenTimers = new Map<string, ReturnType<typeof setInterval>>()
 
 // ── Leaderboard ──────────────────────────────────────────────
 interface LeaderboardEntry { displayName: string; total: number }
@@ -165,6 +170,42 @@ async function incrementPlayerDailyCount(address: string): Promise<number> {
   return newCount
 }
 
+async function decrementPlayerDailyCount(address: string): Promise<number> {
+  const today    = new Date().toISOString().slice(0, 10)
+  const newCount = Math.max(0, (await getPlayerDailyCount(address)) - 1)
+  await Storage.player.set(address, dailyKey(today), String(newCount))
+  return newCount
+}
+
+function startRegenTimer(address: string): void {
+  if (regenTimers.has(address)) return  // prevent duplicates
+
+  const timer = setInterval(() => {
+    executeTask(async () => {
+      const current = await getPlayerDailyCount(address)
+
+      // ✅ If player has used NO water → already full → do nothing
+      if (current <= 0) return
+
+      const newCount = await decrementPlayerDailyCount(address)
+
+      room.send('playerDailyState', dailyStatePayload(newCount), { to: [address] })
+
+      console.log(`[Server] Regen: ${address} waters ${DAILY_WATER_LIMIT - newCount}/${DAILY_WATER_LIMIT}`)
+    })
+  }, REGEN_INTERVAL_MS)
+
+  regenTimers.set(address, timer)
+}
+
+function stopRegenTimer(address: string): void {
+  const timer = regenTimers.get(address)
+  if (timer !== undefined) {
+    clearInterval(timer)
+    regenTimers.delete(address)
+  }
+}
+
 // ---------------------------------------------------------------
 // Bloom
 // ---------------------------------------------------------------
@@ -238,16 +279,20 @@ function checkBloomThreshold(): void {
 function triggerBloom(): void {
   if (bloomActive) return
   cancelBloomSustain()
-  bloomActive = true
+  bloomActive    = true
+  bloomStartedAt = Date.now()
   console.log(`[Server] Bloom triggered! (${getWateredCount()}/${BLOOM_THRESHOLD} plants)`)
   room.send('bloomTriggered', {})
   setTimeout(() => executeTask(resetGarden), BLOOM_RESET_DELAY_MS)
 }
 
 async function resetGarden(): Promise<void> {
+  // Timestamp guard — ignore stale reset calls if bloom already ended
+  if (bloomStartedAt !== null && Date.now() - bloomStartedAt < BLOOM_RESET_DELAY_MS) return
   console.log('[Server] Resetting garden...')
   cancelBloomSustain()
-  bloomActive = false
+  bloomActive    = false
+  bloomStartedAt = null
 
   for (const [plantId, entity] of plantEntities) {
     const ps   = PlantSync.getMutable(entity)
@@ -274,7 +319,6 @@ function scheduleExpiry(
 ): void {
   setTimeout(() => {
     executeTask(async () => {
-      if (bloomActive) return  // bloom reset will clear everything
       const ps = PlantSync.getOrNull(entity)
       if (!ps || !ps.isWatered || Number(ps.wateredAt) !== sessionTimestamp) return
 
@@ -350,6 +394,7 @@ function playerJoinSystem(): void {
       if (address) {
         syncRateLimits.delete(address)
         testOverrides.delete(address)
+        stopRegenTimer(address)
         console.log(`[Server] Player disconnected: ${address}`)
       }
     }
@@ -374,6 +419,7 @@ function playerJoinSystem(): void {
       broadcastLeaderboard([address])
       // Re-send bloom state to players who join while it is already active
       if (bloomActive) room.send('bloomTriggered', {}, { to: [address] })
+      startRegenTimer(address)
       console.log(`[Server] Player joined: ${address} (${wateredToday}/${DAILY_WATER_LIMIT} today, ${getWateredCount()}/${BLOOM_THRESHOLD} watered, bloom=${bloomActive})`)
     })
   }
@@ -527,6 +573,7 @@ export async function server(): Promise<void> {
     }
     broadcastLeaderboard([address])
     if (bloomActive) room.send('bloomTriggered', {}, { to: [address] })
+    startRegenTimer(address)   // no-op if already running; ensures regen starts on reload
     console.log(`[Server] Full sync sent to ${address} (${wateredToday}/${DAILY_WATER_LIMIT} today, ${getWateredCount()}/${BLOOM_THRESHOLD} watered)`)
   })
 

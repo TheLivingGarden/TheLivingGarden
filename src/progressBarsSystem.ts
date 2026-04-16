@@ -148,16 +148,17 @@ interface Bar {
   lastSparkMs:  number   // timestamp of last spark burst — for cooldown
 }
 
-interface Spark {
-  entity: Entity
+interface PooledSpark {
+  entity:  Entity
+  active:  boolean
   x: number; y: number; z: number
   vx: number; vy: number; vz: number
   life:    number   // remaining seconds
   maxLife: number
 }
 
-const bars:   Bar[]   = []
-const sparks: Spark[] = []
+const bars:      Bar[]         = []
+const sparkPool: PooledSpark[] = []
 
 // ---------------------------------------------------------------
 // Helpers
@@ -172,45 +173,32 @@ function quatRightZ(qx: number, qy: number, qz: number, qw: number): number {
   return 2 * (qx * qz - qy * qw)
 }
 
-/** Spawn sparkle particles at the fill tip of a bar. */
+/** Activate pool slots at the fill tip of a bar. No entities are created. */
 function spawnSparks(bar: Bar): void {
   const now = Date.now()
   if (now - bar.lastSparkMs < SPARK_COOLDOWN_MS) return   // per-bar cooldown
-  if (sparks.length >= SPARK_MAX_LIVE) return              // global entity cap
   bar.lastSparkMs = now
 
-  // Only spawn as many as the cap allows
-  const allowed = Math.min(SPARK_COUNT, SPARK_MAX_LIVE - sparks.length)
   const tipY = bar.worldY + (bar.targetRatio - 0.5) * bar.barHeight
-  for (let i = 0; i < allowed; i++) {
+  let spawned = 0
+  for (const s of sparkPool) {
+    if (spawned >= SPARK_COUNT) break
+    if (s.active) continue
     const angle = Math.random() * Math.PI * 2
     const speed = Math.random() * SPARK_SPREAD
-    const e = engine.addEntity()
-    Transform.create(e, {
-      position: {
-        x: bar.worldX + Math.cos(angle) * speed * 0.1,
-        y: tipY,
-        z: bar.worldZ + Math.sin(angle) * speed * 0.1,
-      },
-      scale: { x: SPARK_SIZE, y: SPARK_SIZE, z: SPARK_SIZE },
-    })
-    MeshRenderer.setBox(e)
-    Material.setPbrMaterial(e, {
-      albedoColor:       SPARK_ALBEDO,
-      emissiveColor:     SPARK_EMISSIVE,
-      emissiveIntensity: SPARK_EMISSION,
-    })
-    sparks.push({
-      entity: e,
-      x: bar.worldX + Math.cos(angle) * speed * 0.1,
-      y: tipY,
-      z: bar.worldZ + Math.sin(angle) * speed * 0.1,
-      vx: Math.cos(angle) * speed,
-      vy: SPARK_RISE * (0.7 + Math.random() * 0.6),
-      vz: Math.sin(angle) * speed,
-      life:    SPARK_LIFETIME,
-      maxLife: SPARK_LIFETIME,
-    })
+    s.x      = bar.worldX + Math.cos(angle) * speed * 0.1
+    s.y      = tipY
+    s.z      = bar.worldZ + Math.sin(angle) * speed * 0.1
+    s.vx     = Math.cos(angle) * speed
+    s.vy     = SPARK_RISE * (0.7 + Math.random() * 0.6)
+    s.vz     = Math.sin(angle) * speed
+    s.life   = SPARK_LIFETIME
+    s.maxLife = SPARK_LIFETIME
+    s.active = true
+    const tf = Transform.getMutable(s.entity)
+    tf.position = { x: s.x, y: s.y, z: s.z }
+    tf.scale    = { x: SPARK_SIZE, y: SPARK_SIZE, z: SPARK_SIZE }
+    spawned++
   }
 }
 
@@ -325,6 +313,22 @@ export function setupProgressBars(): void {
     }
   }
 
+  // ── Pre-allocate spark pool — no entity creation during gameplay ─
+  for (let i = 0; i < SPARK_MAX_LIVE; i++) {
+    const e = engine.addEntity()
+    Transform.create(e, {
+      position: { x: 0, y: 0, z: 0 },
+      scale:    { x: 0, y: 0, z: 0 },   // hidden until activated
+    })
+    MeshRenderer.setBox(e)
+    Material.setPbrMaterial(e, {
+      albedoColor:       SPARK_ALBEDO,
+      emissiveColor:     SPARK_EMISSIVE,
+      emissiveIntensity: SPARK_EMISSION,
+    })
+    sparkPool.push({ entity: e, active: false, x:0, y:0, z:0, vx:0, vy:0, vz:0, life:0, maxLife:0 })
+  }
+
   // ── Tween + sparkle system ──────────────────────────────────────
   engine.addSystem((dt: number) => {
     // Tween fills toward their target ratios
@@ -343,13 +347,13 @@ export function setupProgressBars(): void {
       tf.scale    = { x: bar.fillScaleX, y: fillH, z: bar.fillScaleZ }
     }
 
-    // Animate and expire sparkle particles
-    for (let i = sparks.length - 1; i >= 0; i--) {
-      const s = sparks[i]
+    // Animate and return expired sparks to the pool
+    for (const s of sparkPool) {
+      if (!s.active) continue
       s.life -= dt
       if (s.life <= 0) {
-        engine.removeEntity(s.entity)
-        sparks.splice(i, 1)
+        s.active = false
+        Transform.getMutable(s.entity).scale = { x: 0, y: 0, z: 0 }
         continue
       }
       s.x += s.vx * dt
