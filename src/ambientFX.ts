@@ -74,7 +74,7 @@ const SHOCK_COUNT   = 3
 const SHOCK_DUR_MS  = 1400
 const SHOCK_STAGGER = 280
 const SHOCK_R_MAX   = 12
-const SHOCK_Y_BLOOM  = 0.05   // central bloom (higher, more dramatic)
+const SHOCK_Y_BLOOM  = -0.175   // central bloom (higher, more dramatic)
 const SHOCK_Y_PLANT  = 0.15   // per-plant (closer to ground)
 
 //const SHOCK_THICKNESS = 0.25

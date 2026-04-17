@@ -647,7 +647,14 @@ function scheduleExpiry(entity: Entity, sessionTimestamp: number, delayMs: numbe
 }
 
 function waterPlant(entity: Entity, plantId: string) {
-  if (isBloomActive()) return
+  if (isBloomActive()) {
+    const now = Date.now()
+    if (now - lastBlockedClickMs > BLOCKED_CLICK_COOLDOWN_MS) {
+      lastBlockedClickMs = now
+      showToast("Can't water during bloom event", TOAST_WATERED_MS, false)
+    }
+    return
+  }
   if (emoteActive)     return
 
   // Gate: plant already watered — inform without using water or wiggling
@@ -1160,7 +1167,7 @@ export function setupWateringSystem(): void {
           if (pending.wasTopUp) {
             // Top-up rollback — restore original wateredAt; drop stays hidden (plant still watered)
             pd.wateredAt = pending.prevWateredAt
-            if (overrideDailyLimit || !dailyLimitReached) enablePlantClick(rejEntity)
+            if (overrideDailyLimit || waterRemaining > 0) enablePlantClick(rejEntity)
           } else {
             // Fresh water rollback — revert to unwatered state.
             // Setting wateredAt=0 cancels pending animation timers (they
@@ -1170,7 +1177,7 @@ export function setupWateringSystem(): void {
             hidePlant(rejEntity)
             showRose(rejEntity)
             setDropFade(rejEntity, 'in')
-            if (overrideDailyLimit || !dailyLimitReached) enablePlantClick(rejEntity)
+            if (overrideDailyLimit || waterRemaining > 0) enablePlantClick(rejEntity)
           }
         }
       }
