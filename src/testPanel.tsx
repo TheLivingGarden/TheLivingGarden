@@ -244,7 +244,7 @@ export function TestPanelUi() {
         <Label value="LIVE STATUS" fontSize={10} color={MUTED} uiTransform={{ margin: { bottom: 5 } }} />
 
         <Label
-          value={`Watered:  ${s.wateredCount} / ${s.totalPlants} plants   ·   Your waters today:  ${s.playerWateredToday} / ${s.overrideDailyLimit ? 'unlimited' : s.dailyWaterLimit}`}
+          value={`Watered:  ${s.wateredCount} / ${s.totalPlants} plants   ·   Your waters today:  ${s.waterRemaining} / ${s.overrideDailyLimit ? 'unlimited' : s.dailyWaterLimit}`}
           fontSize={11}
           color={WHITE}
           uiTransform={{ margin: { bottom: 4 } }}

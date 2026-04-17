@@ -205,7 +205,7 @@ let wiltSoundEntity:     Entity
 const magicSoundEntities: Entity[] = []
 let magicSoundIdx = 0
 
-let playerWateredToday      = 0
+let waterRemaining          = DAILY_WATER_LIMIT
 let dailyLimitReached       = false
 let lastLimitNotificationMs = 0
 let lastBlockedClickMs      = 0         // throttle for blocked-click feedback (wiggle / toast)
@@ -428,7 +428,7 @@ function updateProgressText() {
   updateProgressBars(count, TOTAL_PLANTS)
   updateGroundLights(count)
   updateBannerHealth(count / TOTAL_PLANTS)
-  updateWaterCount(playerWateredToday, dailyWaterLimit)
+  updateWaterCount(waterRemaining, dailyWaterLimit)
   // Banner state: idle below threshold, countdown at/above threshold (unless bloom active)
   if (!isBloomActive() && !bloomActive) {
     if (count >= BLOOM_THRESHOLD) {
@@ -501,8 +501,8 @@ function onDailyLimitReached() {
 }
 
 export function resetDailyLimit(): void {
-  playerWateredToday = 0
-  dailyLimitReached  = false
+  waterRemaining    = DAILY_WATER_LIMIT
+  dailyLimitReached = false
   hideDailyLimit()
   updateProgressText()
   console.log('[TEST] Daily limit reset to 0')
@@ -660,8 +660,8 @@ function waterPlant(entity: Entity, plantId: string) {
     return
   }
 
-  // Gate: daily limit reached — wiggle + inform
-  if (!overrideDailyLimit && playerWateredToday >= dailyWaterLimit) {
+  // Gate: no water remaining — wiggle + inform
+  if (!overrideDailyLimit && waterRemaining <= 0) {
     const now = Date.now()
     if (now - lastBlockedClickMs > BLOCKED_CLICK_COOLDOWN_MS) {
       lastBlockedClickMs = now
@@ -679,8 +679,7 @@ function waterPlant(entity: Entity, plantId: string) {
   pd.isWatered = true
   pd.wateredAt = now
 
-  playerWateredToday++
-  const justHitLimit = !overrideDailyLimit && playerWateredToday >= dailyWaterLimit
+  const justHitLimit = !overrideDailyLimit && waterRemaining <= 1
   if (justHitLimit) onDailyLimitReached()
 
   disablePlantClick(entity)     // prevent double-click while pending; re-enabled on confirmation
@@ -1115,16 +1114,16 @@ export function setupWateringSystem(): void {
       const lp = getPlayer()
       room.send('registerPlayer', { displayName: lp?.name ?? lp?.userId ?? 'unknown' })
     }
-    const prevWateredToday = playerWateredToday
-    playerWateredToday = data.wateredToday
+    const prev     = waterRemaining
+    waterRemaining = data.wateredToday
 
     // Always keep the UI count in sync with server state
-    updateWaterCount(playerWateredToday, dailyWaterLimit)
+    updateWaterCount(waterRemaining, dailyWaterLimit)
 
     // Regen: available water increased
-    if (data.wateredToday > prevWateredToday) {
+    if (waterRemaining > prev) {
       // Unlock watering whenever the player now has water available
-      if (playerWateredToday > 0) {
+      if (waterRemaining > 0) {
         dailyLimitReached = false
         hideDailyLimit()
         for (const [entity] of plantRegistry) {
@@ -1138,7 +1137,7 @@ export function setupWateringSystem(): void {
       initialLoadDone = true
       timers.setTimeout(showWelcomeProgress, WELCOME_DELAY_MS)
     }
-    if (!overrideDailyLimit && playerWateredToday <= 0 && !dailyLimitReached) {
+    if (!overrideDailyLimit && waterRemaining <= 0 && !dailyLimitReached) {
       onDailyLimitReached()
       showDailyLimit(formatDailyLimitMessage(runtimeTestMode))
     }
@@ -1178,8 +1177,6 @@ export function setupWateringSystem(): void {
       stopWateringEmote()
     }
 
-    playerWateredToday = Math.max(0, playerWateredToday - 1)
-
     if (data.reason === 'daily_limit') {
       if (!dailyLimitReached) onDailyLimitReached()
       const now = Date.now()
@@ -1191,7 +1188,7 @@ export function setupWateringSystem(): void {
     }
 
     if (data.reason === 'bloom_active') {
-      if (dailyLimitReached && playerWateredToday < dailyWaterLimit) {
+      if (dailyLimitReached && waterRemaining > 0) {
         dailyLimitReached = false
         for (const [entity] of plantRegistry) {
           if (!PlantData.get(entity).isWatered) enablePlantClick(entity)
@@ -1428,7 +1425,7 @@ export function getWateringStatus() {
   return {
     wateredCount: computeWateredCount(),
     totalPlants:  TOTAL_PLANTS,
-    playerWateredToday,
+    waterRemaining,
     dailyWaterLimit,
     dailyLimitReached,
     overrideDailyLimit,
