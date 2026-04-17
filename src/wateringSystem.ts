@@ -1121,11 +1121,10 @@ export function setupWateringSystem(): void {
     // Always keep the UI count in sync with server state
     updateWaterCount(playerWateredToday, dailyWaterLimit)
 
-    // Regen: server decremented wateredToday
-    if (data.wateredToday < prevWateredToday) {
-      // Restore watering ability whenever the player is now below the limit —
-      // do NOT gate on dailyLimitReached; it may be false after a reload
-      if (playerWateredToday < dailyWaterLimit) {
+    // Regen: available water increased
+    if (data.wateredToday > prevWateredToday) {
+      // Unlock watering whenever the player now has water available
+      if (playerWateredToday > 0) {
         dailyLimitReached = false
         hideDailyLimit()
         for (const [entity] of plantRegistry) {
@@ -1139,7 +1138,7 @@ export function setupWateringSystem(): void {
       initialLoadDone = true
       timers.setTimeout(showWelcomeProgress, WELCOME_DELAY_MS)
     }
-    if (!overrideDailyLimit && playerWateredToday >= dailyWaterLimit && !dailyLimitReached) {
+    if (!overrideDailyLimit && playerWateredToday <= 0 && !dailyLimitReached) {
       onDailyLimitReached()
       showDailyLimit(formatDailyLimitMessage(runtimeTestMode))
     }

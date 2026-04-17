@@ -43,7 +43,7 @@ let   countdownPaused  = false
 
 // ── Passive water regeneration ───────────────────────────────
 const REGEN_INTERVAL_MS = 75_000
-const regenTimers = new Map<string, ReturnType<typeof setInterval>>()
+const lastRegenTick = new Map<string, number>()   // address → last regen timestamp (ms)
 
 // ── Leaderboard ──────────────────────────────────────────────
 interface LeaderboardEntry { displayName: string; total: number }
@@ -157,18 +157,21 @@ async function getPlayerDailyCount(address: string): Promise<number> {
   try {
     const today = new Date().toISOString().slice(0, 10)
     const raw   = await Storage.player.get<string>(address, dailyKey(today))
-    return raw ? parseInt(raw) : 0
+    return raw ? parseInt(raw) : DAILY_WATER_LIMIT
+    //return raw ? parseInt(raw) : 0
   } catch {
-    return 0  // new player — no storage entry yet (Storage.player.get throws 404)
+return DAILY_WATER_LIMIT
   }
 }
 
+/*
 async function incrementPlayerDailyCount(address: string): Promise<number> {
   const today    = new Date().toISOString().slice(0, 10)
   const newCount = (await getPlayerDailyCount(address)) + 1
   await Storage.player.set(address, dailyKey(today), String(newCount))
   return newCount
 }
+*/
 
 async function decrementPlayerDailyCount(address: string): Promise<number> {
   const today    = new Date().toISOString().slice(0, 10)
@@ -177,32 +180,35 @@ async function decrementPlayerDailyCount(address: string): Promise<number> {
   return newCount
 }
 
-function startRegenTimer(address: string): void {
-  if (regenTimers.has(address)) return  // prevent duplicates
+function regenSystem(): void {
+  const now = Date.now()
 
-  const timer = setInterval(() => {
+  for (const address of playerAddresses.values()) {
+    const last = lastRegenTick.get(address)
+
+    if (last === undefined) {
+      lastRegenTick.set(address, now)
+      continue
+    }
+
+    if (now - last < REGEN_INTERVAL_MS) continue
+
+    // Update timestamp BEFORE async to prevent double execution
+    lastRegenTick.set(address, now)
+
     executeTask(async () => {
       const current = await getPlayerDailyCount(address)
 
-      // ✅ If player has used NO water → already full → do nothing
-      if (current <= 0) return
+      if (current >= DAILY_WATER_LIMIT) return
 
-      const newCount = await decrementPlayerDailyCount(address)
+      const newCount = Math.min(DAILY_WATER_LIMIT, current + 1)
+      const today    = new Date().toISOString().slice(0, 10)
+      await Storage.player.set(address, dailyKey(today), String(newCount))
 
       room.send('playerDailyState', dailyStatePayload(newCount), { to: [address] })
 
-      console.log(`[Server] Regen: ${address} waters ${DAILY_WATER_LIMIT - newCount}/${DAILY_WATER_LIMIT}`)
+      console.log(`[Server] Regen tick: ${address} → ${newCount}/${DAILY_WATER_LIMIT}`)
     })
-  }, REGEN_INTERVAL_MS)
-
-  regenTimers.set(address, timer)
-}
-
-function stopRegenTimer(address: string): void {
-  const timer = regenTimers.get(address)
-  if (timer !== undefined) {
-    clearInterval(timer)
-    regenTimers.delete(address)
   }
 }
 
@@ -394,7 +400,7 @@ function playerJoinSystem(): void {
       if (address) {
         syncRateLimits.delete(address)
         testOverrides.delete(address)
-        stopRegenTimer(address)
+        lastRegenTick.delete(address)
         console.log(`[Server] Player disconnected: ${address}`)
       }
     }
@@ -419,7 +425,7 @@ function playerJoinSystem(): void {
       broadcastLeaderboard([address])
       // Re-send bloom state to players who join while it is already active
       if (bloomActive) room.send('bloomTriggered', {}, { to: [address] })
-      startRegenTimer(address)
+      lastRegenTick.set(address, Date.now())
       console.log(`[Server] Player joined: ${address} (${wateredToday}/${DAILY_WATER_LIMIT} today, ${getWateredCount()}/${BLOOM_THRESHOLD} watered, bloom=${bloomActive})`)
     })
   }
@@ -486,7 +492,7 @@ export async function server(): Promise<void> {
 
       // Reject if daily limit reached (test-panel override bypasses this)
       const todayCount = await getPlayerDailyCount(playerAddress)
-      if (!testOverrides.has(playerAddress) && todayCount >= DAILY_WATER_LIMIT) {
+      if (!testOverrides.has(playerAddress) && todayCount <= 0) {
         room.send('waterRejected', { plantId, reason: 'daily_limit' }, { to: [playerAddress] })
         return
       }
@@ -497,7 +503,7 @@ export async function server(): Promise<void> {
       watered.isWatered = true
       watered.wateredAt = now
 
-      const newCount = await incrementPlayerDailyCount(playerAddress)
+      const newCount = await decrementPlayerDailyCount(playerAddress)
 
       // Update all-time leaderboard total for this player
       const entry = leaderboard.get(playerAddress)
@@ -573,7 +579,7 @@ export async function server(): Promise<void> {
     }
     broadcastLeaderboard([address])
     if (bloomActive) room.send('bloomTriggered', {}, { to: [address] })
-    startRegenTimer(address)   // no-op if already running; ensures regen starts on reload
+    if (!lastRegenTick.has(address)) lastRegenTick.set(address, Date.now())   // ensure regen clock is running on reload
     console.log(`[Server] Full sync sent to ${address} (${wateredToday}/${DAILY_WATER_LIMIT} today, ${getWateredCount()}/${BLOOM_THRESHOLD} watered)`)
   })
 
@@ -603,6 +609,7 @@ export async function server(): Promise<void> {
 
   // Player join detection — runs every frame, lightweight
   engine.addSystem(playerJoinSystem)
+  engine.addSystem(regenSystem)
 
   // Schedule bloom checks at every 6am/6pm UTC window
   scheduleBloomCheck()
