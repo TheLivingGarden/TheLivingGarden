@@ -38,20 +38,7 @@ let playerCount     = 0
 
 // Banner animation
 let bannerOffsetY = 0   // slide-in from top
-let bannerOffsetX = 0   // wiggle
-let wiggleGen     = 0   // cancel stale wiggle chains
 
-// Waters counter
-let waterUsed  = 0
-let waterLimit = 5   // overwritten by updateWaterCount once server syncs
-
-// Watering-can error animation (daily limit hit / attempt while at limit)
-let canWiggleGen     = 0
-let canWiggleOffsetX = 0
-let canErrorScale    = 1   // 1 = normal; 2 = scaled-up error state
-//s aaw  asserts
-// Watering-can regen highlight (brief green flash when +1 water is gained)
-let canRegenActive = false
 
 function animateBannerIn(): void {
   const STEPS   = 10
@@ -69,31 +56,6 @@ function animateBannerIn(): void {
   timers.setTimeout(tick, STEP_MS)
 }
 
-function startWiggleLoop(): void {
-  const myGen = ++wiggleGen
-  const SHAKE  = [0, 6, -6, 4, -4, 2, -2, 1, -1, 0]
-  const STEP_MS = 45
-  function runShake(): void {
-    let i = 0
-    function step(): void {
-      if (wiggleGen !== myGen) { bannerOffsetX = 0; return }
-      bannerOffsetX = SHAKE[i]
-      i++
-      if (i < SHAKE.length) timers.setTimeout(step, STEP_MS)
-      else {
-        bannerOffsetX = 0
-        timers.setTimeout(runShake, 9_000)  // next wiggle in 9s
-      }
-    }
-    step()
-  }
-  timers.setTimeout(runShake, 3_000)   // first wiggle 3s after appearing
-}
-
-function stopWiggleLoop(): void {
-  wiggleGen++
-  bannerOffsetX = 0
-}
 
 // ---------------------------------------------------------------
 // Public API — bottom pills
@@ -123,8 +85,8 @@ export function hidePersistent(): void { persistVisible = false }
 // Public API — top banner
 // ---------------------------------------------------------------
 
-export function showBannerIdle(): void  { stopWiggleLoop(); bannerState = 'idle' }
-export function showBannerBloom(): void { stopWiggleLoop(); bannerState = 'bloom'; bannerVisible = true; animateBannerIn() }
+export function showBannerIdle(): void  { bannerState = 'idle' }
+export function showBannerBloom(): void { bannerState = 'bloom'; bannerVisible = true; animateBannerIn() }
 
 export function showBannerCountdown(countdown: string): void {
   const wasCountdown = bannerState === 'countdown'
@@ -133,13 +95,12 @@ export function showBannerCountdown(countdown: string): void {
   bannerVisible   = true
   if (!wasCountdown) {
     animateBannerIn()
-    startWiggleLoop()
   }
 }
 export function updateBannerCountdown(countdown: string): void {
   bannerCountdown = countdown
 }
-function hideBanner(): void { stopWiggleLoop(); bannerVisible = false }
+function hideBanner(): void { bannerVisible = false }
 
 // ---------------------------------------------------------------
 // Public API — side health bar
@@ -156,46 +117,14 @@ export function updatePlayerCount(n: number): void {
 }
 
 /** Update the top-left waters-remaining counter. */
-export function updateWaterCount(used: number, limit: number): void {
-  waterUsed  = used
-  waterLimit = limit
-}
 
-/** Brief green flash on the badge when passive regen grants +1 water. */
-export function triggerCanRegenEffect(): void {
-  canRegenActive = true
-  timers.setTimeout(() => { canRegenActive = false }, 700)
-}
 
-/** One-shot error pulse on the watering-can counter.
- *  Scales the pill to 2× and shakes it horizontally, then resets.
- *  Safe to call while already animating — bumps the gen to restart. */
-export function triggerCanErrorEffect(): void {
-  canErrorScale = 2
-  const myGen   = ++canWiggleGen
-  const SHAKE   = [0, 8, -8, 6, -6, 4, -4, 2, -2, 0]
-  const STEP_MS = 45
-  let i = 0
-  function step(): void {
-    if (canWiggleGen !== myGen) { canWiggleOffsetX = 0; canErrorScale = 1; return }
-    canWiggleOffsetX = SHAKE[i]
-    i++
-    if (i < SHAKE.length) {
-      timers.setTimeout(step, STEP_MS)
-    } else {
-      canWiggleOffsetX = 0
-      canErrorScale    = 1
-    }
-  }
-  step()
-}
 
 // ---------------------------------------------------------------
 // Layout constants  (virtual canvas 1920 × 1080)
 // ---------------------------------------------------------------
 
 const DARK         = { r: 0.13, g: 0.13, b: 0.13, a: 0.88 }   // DCL default dark
-const REGEN_BADGE  = Color4.create(0.13, 0.52, 0.22, 1.0)      // green flash on +1 regen
 const WHITE   = Color4.White()
 const GREY    = Color4.create(0.65, 0.65, 0.65, 1)
 
@@ -268,8 +197,8 @@ const CAN_BADGE_MIN_W = 34
 const CAN_BADGE_PAD_X = 6
 const CAN_BADGE_FONT  = 12
 
-const SIDE_COL_W    = Math.max(SIDE_W, CAN_IMG_SIZE)   // 72 — column wide enough for image
-const SIDE_TOTAL_H  = CAN_IMG_SIZE + CAN_IMG_GAP + SIDE_PILL_H + SIDE_PILL_GAP + SIDE_H
+const SIDE_COL_W    = SIDE_W
+const SIDE_TOTAL_H  = SIDE_PILL_H + SIDE_PILL_GAP + SIDE_H
 const SIDE_RIGHT_PAD  = 44    // distance from right edge
 const SIDE_LEFT       = 1920 - SIDE_RIGHT_PAD - SIDE_COL_W
 const SIDE_TOP        = Math.round((1080 - SIDE_TOTAL_H) / 2)
@@ -300,10 +229,8 @@ function sideFillColor(): Color4 {
 
 function bannerLine1(): string {
   if (bannerState === 'bloom')     return 'The Garden is in Full Bloom!'
-  if (bannerState === 'countdown') return `Garden Bloom in ${bannerCountdown}`
-  return bannerCountdown
-    ? `Water the plants to see the garden bloom in ${bannerCountdown}`
-    : 'Water the plants to see the garden bloom'
+  if (bannerState === 'countdown') return `Keep garden health above 80% for ${bannerCountdown} to wake the big bloom`
+  return 'Keep garden health above 80% to wake the big bloom'
 }
 function bannerHealthLine(): string | null {
   if (bannerState === 'bloom') return null
@@ -339,12 +266,7 @@ function uiComponent() {
 
   const isCountdown  = bannerState === 'countdown'
   const isBloom      = bannerState === 'bloom'
-  const healthLine   = bannerHealthLine()
-  // Two lines whenever health subtext is shown (all non-bloom states)
-  const bannerH      = healthLine ? BANNER_H_COUNTDOWN : BANNER_H_SINGLE
-
-  // Waters remaining
-  const watersLeft  = Math.max(0, waterLimit - waterUsed)
+  const bannerH      = BANNER_H_SINGLE
 
   // Side bar fill — grows from bottom, minimum SIDE_FILL_MIN px when health > 0
   const fillH       = bannerHealth > 0 ? Math.max(SIDE_FILL_MIN, Math.round(bannerHealth * SIDE_H)) : 0
@@ -371,7 +293,7 @@ function uiComponent() {
         uiTransform={{
           display:        bannerVisible ? 'flex' : 'none',
           positionType:   'absolute',
-          position:       { top: BANNER_TOP + bannerOffsetY, left: BANNER_LEFT + bannerOffsetX },
+          position:       { top: BANNER_TOP + bannerOffsetY, left: BANNER_LEFT },
           width:          BANNER_W,
           height:         bannerH,
           flexDirection:  'row',
@@ -399,15 +321,6 @@ function uiComponent() {
             textAlign="middle-center"
             uiTransform={{ width: '100%', height: BANNER_LINE1_H }}
           />
-          {healthLine && (
-            <Label
-              value={healthLine}
-              fontSize={BANNER_SUBTEXT_FONT}
-              color={TEXT_SUBTEXT}
-              textAlign="middle-center"
-              uiTransform={{ width: '100%', height: BANNER_SUBTEXT_H }}
-            />
-          )}
         </UiEntity>
 
         {/* Dismiss button */}
@@ -438,42 +351,6 @@ function uiComponent() {
           alignItems:     'center',
         }}
       >
-        {/* Watering can image + waters-left badge */}
-        <UiEntity
-          uiTransform={{ width: CAN_IMG_SIZE * canErrorScale, height: CAN_IMG_SIZE * canErrorScale, flexShrink: 0, positionType: 'relative', position: { left: canWiggleOffsetX } }}
-        >
-          {/* Can image fills the wrapper */}
-          <UiEntity
-            uiTransform={{ positionType: 'absolute', position: { top: 0, left: 0 }, width: CAN_IMG_SIZE * canErrorScale, height: CAN_IMG_SIZE * canErrorScale }}
-            uiBackground={{ textureMode: 'stretch', texture: { src: WATERING_CAN_SRC }, color: Color4.White() }}
-          />
-          {/* Count badge — bottom-right corner */}
-          <UiEntity
-  uiTransform={{
-    positionType: 'absolute',
-    position: {
-      top: CAN_IMG_SIZE * canErrorScale - CAN_BADGE_H,
-      left: CAN_IMG_SIZE * canErrorScale - CAN_BADGE_MIN_W
-    },
-    minWidth: CAN_BADGE_MIN_W,
-    height: CAN_BADGE_H,
-    padding: { left: CAN_BADGE_PAD_X, right: CAN_BADGE_PAD_X },
-    alignItems: 'center',
-    justifyContent: 'center',
-  }}
-  uiBackground={{ color: canRegenActive ? REGEN_BADGE : DARK }}
->
-  <Label
-    value={`${watersLeft}/${waterLimit}`}
-    fontSize={CAN_BADGE_FONT}
-    color={WHITE}
-    textAlign="middle-center"
-    uiTransform={{ width: 'auto', height: '100%' }}
-  />
-</UiEntity>
-        </UiEntity>
-        <UiEntity uiTransform={{ width: SIDE_COL_W, height: CAN_IMG_GAP, flexShrink: 0 }} />
-
         {/* Dark pill — player count + title + % */}
         <UiEntity
           uiTransform={{
@@ -487,14 +364,6 @@ function uiComponent() {
           }}
           uiBackground={{ color: DARK }}
         >
-          <Label
-            value={playerCount === 1 ? '1 here' : `${playerCount} here`}
-            fontSize={PLAYER_COUNT_FONT}
-            color={GREY}
-            textAlign="middle-center"
-            uiTransform={{ width: SIDE_W, height: PLAYER_COUNT_H }}
-          />
-          <UiEntity uiTransform={{ width: SIDE_W, height: 4, flexShrink: 0 }} />
           <Label
             value="Garden Health"
             fontSize={GARDEN_TITLE_FONT}

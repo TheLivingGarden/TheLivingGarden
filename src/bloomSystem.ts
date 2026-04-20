@@ -46,6 +46,7 @@ let bloomModelEntity: Entity | null = null
 
 let testMode = false
 let customBloomHour: number | null = null
+let closeGen = 0   // incremented each endBloom/triggerBloom — guards the close→idle timer
 
 let onResetCallback: () => void = () => {}
 let onVisualBloomCallback: () => void = () => {}
@@ -194,6 +195,7 @@ export function setupBloomSystem(opts: {
 export function triggerBloomEvent(): void {
   if (bloomActive) return
   bloomActive = true
+  closeGen++   // cancel any pending close→idle timer from a previous cycle
   launchVisualBloom()
 }
 
@@ -203,6 +205,7 @@ export function triggerBloomEvent(): void {
 
 export function endBloom(): void {
   bloomActive = false
+  const gen = ++closeGen
 
   // Stop bloom audio layers
   if (pulseEntity) {
@@ -213,9 +216,25 @@ export function endBloom(): void {
   startPetalSettle()
 
   if (bloomModelEntity) {
-    Animator.playSingleAnimation(bloomModelEntity, ANIM_CLOSE)
+    // Re-assert the full animator state including speeds, then play CloseAction.
+    // playSingleAnimation alone doesn't guarantee the configured speed is applied,
+    // so we use createOrReplace to be explicit.
+    Animator.createOrReplace(bloomModelEntity, {
+      states: [
+        { clip: ANIM_IDLE,      playing: false, loop: true,  speed: 1               },
+        { clip: ANIM_BLOOM,     playing: false, loop: false, speed: BLOOM_ANIM_SPEED },
+        { clip: ANIM_OPEN_IDLE, playing: false, loop: true,  speed: 1               },
+        { clip: ANIM_CLOSE,     playing: true,  loop: false, speed: BLOOM_ANIM_SPEED },
+      ],
+    })
+    console.log('[BloomSystem] Playing CloseAction')
+
     timers.setTimeout(() => {
-      if (bloomModelEntity) Animator.playSingleAnimation(bloomModelEntity, ANIM_IDLE)
+      if (gen !== closeGen) return   // superseded by a newer bloom or close cycle
+      if (bloomModelEntity) {
+        Animator.playSingleAnimation(bloomModelEntity, ANIM_IDLE)
+        console.log('[BloomSystem] Switched to CloseIdle')
+      }
     }, CLOSE_ACTION_MS)
   }
 }

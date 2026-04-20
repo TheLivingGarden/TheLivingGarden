@@ -10,7 +10,7 @@
 export {
   showToast, showDailyLimit, hideDailyLimit, showPersistent, hidePersistent,
   showBannerIdle, showBannerCountdown, updateBannerCountdown, showBannerBloom, updateBannerHealth,
-  updatePlayerCount, updateWaterCount, triggerCanErrorEffect, triggerCanRegenEffect,
+  updatePlayerCount,
 } from './ui'
 export { setupUi as setupNotifications } from './ui'
 import { BLOOM_WINDOWS } from './shared/config'
@@ -71,12 +71,3 @@ export function formatBloomCountdown(testMode: boolean): string {
   return `${ss}s`
 }
 
-/** Toast copy — shown when the player hits their daily watering limit. */
-export function formatDailyLimitMessage(testMode: boolean): string {
-  if (testMode) return "You've reached your daily watering limit\n[TEST MODE — resets on new session]"
-  const midnight = new Date(); midnight.setUTCHours(24, 0, 0, 0)
-  const ms = midnight.getTime() - Date.now()
-  const h  = Math.floor(ms / 3_600_000)
-  const m  = Math.floor((ms % 3_600_000) / 60_000)
-  return `You've reached your daily watering limit,\nplease try again in ${h}h ${m}min`
-}

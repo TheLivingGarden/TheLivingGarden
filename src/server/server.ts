@@ -41,9 +41,6 @@ let   bloomActive      = false
 let   bloomStartedAt:  number | null = null   // ms timestamp when current bloom began
 let   countdownPaused  = false
 
-// ── Passive water regeneration ───────────────────────────────
-const REGEN_INTERVAL_MS = 75_000
-const lastRegenTick = new Map<string, number>()   // address → last regen timestamp (ms)
 
 // ── Leaderboard ──────────────────────────────────────────────
 interface LeaderboardEntry { displayName: string; total: number }
@@ -173,44 +170,6 @@ async function incrementPlayerDailyCount(address: string): Promise<number> {
 }
 */
 
-async function decrementPlayerDailyCount(address: string): Promise<number> {
-  const today    = new Date().toISOString().slice(0, 10)
-  const newCount = Math.max(0, (await getPlayerDailyCount(address)) - 1)
-  await Storage.player.set(address, dailyKey(today), String(newCount))
-  return newCount
-}
-
-function regenSystem(): void {
-  const now = Date.now()
-
-  for (const address of playerAddresses.values()) {
-    const last = lastRegenTick.get(address)
-
-    if (last === undefined) {
-      lastRegenTick.set(address, now)
-      continue
-    }
-
-    if (now - last < REGEN_INTERVAL_MS) continue
-
-    // Update timestamp BEFORE async to prevent double execution
-    lastRegenTick.set(address, now)
-
-    executeTask(async () => {
-      const current = await getPlayerDailyCount(address)
-
-      if (current >= DAILY_WATER_LIMIT) return
-
-      const newCount = Math.min(DAILY_WATER_LIMIT, current + 1)
-      const today    = new Date().toISOString().slice(0, 10)
-      await Storage.player.set(address, dailyKey(today), String(newCount))
-
-      room.send('playerDailyState', dailyStatePayload(newCount), { to: [address] })
-
-      console.log(`[Server] Regen tick: ${address} → ${newCount}/${DAILY_WATER_LIMIT}`)
-    })
-  }
-}
 
 // ---------------------------------------------------------------
 // Bloom
@@ -271,8 +230,16 @@ function checkBloomThreshold(): void {
         executeTask(async () => {
           bloomSustainTimer     = null
           bloomSustainStartedAt = null
-          bloomSustainElapsedMs = 0
-          if (!bloomActive && !countdownPaused && getWateredCount() >= BLOOM_THRESHOLD) triggerBloom()
+          // Only reset elapsed after confirming we can bloom — if a plant expired in the
+          // same tick, we want checkBloomThreshold() (called on next water) to restart
+          // from 0 rather than an incorrect partial value.
+          if (!bloomActive && getWateredCount() >= BLOOM_THRESHOLD) {
+            bloomSustainElapsedMs = 0
+            triggerBloom()
+          } else {
+            bloomSustainElapsedMs = 0   // full cycle elapsed; reset for next attempt
+            console.log('[Server] Bloom sustain timer fired but health below threshold — resetting countdown')
+          }
         })
       }, remaining)
     }
@@ -293,24 +260,31 @@ function triggerBloom(): void {
 }
 
 async function resetGarden(): Promise<void> {
-  // Timestamp guard — ignore stale reset calls if bloom already ended
-  if (bloomStartedAt !== null && Date.now() - bloomStartedAt < BLOOM_RESET_DELAY_MS) return
+  // Idempotent guard — ignore if bloom is no longer active (already reset)
+  if (!bloomActive) return
   console.log('[Server] Resetting garden...')
   cancelBloomSustain()
   bloomActive    = false
   bloomStartedAt = null
 
   for (const [plantId, entity] of plantEntities) {
-    const ps   = PlantSync.getMutable(entity)
+    const ps     = PlantSync.getMutable(entity)
     ps.isWatered = false
     ps.wateredAt = 0
     wateredByMap.delete(plantId)
     room.send('plantStateUpdate', { plantId, isWatered: false, wateredAt: 0, wateredBy: '' })
   }
 
-  await savePlantStates()
+  // Send bloomReset BEFORE persisting — a Storage failure must never prevent clients
+  // from leaving bloom state. The in-memory state is already authoritative.
   room.send('bloomReset', {})
   console.log('[Server] Garden reset complete')
+
+  try {
+    await savePlantStates()
+  } catch (err) {
+    console.error('[Server] resetGarden: failed to persist plant states:', err)
+  }
 }
 
 // ---------------------------------------------------------------
@@ -365,10 +339,10 @@ function msUntilNextBloomWindow(): number {
 
 /** Build a playerDailyState payload stamped with the current server time and
  *  the absolute timestamp of the next bloom window (for client clock-sync). */
-function dailyStatePayload(wateredToday: number) {
-  const sentAt     = Date.now()
-  const bloomTime  = sentAt + msUntilNextBloomWindow()
-  return { wateredToday, dailyLimit: DAILY_WATER_LIMIT, sentAt, bloomTime }
+function dailyStatePayload() {
+  const sentAt    = Date.now()
+  const bloomTime = sentAt + msUntilNextBloomWindow()
+  return { sentAt, bloomTime }
 }
 
 function scheduleBloomCheck(): void {
@@ -400,7 +374,6 @@ function playerJoinSystem(): void {
       if (address) {
         syncRateLimits.delete(address)
         testOverrides.delete(address)
-        lastRegenTick.delete(address)
         console.log(`[Server] Player disconnected: ${address}`)
       }
     }
@@ -413,7 +386,7 @@ function playerJoinSystem(): void {
     playerAddresses.set(entity, address)
     executeTask(async () => {
       const wateredToday = await getPlayerDailyCount(address)
-      room.send('playerDailyState', dailyStatePayload(wateredToday), { to: [address] })
+      room.send('playerDailyState', dailyStatePayload(), { to: [address] })
 
       // Send current state of all plants so the client can restore visuals
       for (const [plantId, plantEntity] of plantEntities) {
@@ -425,7 +398,6 @@ function playerJoinSystem(): void {
       broadcastLeaderboard([address])
       // Re-send bloom state to players who join while it is already active
       if (bloomActive) room.send('bloomTriggered', {}, { to: [address] })
-      lastRegenTick.set(address, Date.now())
       console.log(`[Server] Player joined: ${address} (${wateredToday}/${DAILY_WATER_LIMIT} today, ${getWateredCount()}/${BLOOM_THRESHOLD} watered, bloom=${bloomActive})`)
     })
   }
@@ -468,7 +440,17 @@ export async function server(): Promise<void> {
   // Restore persisted plant states and leaderboard
   await loadPlantStates()
   await loadLeaderboard()
-  console.log(`[Server] ${getWateredCount()} plants currently watered`)
+  const restoredCount = getWateredCount()
+  console.log(`[Server] ${restoredCount} plants currently watered`)
+
+  // If health is already at/above threshold on startup (persisted from before restart),
+  // start the sustain timer immediately so the bloom can still fire.
+  // Without this, the client would start its countdown (seeing count ≥ threshold via
+  // requestFullSync) but the server would have no timer — bloom would never trigger.
+  if (restoredCount >= BLOOM_THRESHOLD && !bloomActive) {
+    console.log('[Server] Restored state already at/above bloom threshold — starting sustain timer')
+    checkBloomThreshold()
+  }
 
   // ── Message: waterPlant ──────────────────────────────────────
   onRoomMessage<{ plantId: string }>('waterPlant', async (data, playerAddress) => {
@@ -490,10 +472,11 @@ export async function server(): Promise<void> {
         return
       }
 
-      // Reject if daily limit reached (test-panel override bypasses this)
-      const todayCount = await getPlayerDailyCount(playerAddress)
-      if (!testOverrides.has(playerAddress) && todayCount <= 0) {
-        room.send('waterRejected', { plantId, reason: 'daily_limit' }, { to: [playerAddress] })
+      // Reject if already watered — prevents concurrent double-water when two players
+      // click the same unwatered plant before either receives the other's confirmation.
+      // isWatered is set synchronously before any await, so this check is race-free.
+      if (ps.isWatered) {
+        room.send('waterRejected', { plantId, reason: 'already_watered' }, { to: [playerAddress] })
         return
       }
 
@@ -502,8 +485,6 @@ export async function server(): Promise<void> {
       const watered  = PlantSync.getMutable(entity)
       watered.isWatered = true
       watered.wateredAt = now
-
-      const newCount = await decrementPlayerDailyCount(playerAddress)
 
       // Update all-time leaderboard total for this player
       const entry = leaderboard.get(playerAddress)
@@ -520,10 +501,9 @@ export async function server(): Promise<void> {
       await saveLeaderboard()
       scheduleExpiry(plantId, entity, now, FAST_PLANT_NAMES.has(plantId) ? FAST_PLANT_EXPIRY_MS : WATERED_EXPIRY_MS)
 
-      room.send('playerDailyState', dailyStatePayload(newCount), { to: [playerAddress] })
       room.send('plantStateUpdate', { plantId, isWatered: true, wateredAt: now, wateredBy: displayName })
       broadcastLeaderboard()
-      console.log(`[Server] ${plantId} watered by ${playerAddress} (${newCount}/${DAILY_WATER_LIMIT} today, ${getWateredCount()}/${BLOOM_THRESHOLD} garden)`)
+      console.log(`[Server] ${plantId} watered by ${playerAddress} (${getWateredCount()}/${BLOOM_THRESHOLD} garden)`)
       checkBloomThreshold()
     }
   })
@@ -571,7 +551,7 @@ export async function server(): Promise<void> {
     }
     syncRateLimits.set(address, now)
     const wateredToday = await getPlayerDailyCount(address)
-    room.send('playerDailyState', dailyStatePayload(wateredToday), { to: [address] })
+    room.send('playerDailyState', dailyStatePayload(), { to: [address] })
     for (const [plantId, plantEntity] of plantEntities) {
       const ps = PlantSync.getOrNull(plantEntity)
       if (!ps) continue
@@ -579,7 +559,6 @@ export async function server(): Promise<void> {
     }
     broadcastLeaderboard([address])
     if (bloomActive) room.send('bloomTriggered', {}, { to: [address] })
-    if (!lastRegenTick.has(address)) lastRegenTick.set(address, Date.now())   // ensure regen clock is running on reload
     console.log(`[Server] Full sync sent to ${address} (${wateredToday}/${DAILY_WATER_LIMIT} today, ${getWateredCount()}/${BLOOM_THRESHOLD} watered)`)
   })
 
@@ -609,7 +588,6 @@ export async function server(): Promise<void> {
 
   // Player join detection — runs every frame, lightweight
   engine.addSystem(playerJoinSystem)
-  engine.addSystem(regenSystem)
 
   // Schedule bloom checks at every 6am/6pm UTC window
   scheduleBloomCheck()

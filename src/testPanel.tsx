@@ -251,9 +251,9 @@ export function TestPanelUi() {
         />
 
         <Label
-          value={`Daily limit hit:  ${s.dailyLimitReached ? 'YES' : 'No'}   ·   Bloom:  ${isBloomActive() ? 'ACTIVE' : 'Inactive'}`}
+          value={`Bloom:  ${isBloomActive() ? 'ACTIVE' : 'Inactive'}`}
           fontSize={11}
-          color={s.dailyLimitReached ? ERR_TEXT : OK_TEXT}
+          color={OK_TEXT}
         />
 
       </UiEntity>
