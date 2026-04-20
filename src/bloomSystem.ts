@@ -31,8 +31,11 @@ const ANIM_CLOSE     = 'CloseAction'
 const BLOOM_ANIM_SPEED        = 0.25
 const BLOOM_SWITCH_TO_OPEN_MS = 20_000
 const BLOOM_OPEN_POSE_HOLD_MS = 30 * 60 * 1_000
-/** Same clip length as OpenAction, same speed — so the same duration applies. */
-const CLOSE_ACTION_MS         = BLOOM_SWITCH_TO_OPEN_MS
+/** How long to let CloseAction play before switching to CloseIdle.
+ *  = CloseAction clip length (seconds) / BLOOM_ANIM_SPEED
+ *  Tune this if the animation still snaps early: increase until the
+ *  flower is fully closed before CloseIdle takes over. */
+const CLOSE_ACTION_MS         = 26_000
 
 // ---------------------------------------------------------------
 // State
@@ -46,7 +49,8 @@ let bloomModelEntity: Entity | null = null
 
 let testMode = false
 let customBloomHour: number | null = null
-let closeGen = 0   // incremented each endBloom/triggerBloom — guards the close→idle timer
+let closeGen     = 0      // incremented each startBloomClose/triggerBloom — guards the close→idle timer
+let closeStarted = false  // idempotency flag — prevents double-playing CloseAction
 
 let onResetCallback: () => void = () => {}
 let onVisualBloomCallback: () => void = () => {}
@@ -194,8 +198,9 @@ export function setupBloomSystem(opts: {
 
 export function triggerBloomEvent(): void {
   if (bloomActive) return
-  bloomActive = true
-  closeGen++   // cancel any pending close→idle timer from a previous cycle
+  bloomActive  = true
+  closeStarted = false  // reset so startBloomClose can fire for this new cycle
+  closeGen++            // cancel any pending close→idle timer from a previous cycle
   launchVisualBloom()
 }
 
@@ -203,15 +208,14 @@ export function triggerBloomEvent(): void {
 // End Bloom
 // ---------------------------------------------------------------
 
-export function endBloom(): void {
-  bloomActive = false
-  const gen = ++closeGen
-
-  // Stop bloom audio layers
-  if (pulseEntity) {
-    const src = AudioSource.getMutableOrNull(pulseEntity)
-    if (src) { src.playing = false; src.volume = 0 }
-  }
+/** Start the CloseAction animation immediately. Idempotent — safe to call from both
+ *  the client-side reset ticker (proactive, fires at countdown = 0) and endBloom()
+ *  (fallback, fires when the server's bloomReset message arrives). Whichever runs
+ *  first wins; the second call is a no-op so CloseAction never plays twice. */
+export function startBloomClose(): void {
+  if (closeStarted) return
+  closeStarted = true
+  const gen = ++closeGen   // claim this close cycle's generation
 
   startPetalSettle()
 
@@ -237,6 +241,19 @@ export function endBloom(): void {
       }
     }, CLOSE_ACTION_MS)
   }
+}
+
+export function endBloom(): void {
+  bloomActive = false
+
+  // Stop bloom audio layers
+  if (pulseEntity) {
+    const src = AudioSource.getMutableOrNull(pulseEntity)
+    if (src) { src.playing = false; src.volume = 0 }
+  }
+
+  // Start close animation — no-op if the reset ticker already called startBloomClose()
+  startBloomClose()
 }
 
 // ---------------------------------------------------------------

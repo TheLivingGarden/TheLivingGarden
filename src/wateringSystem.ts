@@ -37,7 +37,7 @@ import {
 import { getPlayer }              from '@dcl/sdk/players'
 import { onEnterSceneObservable } from '@dcl/sdk/observables'
 import { setupPetalSystem, petalParticleSystem }                                                                   from './petalSystem'
-import { setupBloomSystem, triggerBloomEvent, endBloom, isBloomActive, playBloomAudioAccent }                     from './bloomSystem'
+import { setupBloomSystem, triggerBloomEvent, endBloom, startBloomClose, isBloomActive, playBloomAudioAccent }    from './bloomSystem'
 import { startPreBloomEffects, startBloomPhases, startBloomCooldown, cancelPreBloom }                             from './bloomEvent'
 import { setupSparkleSystem, triggerSparkle, triggerWateringTribute, sparkleSystem, triggerBloomSparkles, endBloomSparkles, bloomSparkleSystem } from './sparkleSystem'
 import { setupAmbientFX, triggerGroundRipple, stopFireflies, ambientFXSystem }                                        from './ambientFX'
@@ -298,6 +298,16 @@ let bloomResetStartMs: number | null = null
 function startBloomResetTicker(): void {
   bloomResetStartMs = Date.now()
   const myGen = ++bloomResetTickerGen
+
+  // Dedicated terminal timer — fires startBloomClose() at exactly countdown=0,
+  // independently of the 1-second display loop.  The display loop is cancelled by
+  // stopBloomResetTicker() (gen bump) when bloomReset arrives, but that must NOT
+  // prevent the close animation from starting on time.  isBloomActive() guards
+  // against stale timers firing during a subsequent bloom cycle (test mode).
+  timers.setTimeout(() => {
+    if (isBloomActive()) startBloomClose()
+  }, BLOOM_RESET_DELAY_MS)
+
   function tick(): void {
     if (bloomResetTickerGen !== myGen) return
     const elapsed   = Date.now() - (bloomResetStartMs ?? Date.now())
@@ -310,6 +320,7 @@ function startBloomResetTicker(): void {
       : '…'
     setBloomResetText(label)
     if (remaining > 0) timers.setTimeout(tick, 1_000)
+    // No startBloomClose() here — the dedicated timer above handles it
   }
   tick()
 }
