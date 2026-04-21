@@ -7,6 +7,8 @@
 //      globalThis.__BABYLON_*__ so ESM babylon can be preloaded via hammurabi.mjs
 //   2. @dcl/sdk-commands     — replace npx spawn with local hammurabi.mjs spawn
 //      so the preloader is always used when running `npm start`
+//   3. @dcl/sdk/server       — create the Storage module shim so the bundler can
+//      resolve it (the production DCL server runtime provides the real one)
 
 const fs   = require('fs')
 const path = require('path')
@@ -131,4 +133,83 @@ if (fs.existsSync(sdkCmdFile)) {
   }
 } else {
   console.warn('[postinstall] @dcl/sdk-commands hammurabi-server.js not found — skipping.')
+}
+
+// ── 3. Create @dcl/sdk/server — Storage shim ─────────────────────────────────
+// @dcl/sdk/server is not shipped with the installed SDK version; the production
+// DCL server runtime injects the real implementation.  For local dev we create a
+// file-backed shim so the bundler can resolve the import and the server can run.
+//
+// Data files written by the shim:
+//   server-storage.json         — global key→value store  (scene-wide persistence)
+//   server-storage-players.json — address→{key→value}     (per-player persistence)
+
+const sdkServerJs = path.join(root, 'node_modules/@dcl/sdk/server.js')
+const sdkServerDts = path.join(root, 'node_modules/@dcl/sdk/server.d.ts')
+
+const serverJsContent = `'use strict'
+// @dcl/sdk/server — file-backed Storage shim for local / hammurabi-server dev.
+// The production DCL server runtime replaces this with its own implementation.
+//
+// fs and path are loaded via Function() so esbuild cannot statically resolve them
+// when bundling the client — they are Node.js built-ins used only server-side.
+const _r   = Function('return require')()
+const fs   = _r('fs')
+const path = _r('path')
+
+const GLOBAL_FILE = path.join(process.cwd(), 'server-storage.json')
+const PLAYER_FILE  = path.join(process.cwd(), 'server-storage-players.json')
+
+function readJSON(file) {
+  try { return JSON.parse(fs.readFileSync(file, 'utf8')) } catch { return {} }
+}
+function writeJSON(file, data) {
+  try { fs.writeFileSync(file, JSON.stringify(data, null, 2)) } catch (e) {
+    console.error('[Storage] write failed:', e.message)
+  }
+}
+
+const Storage = {
+  async get(key) {
+    return readJSON(GLOBAL_FILE)[key] ?? null
+  },
+  async set(key, value) {
+    const data = readJSON(GLOBAL_FILE)
+    data[key] = value
+    writeJSON(GLOBAL_FILE, data)
+  },
+  player: {
+    async get(address, key) {
+      return (readJSON(PLAYER_FILE)[address] ?? {})[key] ?? null
+    },
+    async set(address, key, value) {
+      const data = readJSON(PLAYER_FILE)
+      if (!data[address]) data[address] = {}
+      data[address][key] = value
+      writeJSON(PLAYER_FILE, data)
+    },
+  },
+}
+
+module.exports = { Storage }
+`
+
+const serverDtsContent = `// @dcl/sdk/server — type declarations for the Storage persistence API.
+export declare const Storage: {
+  get<T = string>(key: string): Promise<T | null>
+  set(key: string, value: string): Promise<void>
+  player: {
+    get<T = string>(address: string, key: string): Promise<T | null>
+    set(address: string, key: string, value: string): Promise<void>
+  }
+}
+`
+
+const sdkDir = path.join(root, 'node_modules/@dcl/sdk')
+if (fs.existsSync(sdkDir)) {
+  fs.writeFileSync(sdkServerJs,  serverJsContent)
+  fs.writeFileSync(sdkServerDts, serverDtsContent)
+  console.log('[postinstall] @dcl/sdk/server shim created.')
+} else {
+  console.warn('[postinstall] @dcl/sdk not found — skipping server shim.')
 }

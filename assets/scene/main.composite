@@ -1000,16 +1000,16 @@
               "y": 0.7205653786659241,
               "z": 21.239410400390625
             },
+            "scale": {
+              "x": 0.75,
+              "y": 0.5,
+              "z": 0.5
+            },
             "rotation": {
               "x": 0,
               "y": 0.12257004529237747,
               "z": 0,
               "w": -0.9924448728561401
-            },
-            "scale": {
-              "x": 0.75,
-              "y": 0.5,
-              "z": 0.5
             },
             "parent": 0
           }
@@ -1021,16 +1021,16 @@
               "y": 0.7205653786659241,
               "z": 24.74260139465332
             },
+            "scale": {
+              "x": 0.75,
+              "y": 0.5,
+              "z": 0.5
+            },
             "rotation": {
               "x": 0,
               "y": 0.7680650949478149,
               "z": 0,
               "w": -0.6403486728668213
-            },
-            "scale": {
-              "x": 0.75,
-              "y": 0.5,
-              "z": 0.5
             },
             "parent": 0
           }
@@ -1042,16 +1042,16 @@
               "y": 0.7205653786659241,
               "z": 26.751049041748047
             },
+            "scale": {
+              "x": 0.75,
+              "y": 0.5,
+              "z": 0.5
+            },
             "rotation": {
               "x": 0,
               "y": 0.9904173016548157,
               "z": 0,
               "w": 0.1379999965429306
-            },
-            "scale": {
-              "x": 0.75,
-              "y": 0.5,
-              "z": 0.5
             },
             "parent": 0
           }
@@ -1063,16 +1063,16 @@
               "y": 0.7205653786659241,
               "z": 23.22252082824707
             },
+            "scale": {
+              "x": 0.75,
+              "y": 0.5,
+              "z": 0.5
+            },
             "rotation": {
               "x": 0,
               "y": 0.633176863193512,
               "z": 0,
               "w": 0.7739880681037903
-            },
-            "scale": {
-              "x": 0.75,
-              "y": 0.5,
-              "z": 0.5
             },
             "parent": 0
           }
@@ -1084,16 +1084,16 @@
               "y": 0.5238143801689148,
               "z": 23.328567504882812
             },
+            "scale": {
+              "x": 0.8999999761581421,
+              "y": 0.30000001192092896,
+              "z": 0.8999999761581421
+            },
             "rotation": {
               "x": 0,
               "y": 0.6751932501792908,
               "z": 0,
               "w": 0.7376278638839722
-            },
-            "scale": {
-              "x": 0.8999999761581421,
-              "y": 0.30000001192092896,
-              "z": 0.8999999761581421
             },
             "parent": 0
           }
@@ -1105,16 +1105,16 @@
               "y": 0.4881914556026459,
               "z": 24.682437896728516
             },
+            "scale": {
+              "x": 0.800000011920929,
+              "y": 0.30000001192092896,
+              "z": 0.800000011920929
+            },
             "rotation": {
               "x": 0,
               "y": 0.7580583691596985,
               "z": 0,
               "w": -0.6521719694137573
-            },
-            "scale": {
-              "x": 0.800000011920929,
-              "y": 0.30000001192092896,
-              "z": 0.800000011920929
             },
             "parent": 0
           }
@@ -1147,16 +1147,16 @@
               "y": 0.5074309706687927,
               "z": 21.166194915771484
             },
+            "scale": {
+              "x": 0.699999988079071,
+              "y": 0.30000001192092896,
+              "z": 0.699999988079071
+            },
             "rotation": {
               "x": 0,
               "y": -0.10723388940095901,
               "z": 0,
               "w": 0.9942338466644287
-            },
-            "scale": {
-              "x": 0.699999988079071,
-              "y": 0.30000001192092896,
-              "z": 0.699999988079071
             },
             "parent": 0
           }
@@ -2133,48 +2133,6 @@
               "x": 14.720000267028809,
               "y": 0,
               "z": 17.639999389648438
-            },
-            "scale": {
-              "x": 1,
-              "y": 1,
-              "z": 1
-            },
-            "rotation": {
-              "x": 0,
-              "y": 0,
-              "z": 0,
-              "w": 1
-            },
-            "parent": 0
-          }
-        },
-        "612": {
-          "json": {
-            "position": {
-              "x": 12.779983520507812,
-              "y": 0.5,
-              "z": 47.5
-            },
-            "scale": {
-              "x": 1,
-              "y": 1,
-              "z": 1
-            },
-            "rotation": {
-              "x": 0,
-              "y": 0,
-              "z": 0,
-              "w": 1
-            },
-            "parent": 0
-          }
-        },
-        "613": {
-          "json": {
-            "position": {
-              "x": 12.779983520507812,
-              "y": 0.5,
-              "z": 0.6606136560440063
             },
             "scale": {
               "x": 1,
@@ -3736,50 +3694,6 @@
             ]
           }
         },
-        "612": {
-          "json": {
-            "states": [
-              {
-                "clip": "Action",
-                "playing": false,
-                "weight": 1,
-                "speed": 1,
-                "loop": false,
-                "shouldReset": false
-              },
-              {
-                "clip": "Main",
-                "playing": false,
-                "weight": 1,
-                "speed": 1,
-                "loop": false,
-                "shouldReset": false
-              }
-            ]
-          }
-        },
-        "613": {
-          "json": {
-            "states": [
-              {
-                "clip": "Action",
-                "playing": false,
-                "weight": 1,
-                "speed": 1,
-                "loop": false,
-                "shouldReset": false
-              },
-              {
-                "clip": "Main",
-                "playing": false,
-                "weight": 1,
-                "speed": 1,
-                "loop": false,
-                "shouldReset": false
-              }
-            ]
-          }
-        },
         "614": {
           "json": {
             "states": [
@@ -5068,20 +4982,6 @@
         "611": {
           "json": {
             "src": "assets/scene/Models/lamppost_light_mid/lamppost_light_mid.glb",
-            "visibleMeshesCollisionMask": 0,
-            "invisibleMeshesCollisionMask": 3
-          }
-        },
-        "612": {
-          "json": {
-            "src": "assets/asset-packs/discord_button/discord.glb",
-            "visibleMeshesCollisionMask": 0,
-            "invisibleMeshesCollisionMask": 3
-          }
-        },
-        "613": {
-          "json": {
-            "src": "assets/asset-packs/discord_button/discord.glb",
             "visibleMeshesCollisionMask": 0,
             "invisibleMeshesCollisionMask": 3
           }
@@ -6899,16 +6799,6 @@
             "value": "lamppost_light_mid_4"
           }
         },
-        "612": {
-          "json": {
-            "value": "Discord Button"
-          }
-        },
-        "613": {
-          "json": {
-            "value": "Discord Button_2"
-          }
-        },
         "614": {
           "json": {
             "value": "Plant_23"
@@ -7349,9 +7239,9 @@
         "serializationType": "map"
       },
       "data": {
-        "558": {
+        "0": {
           "json": {
-            "gizmo": 1
+            "gizmo": 0
           }
         }
       }
@@ -7466,8 +7356,6 @@
                   597,
                   598,
                   599,
-                  612,
-                  613,
                   646,
                   624
                 ]
@@ -7925,14 +7813,6 @@
                 "children": []
               },
               {
-                "entity": 612,
-                "children": []
-              },
-              {
-                "entity": 613,
-                "children": []
-              },
-              {
                 "entity": 614,
                 "children": []
               },
@@ -8324,12 +8204,6 @@
           "json": {}
         },
         "611": {
-          "json": {}
-        },
-        "612": {
-          "json": {}
-        },
-        "613": {
           "json": {}
         },
         "614": {
@@ -9322,60 +9196,6 @@
               "text": "Configure the sit spot's hover text and actions. Players can click to sit here. The spot tracks whether it's free or taken and shows a message when occupied."
             },
             "version": 1
-          }
-        },
-        "612": {
-          "json": {
-            "isBasicViewEnabled": true,
-            "componentName": "",
-            "fields": [],
-            "assetId": "ba1cc208-fd8a-4b5d-849c-8c5f02430af3",
-            "label": "Discord Link",
-            "sections": [
-              {
-                "id": "link",
-                "items": [
-                  {
-                    "component": "asset-packs::Actions",
-                    "widget": "TextField",
-                    "label": "Discord Link",
-                    "path": "url",
-                    "basicViewId": "open-link"
-                  }
-                ]
-              }
-            ],
-            "helpTooltip": {
-              "text": "Enter a Discord server URL to open when the item is clicked."
-            },
-            "version": 2
-          }
-        },
-        "613": {
-          "json": {
-            "isBasicViewEnabled": true,
-            "componentName": "",
-            "fields": [],
-            "assetId": "ba1cc208-fd8a-4b5d-849c-8c5f02430af3",
-            "label": "Discord Link",
-            "sections": [
-              {
-                "id": "link",
-                "items": [
-                  {
-                    "component": "asset-packs::Actions",
-                    "widget": "TextField",
-                    "label": "Discord Link",
-                    "path": "url",
-                    "basicViewId": "open-link"
-                  }
-                ]
-              }
-            ],
-            "helpTooltip": {
-              "text": "Enter a Discord server URL to open when the item is clicked."
-            },
-            "version": 2
           }
         },
         "646": {
@@ -10851,34 +10671,6 @@
               }
             ]
           }
-        },
-        "612": {
-          "json": {
-            "id": 30,
-            "value": [
-              {
-                "name": "Open Link",
-                "type": "open_link",
-                "jsonPayload": "{\"url\":\"https://discord.gg/gn8hTCYVPJ\"}",
-                "allowedInBasicView": true,
-                "basicViewId": "open-link"
-              }
-            ]
-          }
-        },
-        "613": {
-          "json": {
-            "id": 31,
-            "value": [
-              {
-                "name": "Open Link",
-                "type": "open_link",
-                "jsonPayload": "{\"url\":\"https://discord.gg/gn8hTCYVPJ\"}",
-                "allowedInBasicView": true,
-                "basicViewId": "open-link"
-              }
-            ]
-          }
         }
       }
     },
@@ -11767,38 +11559,6 @@
                   {
                     "id": 27,
                     "name": "Show text"
-                  }
-                ]
-              }
-            ]
-          }
-        },
-        "612": {
-          "json": {
-            "value": [
-              {
-                "type": "on_click",
-                "conditions": [],
-                "actions": [
-                  {
-                    "id": 30,
-                    "name": "Open Link"
-                  }
-                ]
-              }
-            ]
-          }
-        },
-        "613": {
-          "json": {
-            "value": [
-              {
-                "type": "on_click",
-                "conditions": [],
-                "actions": [
-                  {
-                    "id": 31,
-                    "name": "Open Link"
                   }
                 ]
               }
