@@ -1,4 +1,5 @@
 import { isServer } from '@dcl/sdk/network'
+import { engine, VisibilityComponent } from '@dcl/sdk/ecs'
 import { setupNotifications } from './notifications'
 import { setupWateringSystem } from './wateringSystem'
 
@@ -18,5 +19,11 @@ export async function main() {
   // ── Client only ────────────────────────────────────────────
   setupNotifications()
   setupWateringSystem()
+
+  // Hide Discord buttons — removed from the experience
+  for (const name of ['Discord Button', 'Discord Button_2']) {
+    const e = engine.getEntityOrNullByName(name)
+    if (e) VisibilityComponent.createOrReplace(e, { visible: false })
+  }
 
 }
