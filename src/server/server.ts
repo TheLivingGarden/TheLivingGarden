@@ -16,6 +16,7 @@ import {
 } from '@dcl/sdk/ecs'
 import { loadScene, loadPlayer, createSceneWriter, createPlayerWriter, KeyWriter } from './persistence'
 import { chooseHandSeed } from './hand'
+import { deriveBeds, checkPlant } from '../shared/beds'
 import { PlantSync }          from '../shared/schemas'
 import { room }               from '../shared/messages'
 import {
@@ -59,6 +60,7 @@ import {
   ALMANAC_MILESTONES,
   milestoneTarget,
   STAMP_MILESTONES,
+  BED_FILL_ORIGIN,
   stampMilestoneTarget,
   stampCount,
   SEED_LIFETIME_MS,
@@ -139,6 +141,8 @@ const lifetimeTopWriter  = createSceneWriter('lifetimeTop',        V.lifetimeTop
 const resetAtWriter      = createSceneWriter('leaderboardResetAt', V.leaderboardResetAt)
 const tributesWriter     = createSceneWriter('tributes',           V.tributes)
 const boxesWriter        = createSceneWriter('boxes',              V.boxes)
+// Beds (shared/beds.ts): groups of four planters that belong to whoever planted in them. Derived from the baked layout, no storage.
+const beds = deriveBeds(BOX_POSITIONS, BED_FILL_ORIGIN)
 const lastSeenWriter     = createSceneWriter('lastSeen',           V.lastSeen)
 const planterDraftWriter = createSceneWriter('planterDraft',       V.planterDraft)   // admin overwrite target, never merged
 const plantDraftWriter   = createSceneWriter('plantDraft',         V.plantDraft)     // admin overwrite target, never merged
@@ -934,6 +938,12 @@ function sendBox(b: BoxRecord, to?: string[]): void {
     opened: b.opened, flower: b.flower, waters: b.waters, lastWaterer: b.lastWaterer, tends: b.tends,
   }
   room.send('boxState', payload, to ? { to } : undefined)
+}
+
+/** What the bed rules need to know about a planter: who planted it and when (a bed's owner is derived from this). */
+function bedInfo(boxId: string): { owner: string; ownerName: string; plantedAt: number } | undefined {
+  const x = boxes.get(boxId)
+  return x && x.owner ? { owner: x.owner, ownerName: x.ownerName, plantedAt: x.plantedAt } : undefined
 }
 
 function boxesOwnedBy(address: string): number {
@@ -1895,6 +1905,18 @@ export async function server(): Promise<void> {
     if (boxesOwnedBy(playerAddress) >= cap) {
       sendNotice(playerAddress, `You're using all ${cap} of your planters — harvest one to plant again`)
       return
+    }
+    // Plots: your own bed first, and other people's beds are protected while a free bed exists (shared/beds.ts).
+    // Admin "unlimited" is a test tool and plants anywhere.
+    if (!unlimitedPlanters.has(playerAddress)) {
+      const verdict = checkPlant(beds, bedInfo, playerAddress, b.boxId)
+      if (!verdict.ok) {
+        sendNotice(playerAddress, verdict.reason === 'plot_taken'
+          ? `That is ${verdict.ownerName}'s plot - plant in a free bed (look for the Free plot signs)`
+          : `You have a bed with room - plant in Bed ${verdict.bed} first`)
+        sendBox(b, [playerAddress])
+        return
+      }
     }
     // Admin unlimited: a RANDOM tier every time (test a mixed garden) and no seed needed or used
     const unlimited = unlimitedPlanters.has(playerAddress)

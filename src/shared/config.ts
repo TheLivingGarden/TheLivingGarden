@@ -938,6 +938,9 @@ export const TRIBUTE_MODEL_STANDARD = ''
 /** Planters a player may hold at once — growing AND displaying (GDD §3.1, 2026-09-18:
  *  displaying = leaving an opened flower in its planter). Stored per player (`boxCap`)
  *  so purchasable extra planters can raise it; the effective cap is max(stored, this). */
+/** Beds are numbered outward from here: bed 1 is the group of planters nearest this point. Today that is the spawn area; in the
+ *  new plaza it is the potting shed's door (design/zone-layout.md), so the first gardeners sit beside their inventory. */
+export const BED_FILL_ORIGIN = { x: 11.5, z: 20.5 } as const
 export const BOX_CAP_DEFAULT       = 2   // TUNING
 /** Crowding rule (GDD §3.1): keep this many planters free. When fewer are free, the
  *  planter of the owner away longest (not connected, away ≥ PLANTER_TIDY_MIN_AWAY_MS) is
