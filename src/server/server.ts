@@ -16,7 +16,8 @@ import {
 } from '@dcl/sdk/ecs'
 import { loadScene, loadPlayer, createSceneWriter, createPlayerWriter, KeyWriter } from './persistence'
 import { chooseHandSeed } from './hand'
-import { deriveBeds, checkPlant } from '../shared/beds'
+import { makeBeds, checkPlant } from '../shared/beds'
+import { slimKeepsake, chunkCollection, MAX_SAFE_MESSAGE_BYTES } from '../shared/collection'
 import { PlantSync }          from '../shared/schemas'
 import { room }               from '../shared/messages'
 import {
@@ -61,6 +62,7 @@ import {
   milestoneTarget,
   STAMP_MILESTONES,
   BED_FILL_ORIGIN,
+  BEDS_EXPLICIT,
   stampMilestoneTarget,
   stampCount,
   SEED_LIFETIME_MS,
@@ -142,7 +144,7 @@ const resetAtWriter      = createSceneWriter('leaderboardResetAt', V.leaderboard
 const tributesWriter     = createSceneWriter('tributes',           V.tributes)
 const boxesWriter        = createSceneWriter('boxes',              V.boxes)
 // Beds (shared/beds.ts): groups of four planters that belong to whoever planted in them. Derived from the baked layout, no storage.
-const beds = deriveBeds(BOX_POSITIONS, BED_FILL_ORIGIN)
+const beds = makeBeds(BOX_POSITIONS, BED_FILL_ORIGIN, BEDS_EXPLICIT)
 const lastSeenWriter     = createSceneWriter('lastSeen',           V.lastSeen)
 const planterDraftWriter = createSceneWriter('planterDraft',       V.planterDraft)   // admin overwrite target, never merged
 const plantDraftWriter   = createSceneWriter('plantDraft',         V.plantDraft)     // admin overwrite target, never merged
@@ -1155,7 +1157,14 @@ async function sendCollection(address: string): Promise<void> {
   const flowers = await loadFlowers(address)
   const cap     = await planterCap(address)
   const free    = Math.max(0, avenueSlotCap() - avenueSlotsOwnedBy(address))
-  room.send('collectionUpdate', { flowersJson: JSON.stringify(flowers), boxCap: cap, avenueSlotsFree: free }, { to: [address] })
+  // In CHUNKS, each with the cap (shared/collection.ts): one 14 KB message was silently dropped for a 136-flower collector and the client
+  // fell back to a planter cap of 1. Provenance stays server-side; the client reads flower / tier / at / from.
+  const slim = flowers.map(slimKeepsake)
+  for (const c of chunkCollection(slim)) {
+    const json = JSON.stringify(c.items)
+    if (json.length > MAX_SAFE_MESSAGE_BYTES) console.error(`[Server] collectionUpdate chunk is ${json.length} bytes for ${address.slice(0, 8)}… — over the safe limit`)
+    room.send('collectionUpdate', { flowersJson: json, boxCap: cap, avenueSlotsFree: free, start: c.start, total: slim.length }, { to: [address] })
+  }
 }
 
 // ── v2: held flower — one keepsake per gardener, shown in their hand to everyone.
@@ -1912,7 +1921,7 @@ export async function server(): Promise<void> {
       const verdict = checkPlant(beds, bedInfo, playerAddress, b.boxId)
       if (!verdict.ok) {
         sendNotice(playerAddress, verdict.reason === 'plot_taken'
-          ? `That is ${verdict.ownerName}'s plot - plant in a free bed (look for the Free plot signs)`
+          ? `That is ${verdict.ownerName}'s plot - plant in a free bed (any planter without a name sign)`
           : `You have a bed with room - plant in Bed ${verdict.bed} first`)
         sendBox(b, [playerAddress])
         return

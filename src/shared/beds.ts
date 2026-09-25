@@ -49,6 +49,29 @@ export function deriveBeds(
   return beds
 }
 
+/** Beds from EXPLICIT groups of planter ids (the baked layout lists them, so a bed is always the row the artist laid out), numbered in the
+ *  order given. Unknown ids and empty groups are dropped; planters named in no group still get beds (greedy fallback), so nothing is left out.
+ *  With no groups at all this is deriveBeds. */
+export function makeBeds(
+  planters: ReadonlyArray<{ id: string; x: number; z: number }>,
+  origin: { x: number; z: number },
+  groups?: ReadonlyArray<ReadonlyArray<string>>,
+): Bed[] {
+  if (!groups || groups.length === 0) return deriveBeds(planters, origin)
+  const byId = new Map(planters.map(p => [p.id, p]))
+  const used = new Set<string>()
+  const beds: Bed[] = []
+  for (const g of groups) {
+    const ps = g.map(id => byId.get(id)).filter((p): p is { id: string; x: number; z: number } => !!p && !used.has(p.id))
+    if (ps.length === 0) continue
+    ps.forEach(p => used.add(p.id))
+    beds.push({ id: beds.length + 1, boxIds: ps.map(p => p.id), cx: ps.reduce((a, p) => a + p.x, 0) / ps.length, cz: ps.reduce((a, p) => a + p.z, 0) / ps.length })
+  }
+  const rest = planters.filter(p => !used.has(p.id))
+  for (const b of deriveBeds(rest, origin)) beds.push({ ...b, id: beds.length + 1 })
+  return beds
+}
+
 /** The owner of a bed: whoever planted first among its planted planters, or null when it is empty. */
 export function bedOwner(bed: Bed, info: BoxInfoFn): BoxOwnerInfo | null {
   let best: BoxOwnerInfo | null = null

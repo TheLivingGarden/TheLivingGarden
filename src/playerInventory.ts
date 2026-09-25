@@ -21,6 +21,7 @@ let pouch: number[] = []      // counts per rarity tier, index = tier id
 let preferredTier   = 0       // which tier to plant next, when the pouch holds more than one
 let flowers: Keepsake[] = []
 let boxCap     = 1
+let boxCapKnown = false   // false until the server has told us: the default of 1 is a placeholder and must never block planting
 
 export function getPouch(): number[] { return pouch }
 export function setPouch(counts: number[]): void {
@@ -81,7 +82,8 @@ export function setDiscovered(entries: string[]): void {
 export function getFlowers(): Keepsake[] { return flowers }
 export function setFlowers(list: Keepsake[]): void { flowers = list }
 export function getBoxCap(): number { return boxCap }
-export function setBoxCap(n: number): void { boxCap = n }
+export function setBoxCap(n: number): void { boxCap = n; boxCapKnown = true }
+export function isBoxCapKnown(): boolean { return boxCapKnown }
 
 /** How many MORE flowers this gardener could put on the Avenue right now — server-owned,
  *  refreshed alongside the collection (harvest/gift/display/recall/join). Onboarding uses

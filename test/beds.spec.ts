@@ -1,4 +1,5 @@
-import { deriveBeds, bedOwner, checkPlant, BoxOwnerInfo } from '../src/shared/beds'
+import { deriveBeds, makeBeds, bedOwner, checkPlant, BoxOwnerInfo } from '../src/shared/beds'
+import { BOX_POSITIONS, BED_FILL_ORIGIN, BEDS_EXPLICIT } from '../src/shared/config'
 
 const grid = (n: number) => Array.from({ length: n }, (_, i) => ({ id: `box_${i + 1}`, x: (i % 8) * 1.5, z: Math.floor(i / 8) * 3 }))
 const origin = { x: 0, z: 0 }
@@ -85,5 +86,51 @@ describe('bedOwner and checkPlant', () => {
   it('a bed goes free again when its owner has emptied it', () => {
     expect(bedOwner(beds[0], info({}))).toBeNull()
     expect(checkPlant(beds, info({}), B, beds[0].boxIds[0]).ok).toBe(true)
+  })
+})
+
+describe("the baked layout from KJ's scene.glb (2026-09-25)", () => {
+  const beds = makeBeds(BOX_POSITIONS, BED_FILL_ORIGIN, BEDS_EXPLICIT)
+  it('is 96 planters with unique ids', () => {
+    expect(BOX_POSITIONS).toHaveLength(96)
+    expect(new Set(BOX_POSITIONS.map(p => p.id)).size).toBe(96)
+  })
+  it('groups into 24 beds of exactly four', () => {
+    expect(beds).toHaveLength(24)
+    for (const b of beds) expect(b.boxIds).toHaveLength(4)
+  })
+  it('every bed is a tidy row: its planters span at most 4.5 m and share a facing', () => {
+    for (const b of beds) {
+      const ps = b.boxIds.map(id => BOX_POSITIONS.find(p => p.id === id)!)
+      const span = Math.max(...ps.map(a => Math.max(...ps.map(c => Math.hypot(a.x - c.x, a.z - c.z)))))
+      expect(span).toBeLessThanOrEqual(4.6)
+      expect(new Set(ps.map(p => p.rot)).size).toBe(1)
+    }
+  })
+  it("bed 1 holds KJ's four planted test planters, so they keep their plot", () => {
+    expect([...beds[0].boxIds].sort()).toEqual(['box_100', 'box_4', 'box_6', 'box_99'])
+  })
+})
+
+describe('makeBeds with explicit groups', () => {
+  const ps = grid(10)
+  it('uses the given groups, numbered in order, with centroids', () => {
+    const beds = makeBeds(ps, origin, [['box_1', 'box_2'], ['box_5', 'box_6', 'box_7']])
+    expect(beds.slice(0, 2).map(b => b.id)).toEqual([1, 2])      // the two given groups come first, in order
+    expect(beds[1].boxIds).toEqual(['box_5', 'box_6', 'box_7'])
+    expect(beds[0].boxIds).toEqual(['box_1', 'box_2'])
+    expect(beds[0].cx).toBeCloseTo(0.75)
+  })
+  it('planters not named in any group still get a bed (nothing is left out)', () => {
+    const beds = makeBeds(ps, origin, [['box_1', 'box_2']])
+    expect(beds.flatMap(b => b.boxIds).sort()).toEqual(ps.map(p => p.id).sort())
+  })
+  it('ignores ids that are not planters, and empty groups', () => {
+    const beds = makeBeds(ps, origin, [['nope', 'box_1'], []])
+    expect(beds[0].boxIds).toEqual(['box_1'])
+    expect(beds.every(b => b.boxIds.length > 0)).toBe(true)
+  })
+  it('falls back to the greedy grouping when no groups are given', () => {
+    expect(makeBeds(ps, origin)).toEqual(deriveBeds(ps, origin))
   })
 })

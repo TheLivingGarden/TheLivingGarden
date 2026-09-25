@@ -67,7 +67,9 @@ export const room = registerMessages({
   /** avenueSlotsFree: how many MORE flowers this gardener could put on the Avenue right
    *  now (slots their flair has earned, minus slots they're already using) — lets the
    *  client onboarding hint know when to point at the Avenue without a extra round trip. */
-  collectionUpdate: Schemas.Map({ flowersJson: Schemas.String, boxCap: Schemas.Number, avenueSlotsFree: Schemas.Number }),
+  // One CHUNK of the collection (shared/collection.ts): `start` = index of its first flower, `total` = flowers in all. Every chunk
+  // repeats the planter cap, so the cap can never depend on the collection's size.
+  collectionUpdate: Schemas.Map({ flowersJson: Schemas.String, boxCap: Schemas.Number, avenueSlotsFree: Schemas.Number, start: Schemas.Number, total: Schemas.Number }),
   /** Hold one keepsake in your hand (by collection index), or -1 to put it away. */
   holdFlower:       Schemas.Map({ flowerIndex: Schemas.Number }),
   /** Equip a seed of this rarity tier into your hand, REPLACING whatever was there —

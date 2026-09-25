@@ -39,6 +39,7 @@ import { Quaternion } from '@dcl/sdk/math'
 import { room } from './shared/messages'
 import { showToast } from './notifications'
 import { getPlayer } from '@dcl/sdk/players'
+import { CollectionAssembler } from './shared/collection'
 import { getFlowers, setFlowers, setBoxCap, setAvenueSlotsFree, registerGiftApi, Keepsake, setHeld, heldFlowerIndex, setDiscovered } from './playerInventory'
 import { getSelectedGiftIndex, openSeedMenu } from './seedMenu'
 import { rarityTierById, plantSpeciesById, withArticle, seedModelSrc, SEED_HAND_SCALE } from './shared/config'
@@ -238,13 +239,18 @@ export function setupGiftSystem(): void {
     console.log(`[Gift] discovered: ${ids.length} species`)
   })
 
+  // The collection arrives in chunks (shared/collection.ts); every chunk carries the planter cap, so it is applied at once.
+  const assembler = new CollectionAssembler()
   room.onMessage('collectionUpdate', (data) => {
-    let list: Keepsake[] = []
-    try { list = JSON.parse(data.flowersJson) } catch { list = [] }
-    setFlowers(list)
     setBoxCap(data.boxCap)
     setAvenueSlotsFree(data.avenueSlotsFree)
-    console.log(`[Gift] collection: ${list.length} flower(s), box cap ${data.boxCap}`)
+    let items: Keepsake[] = []
+    try { items = JSON.parse(data.flowersJson) } catch { items = [] }
+    const done = assembler.add(data.start ?? 0, data.total ?? items.length, items)
+    if (done) {
+      setFlowers(done as Keepsake[])
+      console.log(`[Gift] collection: ${done.length} flower(s), box cap ${data.boxCap}`)
+    }
   })
 
   room.onMessage('giftReceived', (data) => {

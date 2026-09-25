@@ -48,14 +48,14 @@ import {
 import { Quaternion } from '@dcl/sdk/math'
 import { getPlayer } from '@dcl/sdk/players'
 import { room } from './shared/messages'
-import { BOX_POSITIONS, BOX_WATER_MAX, WATER_DROP_MODEL_SRC, BOX_MODEL_SRC, BOX_MODEL_SCALE, BOX_MODEL_RIM_Y, BED_FILL_ORIGIN, growMsForTier, growStageOf, tendsAvailable, BALLOON_MODEL_SRC, BALLOON_ANIM_CLIPS, SEED_MODEL_HEIGHT, seedModelSrc, SEEDLING_MODEL_SRC_NORMAL, SEEDLING_MODEL_SRC_RARE, rarityTierById, plantSpeciesById, withArticle } from './shared/config'
+import { BOX_POSITIONS, BOX_WATER_MAX, WATER_DROP_MODEL_SRC, BOX_MODEL_SRC, BOX_MODEL_SCALE, BOX_MODEL_RIM_Y, BED_FILL_ORIGIN, BEDS_EXPLICIT, growMsForTier, growStageOf, tendsAvailable, BALLOON_MODEL_SRC, BALLOON_ANIM_CLIPS, SEED_MODEL_HEIGHT, seedModelSrc, SEEDLING_MODEL_SRC_NORMAL, SEEDLING_MODEL_SRC_RARE, rarityTierById, plantSpeciesById, withArticle } from './shared/config'
 import { showToast } from './notifications'
-import { deriveBeds, bedOwner, checkPlant, Bed } from './shared/beds'
+import { makeBeds, bedOwner, checkPlant, Bed } from './shared/beds'
 import { attachPlantVfx, attachSeedlingVfx, detachPlantVfx, setupPlantVfx } from './plantVfx'
 import { setupGiftSystem } from './giftSystem'
 import { showDiscovery } from './discoveryCard'
 import { triggerSparkle } from './sparkleSystem'
-import { setPouch, getBoxCap, nextSeedTier } from './playerInventory'
+import { setPouch, getBoxCap, isBoxCapKnown, nextSeedTier } from './playerInventory'
 import { createSign, moveSign, setupSignSystem, Sign } from './signs'
 import { BALLOON_TEXT_TRACK } from './balloonTextTrack'
 import { playSfx } from './sounds'
@@ -65,13 +65,14 @@ import { playWateringBeat } from './wateringSystem'
 // Config (greybox visuals)
 // ---------------------------------------------------------------
 
-// Text on the planter's own light wooden board (planterBox.glb node Cube.012: centre
-// y 0.988, front face z≈1.048, 0.96 × 0.32 at model scale — × BOX_MODEL_SCALE here).
-// Readers stand on +Z.
+// Text on the planter's own light wooden board (planterBox.glb node Cube.012: centre y 0.988, front face z≈1.048 — × BOX_MODEL_SCALE here).
+// Readers stand on +Z. KJ 2026-09-25: "the planter text needs to be much bigger, to be legible on mobile" — the floating-tag attempt covered
+// the balloons and the bed sign, so the text stays ON the planter. The board itself is only ~0.55 x 0.18 m, but the crate's front face around it
+// is ~1.08 m wide, so the text (with its dark outline) is allowed to spill past the board: ~1 m wide, font ~2.4x the old 0.4.
 const PLAQUE_OFFSET_Z = 1.055 * BOX_MODEL_SCALE
 const PLAQUE_Y        = 0.988 * BOX_MODEL_SCALE
-const PLAQUE_SIZE     = { w: 0.92 * BOX_MODEL_SCALE, h: 0.30 * BOX_MODEL_SCALE }
-const PLAQUE_FONT     = 0.4    // TUNING — two lines on a 0.55 × 0.18 m board
+const PLAQUE_SIZE     = { w: 1.05, h: 0.40 }
+const PLAQUE_FONT     = 0.95   // TUNING — ~0.05 m per character per unit: 17 chars per line across 0.97 m, two lines
 // Plaques are POOLED: signs.ts only ever shows the nearest 8 within 9 m, so 96 per-box
 // plaques meant 88 hidden text entities (+ a 96-text rewrite on every pouch update).
 // PLAQUE_POOL plaques re-home to the nearest planters instead (same idea as the 100-pot test).
@@ -132,10 +133,16 @@ const views  = new Map<string, BoxView>()
 // Beds (shared/beds.ts): four planters that belong to whoever planted in them. Derived from the baked layout
 // (BOX_POSITIONS) so the client and the server compute the same beds; owners come from the planters themselves.
 // ---------------------------------------------------------------
-const beds: Bed[] = deriveBeds(BOX_POSITIONS, BED_FILL_ORIGIN)
+const beds: Bed[] = makeBeds(BOX_POSITIONS, BED_FILL_ORIGIN, BEDS_EXPLICIT)
 function bedInfo(id: string): { owner: string; ownerName: string; plantedAt: number } | undefined {
   const v = views.get(id)
   return v && v.owner ? { owner: v.owner.toLowerCase(), ownerName: v.ownerName, plantedAt: v.plantedAt } : undefined
+}
+const bedByBox = new Map<string, Bed>()
+for (const b of beds) for (const id of b.boxIds) bedByBox.set(id, b)
+function bedOwnerOfBox(boxId: string): { owner: string; ownerName: string; plantedAt: number } | null {
+  const b = bedByBox.get(boxId)
+  return b ? bedOwner(b, bedInfo) : null
 }
 /** The free planters I should be pointed at: my own bed's spare planters, else the lowest-numbered free bed's. Null = no steer. */
 function steeredFreeBoxes(): Set<string> | null {
@@ -256,20 +263,18 @@ function myBoxCount(): number { let n = 0; for (const v of views.values()) if (i
 function flowerName(v: BoxView): string { return plantSpeciesById(v.flower)?.name ?? v.flower }
 
 /** Board text. The countdown lives on the balloon (balloonTextFor), so this only changes on events. */
+/** Short lines only, so the big font fits on the planter's front: the OWNER is on the bed sign, so it is left out unless this planter sits in someone else's bed. */
 function labelFor(v: BoxView): string {
   if (!v.owner) {
     const have = pouch.reduce((a, b) => a + b, 0)
-    return have > 0 ? `Empty planter\nTap to plant (${have} seeds)` : 'Empty planter\nCatch a bloom seed'
+    return have > 0 ? `Tap to plant\n${have} seeds` : 'Empty planter\nno seeds yet'
   }
   const tierName = rarityTierById(v.rarityTier).name
-  // Always the owner's NAME, never "Your" (Fin 2026-09-21). The label is read by everyone
-  // standing near the planter, so "KJ's Tulip" is what it says to its owner too; the
-  // server sends ownerName for every box, and 'Your' only survives as a fallback for a
-  // record that somehow arrived without one. Direct-address TOASTS keep "Your".
-  const who = v.ownerName ? `${v.ownerName}'s` : 'Your'
-  if (v.opened) return `${who} ${flowerName(v)}${v.rarityTier > 0 ? `\n${tierName}` : ''}`
-  const watered = v.waters > 0 ? `\nwatered x${v.waters} by ${v.lastWaterer}` : ''
-  return `${who} ${v.rarityTier > 0 ? `${tierName} ` : ''}seed${watered}`
+  const bedOwnerInfo = bedOwnerOfBox(v.boxId)
+  const spill = bedOwnerInfo && bedOwnerInfo.owner !== v.owner.toLowerCase() && v.ownerName ? `${v.ownerName}'s\n` : ''
+  if (v.opened) return `${spill}${flowerName(v)}${v.rarityTier > 0 ? `\n${tierName}` : ''}`
+  const watered = v.waters > 0 ? `\nwatered x${v.waters}` : ''
+  return `${spill}${v.rarityTier > 0 ? `${tierName} ` : ''}seed${watered}`
 }
 
 function countdown(v: BoxView, now: number): string {
@@ -549,12 +554,12 @@ function tryPlant(v: BoxView): void {
     const verdict = checkPlant(beds, bedInfo, localId(), v.boxId)
     if (!verdict.ok) {
       showToast(verdict.reason === 'plot_taken'
-        ? `That is ${verdict.ownerName}'s plot - plant in a free bed (look for the Free plot signs)`
+        ? `That is ${verdict.ownerName}'s plot - plant in a free bed (any planter without a name sign)`
         : `You have a bed with room - plant in Bed ${verdict.bed} first`, TOAST_MS, false)
       return
     }
   }
-  if (myBoxCount() >= getBoxCap()) {
+  if (isBoxCapKnown() && myBoxCount() >= getBoxCap()) {   // an unknown cap is only a placeholder: let the server decide
     showToast(`You're using all ${getBoxCap()} of your planters — harvest one to plant again`, TOAST_MS, false)
     return
   }
@@ -770,7 +775,9 @@ const RING_MINE  = { r: 0.98, g: 0.78, b: 0.3 }
 const RING_OTHER = { r: 0.957, g: 0.918, b: 0.824 }
 const RING_FREE  = { r: 0.35, g: 0.62, b: 0.42 }
 
-const PLAQUE_BROWN = { r: 0.30, g: 0.19, b: 0.12 }
+// The bed plaque matches the 2D UI: the same near-black as the menus (DARK in seedMenu/discoveryCard), rounded corners.
+const PLAQUE_DARK = { r: 0.085, g: 0.078, b: 0.067 }
+const PANEL_TEX   = 'assets/images/roundedPanel.png'
 
 function createBedSigns(): void {
   for (const bed of beds) {
@@ -781,29 +788,34 @@ function createBedSigns(): void {
     // depth order from the back: panel, avatar (a plain SQUARE — the explorer ignores a separate mask on it), the
     // brown frame with a circular hole that crops it, then the tinted ring as the outline.
     const panel = engine.addEntity()
-    Transform.create(panel, { parent: root, position: { x: 0, y: 0, z: 0.05 }, scale: { x: 4.6, y: 1.5, z: 0.05 } })
-    MeshRenderer.setBox(panel)
-    Material.setPbrMaterial(panel, { albedoColor: { ...PLAQUE_BROWN, a: 1 }, emissiveColor: PLAQUE_BROWN, emissiveIntensity: 0.5, metallic: 0, roughness: 1 })
+    Transform.create(panel, { parent: root, position: { x: 0, y: 0, z: 0.02 }, scale: { x: 4.3, y: 1.3, z: 1 } })
+    MeshRenderer.setPlane(panel)
+    Material.setPbrMaterial(panel, {
+      texture: Material.Texture.Common({ src: PANEL_TEX }), alphaTexture: Material.Texture.Common({ src: PANEL_TEX }),
+      albedoColor: { ...PLAQUE_DARK, a: 1 }, emissiveColor: PLAQUE_DARK, emissiveIntensity: 0.35,
+      transparencyMode: MaterialTransparencyMode.MTM_ALPHA_BLEND, castShadows: false,
+    })
     const face = engine.addEntity()
-    Transform.create(face, { parent: root, position: { x: -1.65, y: 0, z: 0.0 }, scale: { x: 0, y: 0, z: 0 } })
+    Transform.create(face, { parent: root, position: { x: -1.55, y: 0, z: 0.0 }, scale: { x: 0, y: 0, z: 0 } })
     MeshRenderer.setPlane(face)
     const frame = engine.addEntity()
-    Transform.create(frame, { parent: root, position: { x: -1.65, y: 0, z: -0.006 }, scale: { x: 1.3, y: 1.3, z: 1.3 } })
+    Transform.create(frame, { parent: root, position: { x: -1.55, y: 0, z: -0.006 }, scale: { x: 1.15, y: 1.15, z: 1.15 } })
     MeshRenderer.setPlane(frame)
     Material.setPbrMaterial(frame, {
       texture: Material.Texture.Common({ src: CIRCLE_FRAME }), alphaTexture: Material.Texture.Common({ src: CIRCLE_FRAME }),
-      albedoColor: { ...PLAQUE_BROWN, a: 1 }, emissiveColor: PLAQUE_BROWN, emissiveIntensity: 0.5,
+      albedoColor: { ...PLAQUE_DARK, a: 1 }, emissiveColor: PLAQUE_DARK, emissiveIntensity: 0.35,
       transparencyMode: MaterialTransparencyMode.MTM_ALPHA_BLEND, castShadows: false,
     })
     const ring = engine.addEntity()
-    Transform.create(ring, { parent: root, position: { x: -1.65, y: 0, z: -0.012 }, scale: { x: 1.3, y: 1.3, z: 1.3 } })
+    Transform.create(ring, { parent: root, position: { x: -1.55, y: 0, z: -0.012 }, scale: { x: 1.15, y: 1.15, z: 1.15 } })
     MeshRenderer.setPlane(ring)
     const text = engine.addEntity()
-    // A TextShape's position is the CENTRE of its box, not its left edge: the box spans x -0.9 .. 2.1, clear of the picture
-    Transform.create(text, { parent: root, position: { x: 0.6, y: 0, z: -0.01 } })
+    // A TextShape's position is the CENTRE of its box, not its left edge: the box spans x -0.6 .. 2.0: a 0.4 m gap after the picture's ring.
+    // Font units are small: fontSize 1.15 came out ~0.06 m per character, so 3.4 makes "KJwalker3D's" ~2.4 m wide.
+    Transform.create(text, { parent: root, position: { x: 0.7, y: 0, z: -0.01 } })
     TextShape.create(text, {
-      text: '', fontSize: 1.15, textColor: BED_TEXT_FREE, textAlign: TextAlignMode.TAM_MIDDLE_LEFT,
-      width: 3.0, height: 1.3, textWrapping: true, outlineWidth: 0.15, outlineColor: { r: 0.1, g: 0.06, b: 0.03 },
+      text: '', fontSize: 3.0, textColor: BED_TEXT_FREE, textAlign: TextAlignMode.TAM_MIDDLE_LEFT,
+      width: 2.6, height: 1.2, textWrapping: true, outlineWidth: 0.12, outlineColor: { r: 0.1, g: 0.06, b: 0.03 },
     })
     bedSigns.push({ bed, root, text, face, ring, text_: '', faceOwner: '\u0000', near: false })
   }
@@ -840,10 +852,11 @@ function updateBeds(): void {
       Material.setPbrMaterial(bs.face, tex
         ? { texture: tex, emissiveTexture: tex, emissiveColor: { r: 1, g: 1, b: 1 }, emissiveIntensity: 0.9, castShadows: false }
         : { albedoColor: { ...RING_FREE, a: 1 }, emissiveColor: RING_FREE, emissiveIntensity: 0.4, metallic: 0, roughness: 1 })   // free plot: a plain green disc behind the hole
-      Transform.getMutable(bs.face).scale = { x: 1.17, y: 1.17, z: 1.17 }
+      Transform.getMutable(bs.face).scale = { x: 1.04, y: 1.04, z: 1.04 }
       setBedRing(bs.ring, mine ? RING_MINE : owner ? RING_OTHER : RING_FREE)
     }
-    const near = !!pos && Math.hypot(pos.x - bs.bed.cx, pos.z - bs.bed.cz) <= BED_SIGN_RANGE
+    // Only POPULATED beds get a sign (KJ 2026-09-25: hide the name tags of empty beds)
+    const near = !!owner && !!pos && Math.hypot(pos.x - bs.bed.cx, pos.z - bs.bed.cz) <= BED_SIGN_RANGE
     if (near !== bs.near) { bs.near = near; Transform.getMutable(bs.root).scale = near ? { x: 1, y: 1, z: 1 } : { x: 0, y: 0, z: 0 } }
     // Hover on each FREE planter in this bed says whose plot it is, so the protection is not a surprise on tap
     for (const id of bs.bed.boxIds) {
