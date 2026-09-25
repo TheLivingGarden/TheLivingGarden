@@ -16,7 +16,7 @@
 // =============================================================
 
 import ReactEcs, { UiEntity, Label } from '@dcl/sdk/react-ecs'
-import { PLANT_SPECIES, RARITY_TIERS, rarityTierById, plantSpeciesById, nextMilestone, milestoneTarget, milestoneTitle, growMsForTier, shortGrowTime, AVENUE_MIN_TIER, stampTotal } from './shared/config'
+import { PLANT_SPECIES, RARITY_TIERS, rarityTierById, plantSpeciesById, nextMilestone, milestoneTarget, milestoneTitle, growMsForTier, shortGrowTime, AVENUE_MIN_TIER, stampTotal, nextStampMilestone, stampMilestoneTarget } from './shared/config'
 import { setPreferredTier, nextSeedTier, getPouch, getFlowers, getDiscovered, stampsFound, gardenersHere, giveFlower, getHeld, holdFlower, holdSeed, displayOnAvenue, armAvenuePlacement } from './playerInventory'
 import { showToast } from './notifications'
 
@@ -85,8 +85,8 @@ const FLOWER_MAX_ROWS  = 3
  *  (KJ screenshot 2026-09-21). Normalise once, here, where flowers enter the UI. */
 const safeTier = (t: number): number => (Number.isInteger(t) && t >= 0 && t < RARITY_TIERS.length ? t : 0)
 
-interface Group { key: string; flower: string; rarityTier: number; count: number; lastIndex: number }
-function groupFlowers(): Group[] {
+export interface Group { key: string; flower: string; rarityTier: number; count: number; lastIndex: number }
+export function groupFlowers(): Group[] {
   const map = new Map<string, Group>()
   getFlowers().forEach((raw, i) => {
     const f = { ...raw, rarityTier: safeTier(raw.rarityTier) }
@@ -456,7 +456,12 @@ export function SeedMenuUi(props: { px: (n: number) => number; fs: (n: number) =
         <Label
           value={`${stampsFound()} of ${stampTotal()} rarity stamps - each species in each rarity`}
           fontSize={fs(13)} color={{ ...CREAM, a: 0.7 }} textAlign="middle-left" textWrap="nowrap"
-          uiTransform={{ width: '100%', height: fs(20), margin: { bottom: px(4) } }}
+          uiTransform={{ width: '100%', height: fs(20), margin: { bottom: px(2) } }}
+        />
+        <Label
+          value={(() => { const n = nextStampMilestone(stampsFound()); return n ? `Next: ${n.title} at ${stampMilestoneTarget(n)} stamps - ${stampMilestoneTarget(n) - stampsFound()} to go` : 'Every rarity stamp collected.' })()}
+          fontSize={fs(13)} color={{ ...CREAM, a: 0.85 }} textAlign="middle-left" textWrap="wrap"
+          uiTransform={{ width: '100%', height: fs(22), margin: { bottom: px(6) } }}
         />
 
         {/* Name the next rung outright. The goal being invisible is the whole reason the

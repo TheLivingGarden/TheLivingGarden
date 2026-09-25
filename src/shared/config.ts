@@ -165,7 +165,9 @@ export const GARDEN_BOUNDS = { xMin: 3, xMax: 14, zMin: 3, zMax: 22 } as const
 // computes the same position from goldenSeedPos, so nothing streams per frame.
 export const GOLDEN_SEED_AT_FRACTION   = 0.3   // TUNING — late enough that bloom-arrivals see it
 /** What a rainbow catch rolls into — the realistic route to Mythic and Unique. */
-const RAINBOW_TIER_WEIGHTS: ReadonlyArray<[number, number]> = [[4, 55], [5, 30], [6, 12], [7, 3]]   // TUNING — [tier, weight]: Legendary / Exotic / Mythic / Unique
+// Legendary / Exotic ONLY. It used to roll Mythic 12% and Unique 3% for EVERY gardener who caught it, which made the hard tiers
+// far easier than the ordinary roll (KJ 2026-09-25: Mythic and Unique must be hard). Mythic and Unique come only from the ordinary roll.
+const RAINBOW_TIER_WEIGHTS: ReadonlyArray<[number, number]> = [[4, 65], [5, 35]]   // TUNING — [tier, weight]
 export function rollRainbowTier(): number {
   let r = Math.random() * RAINBOW_TIER_WEIGHTS.reduce((a, [, w]) => a + w, 0)
   for (const [tier, w] of RAINBOW_TIER_WEIGHTS) { r -= w; if (r <= 0) return tier }
@@ -357,8 +359,38 @@ export const ALMANAC_MILESTONES: ReadonlyArray<AlmanacMilestone> = [
   { species: 10, seedTier: 2, planters: 0, title: 'Gardener' },       // TUNING
   { species: 25, seedTier: 3, planters: 1, title: 'Botanist' },
   { species: 50, seedTier: 5, planters: 1, title: 'Curator' },
-  { species: -1, seedTier: 7, planters: 1, title: 'Keeper of the Garden' },
+  { species: -1, seedTier: 5, planters: 1, title: 'Keeper of the Garden' },   // Exotic, NOT Unique: a Unique for every Keeper is a Unique for everyone (KJ 2026-09-25)
 ]
+/** STAMP milestones (KJ 2026-09-25): a second ladder on RARITY STAMPS (each species in each rarity). The species
+ *  ladder above ends within a day or two at a 2-minute growth base, so this one paces the rest of the month. Same
+ *  reward shape; kept separate so the two ladders can never double-pay. -1 = every stamp that exists.
+ *  Planter grants are deliberately few (a planter is faster progress). */
+export interface StampMilestone { stamps: number; seedTier: number; planters: number; title: string }
+export const STAMP_MILESTONES: ReadonlyArray<StampMilestone> = [
+  { stamps: 25,  seedTier: 2, planters: 0, title: 'Collector' },          // TUNING
+  { stamps: 50,  seedTier: 3, planters: 0, title: 'Cataloguer' },
+  { stamps: 100, seedTier: 3, planters: 1, title: 'Archivist' },
+  { stamps: 150, seedTier: 4, planters: 0, title: 'Connoisseur' },
+  { stamps: 200, seedTier: 4, planters: 0, title: 'Rarity Hunter' },
+  { stamps: 300, seedTier: 5, planters: 1, title: 'Grand Collector' },
+  { stamps: 400, seedTier: 5, planters: 0, title: 'Master Collector' },
+  { stamps: -1,  seedTier: 5, planters: 0, title: 'Keeper of Every Bloom' },   // Exotic: the prestige is the title, never a Unique seed
+]
+export function stampMilestoneTarget(m: StampMilestone): number { return m.stamps < 0 ? stampTotal() : m.stamps }
+export function nextStampMilestone(found: number): StampMilestone | null {
+  return STAMP_MILESTONES.find(m => found < stampMilestoneTarget(m)) ?? null
+}
+/** Stamps in a discovered list: one per distinct `${species}|${tier}` entry. A bare species id (the first hours of
+ *  that key) has no rarity, so it is a species but not a stamp. */
+export function stampCount(list: ReadonlyArray<string>): number {
+  const seen = new Set<string>()
+  for (const e of list) {
+    const bar = e.lastIndexOf('|')
+    if (bar > 0 && Number.isInteger(Number(e.slice(bar + 1))) && e.slice(bar + 1) !== '') seen.add(e)
+  }
+  return seen.size
+}
+
 /** How many species this rung actually needs (-1 = every species in the catalogue). */
 export function milestoneTarget(m: AlmanacMilestone): number {
   return m.species < 0 ? PLANT_SPECIES.length : m.species

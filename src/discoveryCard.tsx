@@ -21,7 +21,7 @@
 
 import ReactEcs, { UiEntity, Label } from '@dcl/sdk/react-ecs'
 import { timers } from '@dcl/sdk/ecs'
-import { PLANT_SPECIES, stampTotal, rarityTierById, plantSpeciesById, DISCOVERY_CARD_MS, MILESTONE_CARD_MS, nextMilestone, milestoneTarget } from './shared/config'
+import { PLANT_SPECIES, stampTotal, rarityTierById, plantSpeciesById, DISCOVERY_CARD_MS, MILESTONE_CARD_MS, nextMilestone, milestoneTarget, nextStampMilestone, stampMilestoneTarget } from './shared/config'
 import { getDiscovered, stampsFound } from './playerInventory'
 import { room } from './shared/messages'
 
@@ -72,7 +72,7 @@ export function showDiscovery(flower: string, tier: number, delayMs = 0): void {
 }
 
 // ── Almanac milestone — the bigger, rarer beat that sits on top of a discovery.
-interface Milestone { title: string; species: number; seedTier: number; planters: number }
+interface Milestone { title: string; species: number; stamps: number; seedTier: number; planters: number }
 let milestone: Milestone | null = null
 let milestoneAt = 0   // when its clock starts — later than now while another card is up
 // A real QUEUE, not one slot: an established gardener's first join backfills a whole
@@ -84,8 +84,8 @@ const milestoneQueue: Milestone[] = []
 /** ⚠️ Registered from index.ts AFTER setupWateringSystem(), which calls room.clear(). */
 export function setupDiscoveryCard(): void {
   room.onMessage('milestoneReached', (data) => {
-    milestoneQueue.push({ title: data.title, species: data.species, seedTier: data.seedTier, planters: data.planters })
-    console.log(`[Milestone] queued ${data.title} at ${data.species} species (tier-${data.seedTier} seed, +${data.planters} planter) — ${milestoneQueue.length} waiting`)
+    milestoneQueue.push({ title: data.title, species: data.species, stamps: data.stamps ?? 0, seedTier: data.seedTier, planters: data.planters })
+    console.log(`[Milestone] queued ${data.title} at ${data.stamps > 0 ? `${data.stamps} stamps` : `${data.species} species`} (tier-${data.seedTier} seed, +${data.planters} planter) — ${milestoneQueue.length} waiting`)
   })
 }
 
@@ -119,7 +119,9 @@ export function MilestoneCardUi(props: { px: (n: number) => number; fs: (n: numb
   const { px, fs } = props
   const m = milestone
   const tier = rarityTierById(m.seedTier)
-  const next = nextMilestone(m.species)
+  const isStamp = m.stamps > 0
+  const next = isStamp ? null : nextMilestone(m.species)
+  const nextStamp = isStamp ? nextStampMilestone(m.stamps) : null
   const reward = `A ${tier.name} seed${m.planters > 0 ? ` and ${m.planters === 1 ? 'an extra planter' : `${m.planters} extra planters`}` : ''}`
 
   return (
@@ -130,13 +132,13 @@ export function MilestoneCardUi(props: { px: (n: number) => number; fs: (n: numb
         onMouseDown={dismissMilestone}
       >
         {closeButton(px, fs, a, dismissMilestone)}
-        <Label value={`${m.species} species discovered`} fontSize={fs(15)} color={{ ...DIM, a }} textAlign="middle-center" textWrap="nowrap" uiTransform={{ height: fs(22) }} />
+        <Label value={isStamp ? `${m.stamps} rarity stamps collected` : `${m.species} species discovered`} fontSize={fs(15)} color={{ ...DIM, a }} textAlign="middle-center" textWrap="nowrap" uiTransform={{ height: fs(22) }} />
         <Label value={m.title} fontSize={fs(30)} color={{ ...NEW, a }} textAlign="middle-center" textWrap="wrap" uiTransform={{ width: '100%', height: fs(40), margin: { top: px(2) } }} />
         <UiEntity uiTransform={{ height: px(34), padding: { left: px(18), right: px(18) }, margin: { top: px(10) }, alignItems: 'center', justifyContent: 'center', borderRadius: px(17) }} uiBackground={{ color: { ...tier.seedColor, a } }}>
           <Label value={reward} fontSize={fs(14)} color={{ ...INK, a }} textAlign="middle-center" textWrap="nowrap" uiTransform={{ height: '100%' }} />
         </UiEntity>
         <Label
-          value={next ? `Next: ${next.title} at ${milestoneTarget(next)} species` : 'You have found every flower in the garden.'}
+          value={isStamp ? (nextStamp ? `Next: ${nextStamp.title} at ${stampMilestoneTarget(nextStamp)} stamps` : 'You have every rarity stamp in the garden.') : (next ? `Next: ${next.title} at ${milestoneTarget(next)} species` : 'You have found every flower in the garden.')}
           fontSize={fs(13)} color={{ ...DIM, a: a * 0.85 }} textAlign="middle-center" textWrap="wrap"
           uiTransform={{ width: '100%', height: fs(20), margin: { top: px(10) } }}
         />

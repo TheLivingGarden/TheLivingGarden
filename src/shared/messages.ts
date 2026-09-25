@@ -121,7 +121,7 @@ export const room = registerMessages({
   /** Server → one player: an Almanac milestone just paid out. Celebration only — the
    *  client DERIVES which rungs are earned from the species count it already has, so
    *  nothing here needs re-sending on join. */
-  milestoneReached: Schemas.Map({ title: Schemas.String, species: Schemas.Number, seedTier: Schemas.Number, planters: Schemas.Number }),
+  milestoneReached: Schemas.Map({ title: Schemas.String, species: Schemas.Number, stamps: Schemas.Number, seedTier: Schemas.Number, planters: Schemas.Number }),   // stamps > 0 = a rarity-stamp rung (species is then 0)
   /** Client → server: hold this empty planter for me while the tutorial points at it.
    *  The CLIENT picks which one — the scene server has no avatar positions, so "nearest
    *  free planter" can only be computed where the player is. */

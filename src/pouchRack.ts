@@ -41,23 +41,23 @@ const DEFAULT_YAW = 180
 const PER_ROW     = 4
 const PITCH       = 0.95          // m between slots
 const SEED_WORLD_H = 0.44         // m — a seed's height on the shelf
-const LEDGE_LO    = 0.85
-const LEDGE_HI    = 2.05
-const TAP_M       = 9
-const REFRESH_MS  = 400
-const TOAST_MS    = 3_500
+export const LEDGE_LO    = 0.85
+export const LEDGE_HI    = 2.05
+export const TAP_M       = 9
+export const REFRESH_MS  = 400
+export const TOAST_MS    = 3_500
 // TextShape fontSize is roughly 0.2 m of glyph height per unit: NAME ~0.11 m, COUNT ~0.2 m, SIGN ~0.24 m
-const FONT_NAME   = 0.55
-const FONT_COUNT  = 1.0
-const FONT_SIGN   = 1.0
+export const FONT_NAME   = 0.55
+export const FONT_COUNT  = 1.0
+export const FONT_SIGN   = 1.0
 
 // Lighter than the first pass: the dark wood and near-black panel swallowed the seed colours
-const WOOD   = Color4.create(0.62, 0.42, 0.24, 1)
-const WOOD_D = Color4.create(0.45, 0.29, 0.16, 1)
-const PANEL  = Color4.create(0.24, 0.17, 0.12, 1)
-const PLATE  = Color4.create(0.18, 0.12, 0.09, 1)
-const CREAM  = Color4.create(1.0, 0.95, 0.82, 1)
-const GOLD   = Color4.create(0.98, 0.78, 0.30, 1)
+export const WOOD   = Color4.create(0.62, 0.42, 0.24, 1)
+export const WOOD_D = Color4.create(0.45, 0.29, 0.16, 1)
+export const PANEL  = Color4.create(0.58, 0.47, 0.34, 1)   // lighter than the first pass so plants and seeds read against it
+export const PLATE  = Color4.create(0.30, 0.21, 0.15, 1)
+export const CREAM  = Color4.create(1.0, 0.95, 0.82, 1)
+export const GOLD   = Color4.create(0.98, 0.78, 0.30, 1)
 
 const N = RARITY_TIERS.length
 
@@ -76,15 +76,18 @@ let giftBoard: { root: Entity; text: Entity; tap: Entity } | null = null
 let lastKey = ''
 let accum = 0
 
-function box(parent: Entity, pos: { x: number; y: number; z: number }, size: { x: number; y: number; z: number }, color: Color4): Entity {
+/** `glow` > 0 makes the box faintly self-lit so it does not go black under the night sky (KJ playtest 2026-09-25: flowers vanished against a dark panel). */
+export function box(parent: Entity, pos: { x: number; y: number; z: number }, size: { x: number; y: number; z: number }, color: Color4, glow = 0): Entity {
   const e = engine.addEntity()
   Transform.create(e, { parent, position: pos, scale: size })
   MeshRenderer.setBox(e)
-  Material.setPbrMaterial(e, { albedoColor: color, metallic: 0, roughness: 1 })
+  Material.setPbrMaterial(e, glow > 0
+    ? { albedoColor: color, emissiveColor: color, emissiveIntensity: glow, metallic: 0, roughness: 1 }
+    : { albedoColor: color, metallic: 0, roughness: 1 })
   return e
 }
 
-function label(parent: Entity, pos: { x: number; y: number; z: number }, text: string, fontSize: number, color: Color4, w = 0.5, h = 0.2): Entity {
+export function label(parent: Entity, pos: { x: number; y: number; z: number }, text: string, fontSize: number, color: Color4, w = 0.5, h = 0.2): Entity {
   const e = engine.addEntity()
   Transform.create(e, { parent, position: pos })
   TextShape.create(e, {
@@ -95,20 +98,20 @@ function label(parent: Entity, pos: { x: number; y: number; z: number }, text: s
   return e
 }
 
-function setScale(e: Entity, k: { x: number; y: number; z: number }): void {
+export function setScale(e: Entity, k: { x: number; y: number; z: number }): void {
   const t = Transform.getMutable(e)
   if (t.scale.x !== k.x || t.scale.y !== k.y || t.scale.z !== k.z) t.scale = k
 }
-const ZERO = { x: 0, y: 0, z: 0 }
+export const ZERO = { x: 0, y: 0, z: 0 }
 
-function tapArea(parent: Entity, pos: { x: number; y: number; z: number }, size: { x: number; y: number; z: number }, hover: string, onTap: () => void): Entity {
+export function tapArea(parent: Entity, pos: { x: number; y: number; z: number }, size: { x: number; y: number; z: number }, hover: string, onTap: () => void): Entity {
   const e = engine.addEntity()
   Transform.create(e, { parent, position: pos, scale: size })
   MeshCollider.setBox(e, ColliderLayer.CL_POINTER)
   pointerEventsSystem.onPointerDown({ entity: e, opts: { button: InputAction.IA_POINTER, hoverText: hover, maxDistance: TAP_M } }, onTap)
   return e
 }
-function setHover(e: Entity, text: string): void {
+export function setHover(e: Entity, text: string): void {
   const pe = PointerEvents.getMutableOrNull(e)?.pointerEvents[0]?.eventInfo
   if (pe) pe.hoverText = text
 }
@@ -124,6 +127,17 @@ function holdTier(tier: number): void {
   lastKey = ''   // repaint now
 }
 
+/** The two-shelf cabinet shared by the seed rack and the flower shelf. The viewer stands on the -Z side; the back panel is on +Z. */
+export function buildShelfFrame(root: Entity, w: number): void {
+  box(root, { x: 0, y: 0.4, z: 0 }, { x: w, y: 0.8, z: 0.5 }, WOOD, 0.35)                                   // lower cabinet (plates for the low shelf)
+  box(root, { x: 0, y: LEDGE_LO - 0.03, z: 0 }, { x: w + 0.1, y: 0.06, z: 0.56 }, WOOD_D, 0.3)            // low ledge
+  box(root, { x: 0, y: 1.72, z: -0.02 }, { x: w, y: 0.66, z: 0.46 }, WOOD, 0.35)                             // strip carrying the high shelf plates (tall enough for a two-line name)
+  box(root, { x: 0, y: LEDGE_HI - 0.03, z: 0 }, { x: w + 0.1, y: 0.06, z: 0.56 }, WOOD_D, 0.3)            // high ledge
+  box(root, { x: 0, y: 1.62, z: 0.3 }, { x: w, y: 3.2, z: 0.06 }, PANEL, 0.55)                              // back panel: light and faintly self-lit
+  ;[-1, 1].forEach(sd => box(root, { x: sd * (w / 2 + 0.06), y: 1.7, z: 0.3 }, { x: 0.14, y: 3.4, z: 0.14 }, WOOD_D, 0.3))   // posts
+  box(root, { x: 0, y: 3.0, z: 0.28 }, { x: w * 0.9, y: 0.7, z: 0.07 }, PLATE, 0.3)                        // sign board
+}
+
 export function setupPouchRack(): void {
   const o = PROP_LAYOUT['PouchRack']
   const pos = o ? { x: o.x, y: o.y, z: o.z } : DEFAULT_POS
@@ -134,14 +148,7 @@ export function setupPouchRack(): void {
   Name.create(root, { value: 'PouchRack' })
 
   const w = PER_ROW * PITCH + 0.3
-  // Structure. The viewer stands on the -Z side; the back panel is on +Z.
-  box(root, { x: 0, y: 0.4, z: 0 }, { x: w, y: 0.8, z: 0.5 }, WOOD)                                   // lower cabinet (plates for the low shelf)
-  box(root, { x: 0, y: LEDGE_LO - 0.03, z: 0 }, { x: w + 0.1, y: 0.06, z: 0.56 }, WOOD_D)            // low ledge
-  box(root, { x: 0, y: 1.78, z: -0.02 }, { x: w, y: 0.46, z: 0.46 }, WOOD)                             // strip carrying the high shelf plates
-  box(root, { x: 0, y: LEDGE_HI - 0.03, z: 0 }, { x: w + 0.1, y: 0.06, z: 0.56 }, WOOD_D)            // high ledge
-  box(root, { x: 0, y: 1.62, z: 0.3 }, { x: w, y: 3.2, z: 0.06 }, PANEL)                              // back panel
-  ;[-1, 1].forEach(sd => box(root, { x: sd * (w / 2 + 0.06), y: 1.7, z: 0.3 }, { x: 0.14, y: 3.4, z: 0.14 }, WOOD_D))   // posts
-  box(root, { x: 0, y: 3.0, z: 0.28 }, { x: w * 0.9, y: 0.7, z: 0.07 }, PLATE)                        // sign board
+  buildShelfFrame(root, w)
   label(root, { x: 0, y: 3.08, z: 0.22 }, 'SEED POUCH', FONT_SIGN, GOLD, w * 0.9, 0.5)
   label(root, { x: 0, y: 2.78, z: 0.22 }, 'tap a seed to hold it', 0.36, CREAM, w * 0.9, 0.2)
   tapArea(root, { x: 0, y: 3.0, z: 0.2 }, { x: w * 0.9, y: 0.7, z: 0.1 }, 'Open your pouch', () => { notePouchOpened(); openSeedMenu() })

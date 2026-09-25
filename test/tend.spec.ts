@@ -1,4 +1,4 @@
-import { growStageOf, tendsAvailable, growMsForTier, GROW_STAGE_AT, TEND_SHAVE_FRACTION, rollTierAtLeast, GUARANTEED_MAX_TIER, rollPlantSpecies, plantSpeciesById, PLANT_SPECIES, MYTHIC_PLANTS, UNIQUE_PLANTS, stampTotal, RARITY_TIERS } from '../src/shared/config'
+import { growStageOf, tendsAvailable, growMsForTier, GROW_STAGE_AT, TEND_SHAVE_FRACTION, rollTierAtLeast, GUARANTEED_MAX_TIER, rollPlantSpecies, plantSpeciesById, PLANT_SPECIES, MYTHIC_PLANTS, UNIQUE_PLANTS, stampTotal, RARITY_TIERS, STAMP_MILESTONES, stampMilestoneTarget, nextStampMilestone, stampCount, ALMANAC_MILESTONES, rollRainbowTier } from '../src/shared/config'
 
 describe('growth stages and tending', () => {
   const tier = 0
@@ -74,5 +74,41 @@ describe('bespoke Mythic and Unique plants', () => {
   it('the stamp total is the sum of what can actually be found', () => {
     const regular = PLANT_SPECIES.length * (RARITY_TIERS.length - 2)
     expect(stampTotal()).toBe(regular + (MYTHIC_PLANTS.length || PLANT_SPECIES.length) + (UNIQUE_PLANTS.length || PLANT_SPECIES.length))
+  })
+})
+
+describe('stamp milestones', () => {
+  it('counts one stamp per species|tier entry, ignoring bare species ids and duplicates', () => {
+    expect(stampCount([])).toBe(0)
+    expect(stampCount(['cactus|0', 'cactus|1', 'cactus|1', 'tulip|0', 'daisy'])).toBe(3)
+    expect(stampCount(['cactus|x', ''])).toBe(0)
+  })
+  it('the ladder is strictly increasing and ends at every stamp', () => {
+    const targets = STAMP_MILESTONES.map(stampMilestoneTarget)
+    for (let i = 1; i < targets.length; i++) expect(targets[i]).toBeGreaterThan(targets[i - 1])
+    expect(targets[targets.length - 1]).toBe(stampTotal())
+    expect(STAMP_MILESTONES[STAMP_MILESTONES.length - 1].stamps).toBe(-1)
+  })
+  it('every rung below the last is reachable at plan size (fewer than the total)', () => {
+    for (const m of STAMP_MILESTONES.slice(0, -1)) expect(m.stamps).toBeLessThan(stampTotal())
+  })
+  it('rewards are real tiers and the planter grants stay small', () => {
+    for (const m of STAMP_MILESTONES) { expect(m.seedTier).toBeGreaterThanOrEqual(0); expect(m.seedTier).toBeLessThan(RARITY_TIERS.length) }
+    expect(STAMP_MILESTONES.reduce((a, m) => a + m.planters, 0)).toBeLessThanOrEqual(2)
+  })
+  it('nextStampMilestone is the first rung not yet reached, then null once finished', () => {
+    expect(nextStampMilestone(0)?.stamps).toBe(STAMP_MILESTONES[0].stamps)
+    expect(nextStampMilestone(STAMP_MILESTONES[0].stamps)?.title).toBe(STAMP_MILESTONES[1].title)
+    expect(nextStampMilestone(stampTotal())).toBeNull()
+  })
+})
+
+describe('nothing hands out a Mythic or a Unique except the ordinary hard roll', () => {
+  it('no milestone reward (species ladder or stamp ladder) is above Exotic', () => {
+    for (const m of ALMANAC_MILESTONES) expect(m.seedTier).toBeLessThanOrEqual(GUARANTEED_MAX_TIER)
+    for (const m of STAMP_MILESTONES) expect(m.seedTier).toBeLessThanOrEqual(GUARANTEED_MAX_TIER)
+  })
+  it('the golden rainbow seed never rolls above Exotic (20,000 catches)', () => {
+    for (let i = 0; i < 20_000; i++) expect(rollRainbowTier()).toBeLessThanOrEqual(GUARANTEED_MAX_TIER)
   })
 })

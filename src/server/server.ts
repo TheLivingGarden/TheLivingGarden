@@ -58,6 +58,9 @@ import {
   RARITY_TIERS,
   ALMANAC_MILESTONES,
   milestoneTarget,
+  STAMP_MILESTONES,
+  stampMilestoneTarget,
+  stampCount,
   SEED_LIFETIME_MS,
   GARDEN_BOUNDS,
   BOX_POSITIONS,
@@ -1051,6 +1054,7 @@ async function sendDiscovered(address: string): Promise<void> {
   const list = await loadDiscovered(address)
   room.send('discoveredUpdate', { listJson: JSON.stringify(list) }, { to: [address] })
   await checkMilestones(address, speciesCount(list))
+  await checkStampMilestones(address, stampCount(list))
 }
 
 /** Distinct species in a discovered list. Entries are `${species}|${tier}`; a bare id
@@ -1062,7 +1066,43 @@ function speciesCount(list: string[]): number {
   return ids.size
 }
 
-const loadMilestones = (a: string) => loadPlayerJson<{ claimed: number }>(a, 'milestones', () => ({ claimed: 0 }))
+const loadMilestones = (a: string) => loadPlayerJson<{ claimed: number; stampsClaimed?: number }>(a, 'milestones', () => ({ claimed: 0, stampsClaimed: 0 }))
+
+/** One seed of `seedTier` into the pouch, and `planters` extra planters onto the cap. Shared by the species and stamp ladders. */
+async function payMilestoneReward(address: string, seedTier: number, planters: number): Promise<void> {
+  const pouch = await loadPouch(address)
+  pouch[seedTier] = (pouch[seedTier] ?? 0) + 1
+  void savePouch(address)
+  sendPouch(address)
+  if (planters > 0) {
+    const cap = await loadBoxCap(address)
+    cap.cap = Math.max(cap.cap, BOX_CAP_DEFAULT) + planters
+    void savePlayerJson(address, 'boxCap')
+    await sendCollection(address)   // carries boxCap — the client's own planting gate
+  }
+}
+
+/** The RARITY-STAMP ladder (KJ 2026-09-25). Same shape as checkMilestones, its own counter (`stampsClaimed`) so the two
+ *  ladders never double-pay; an established gardener's first load can cross several rungs at once. */
+async function checkStampMilestones(address: string, stamps: number): Promise<void> {
+  const rec = await loadMilestones(address)
+  let claimed = rec.stampsClaimed ?? 0
+  let changed = false
+  for (let i = claimed; i < STAMP_MILESTONES.length; i++) {
+    const m = STAMP_MILESTONES[i]
+    const target = stampMilestoneTarget(m)
+    if (stamps < target) break
+    claimed = i + 1
+    changed = true
+    await payMilestoneReward(address, m.seedTier, m.planters)
+    room.send('milestoneReached', { title: m.title, species: 0, stamps: target, seedTier: m.seedTier, planters: m.planters }, { to: [address] })
+    console.log(`[Server] ${address} reached stamp milestone "${m.title}" (${target} stamps) → tier-${m.seedTier} seed${m.planters > 0 ? ` + ${m.planters} planter` : ''}`)
+  }
+  if (changed) {
+    rec.stampsClaimed = claimed
+    void savePlayerJson(address, 'milestones')
+  }
+}
 
 /** Pay out every Almanac milestone this species count has crossed. Plural on purpose: the
  *  first load of an established gardener backfills a whole collection at once and can
@@ -1078,19 +1118,9 @@ async function checkMilestones(address: string, species: number): Promise<void> 
     rec.claimed = i + 1
     changed = true
 
-    const pouch = await loadPouch(address)
-    pouch[m.seedTier] = (pouch[m.seedTier] ?? 0) + 1
-    void savePouch(address)
-    sendPouch(address)
+    await payMilestoneReward(address, m.seedTier, m.planters)
 
-    if (m.planters > 0) {
-      const cap = await loadBoxCap(address)
-      cap.cap = Math.max(cap.cap, BOX_CAP_DEFAULT) + m.planters
-      void savePlayerJson(address, 'boxCap')
-      await sendCollection(address)   // carries boxCap — the client's own planting gate
-    }
-
-    room.send('milestoneReached', { title: m.title, species: milestoneTarget(m), seedTier: m.seedTier, planters: m.planters }, { to: [address] })
+    room.send('milestoneReached', { title: m.title, species: milestoneTarget(m), stamps: 0, seedTier: m.seedTier, planters: m.planters }, { to: [address] })
     console.log(`[Server] ${address} reached Almanac milestone "${m.title}" (${milestoneTarget(m)} species) → tier-${m.seedTier} seed${m.planters > 0 ? ` + ${m.planters} planter` : ''}`)
   }
   if (changed) {
