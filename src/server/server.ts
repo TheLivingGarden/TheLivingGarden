@@ -14,7 +14,8 @@ import {
   PlayerIdentityData,
   executeTask,
 } from '@dcl/sdk/ecs'
-import { loadScene, loadPlayer, createSceneWriter, createPlayerWriter, KeyWriter } from './persistence'
+import { loadScene, loadPlayer, createSceneWriter, createPlayerWriter, KeyWriter, isStorableAddress, onSaveProblem } from './persistence'
+import { lastSeenToStore } from './lastSeen'
 import { PlantSync }          from '../shared/schemas'
 import { room }               from '../shared/messages'
 import {
@@ -798,6 +799,10 @@ function emptyPouch(): SeedPouch { return new Array(RARITY_TIERS.length).fill(0)
 // stored; a save for an uncached record is logged as dropped rather than lost silently.
 interface PlayerRecord { value: unknown; writer: KeyWriter }
 const playerRecords = new Map<string, PlayerRecord>()       // `${lowercase address}:${key}` → live record
+
+/** Players whose address cannot key player storage: their records live in memory for the session only. */
+const memoryOnlyPlayers = new Set<string>()                 // lowercase address
+const MEMORY_ONLY_WRITER: KeyWriter = { save() {}, enable() {}, idle: () => Promise.resolve() }
 const playerLoads   = new Map<string, Promise<unknown>>()   // in-flight loads for the same key
 
 // Keyed LOWERCASE, like heldFlowers/heldSeeds — join hands over `identity.address`, messages
@@ -812,6 +817,11 @@ async function loadPlayerRecord<T>(address: string, key: string, parse: (stored:
   if (live) return live.value as T
   const inFlight = playerLoads.get(k)
   if (inFlight) return inFlight as Promise<T>
+  if (memoryOnlyPlayers.has(address.toLowerCase())) {
+    const value = parse(null)
+    playerRecords.set(k, { value, writer: MEMORY_ONLY_WRITER })
+    return value
+  }
 
   const load = (async (): Promise<T> => {
     const res = await loadPlayer<unknown>(address, key)
@@ -1253,7 +1263,8 @@ async function loadLastSeen(): Promise<boolean> {
 }
 function markSeen(address: string): void {
   lastSeen.set(address.toLowerCase(), Date.now())
-  lastSeenWriter.save(Object.fromEntries(lastSeen))
+  const owners = [...[...boxes.values()].map(b => b.owner), ...[...avenue.values()].map(r => r.owner)].filter(Boolean)
+  lastSeenWriter.save(lastSeenToStore(lastSeen, owners))
 }
 const loadKeptSafe = (a: string) => loadPlayerJson<string[]>(a, 'keptSafe', () => [])
 
@@ -1593,6 +1604,7 @@ function playerJoinSystem(): void {
         syncRateLimits.delete(address)
         for (const k of avenueLooked) if (k.startsWith(address.toLowerCase() + ':')) avenueLooked.delete(k)
         evictPlayerRecords(address)
+        memoryOnlyPlayers.delete(address.toLowerCase())
         markSeen(address)
         void ensureFreePlanters()
         heldSeeds.delete(address.toLowerCase())
@@ -1609,6 +1621,18 @@ function playerJoinSystem(): void {
     const address = identity.address
     playerAddresses.set(entity, address)
     executeTask(async () => {
+      const storable = isStorableAddress(address)
+      if (!storable) {
+        memoryOnlyPlayers.add(address.toLowerCase())
+        console.error(`[Server] ${address}: not a storable address — this session's progress stays in memory`)
+      }
+      // Independent reads start together; onboarding's backfill reads the lifetime total, so it follows that
+      // record. The sends below then await reads that are already cached or in flight.
+      const lifetimeLoad = loadLifetimeRecord(address)
+      void Promise.allSettled([
+        loadPouch(address), loadFlowers(address), loadBoxCap(address), loadKeptSafe(address),
+        loadMilestones(address), loadDiscovered(address), lifetimeLoad.then(() => loadOnboarding(address)),
+      ])
       room.send('playerDailyState', dailyStatePayload(), { to: [address] })
 
       // Send current state of all plants so the client can restore visuals
@@ -1618,7 +1642,7 @@ function playerJoinSystem(): void {
         room.send('plantStateUpdate', { plantId, isWatered: ps.isWatered, wateredAt: Number(ps.wateredAt), wateredBy: wateredByMap.get(plantId) ?? '', expiresInMs: expiresInMs(plantId), tier: wateredTierMap.get(plantId) ?? 0, almanac: wateredAlmanacMap.get(plantId) ?? 0 }, { to: [address] })
       }
 
-      await loadLifetimeRecord(address)   // authoritative total before the board goes out
+      await lifetimeLoad   // authoritative total before the board goes out
       broadcastLeaderboard([address])
       sendThreshold([address])
       await loadPouch(address)
@@ -1636,6 +1660,7 @@ function playerJoinSystem(): void {
       sendAllHeld([address])
       markSeen(address)
       await deliverKeptSafe(address)
+      if (!storable) sendNotice(address, "Your progress this visit can't be saved — your address could not be used for storage")
       console.log(`[Server] Player joined: ${address} (${getWateredCount()}/${currentBloomThreshold()} watered, bloom=${bloomActive})`)
     })
   }
@@ -1667,6 +1692,15 @@ function onRoomMessage<T>(
 
 export async function server(): Promise<void> {
   console.log('[Server] Starting up...')
+
+  // Tell any connected admin, once per key per session, that a save was refused; the log has the details.
+  const reportedSaveProblems = new Set<string>()
+  onSaveProblem((label) => {
+    if (reportedSaveProblems.has(label)) return
+    reportedSaveProblems.add(label)
+    const text = `Storage: ${label} could not be saved (see server logs)`
+    for (const address of new Set(playerAddresses.values())) if (isAdmin(address)) sendNotice(address, text)
+  })
 
   // Create PlantSync component for every plant (server-side state tracking only)
   for (const name of PLANT_NAMES) {
@@ -1819,6 +1853,11 @@ export async function server(): Promise<void> {
   // ── Message: adminSpawnSeed (test panel) ────────────────────
   onRoomMessage<{ x: number; z: number; rarityTier: number }>('adminSpawnSeed', async (data, address) => {
     if (!isAdmin(address)) { sendNotice(address, 'Test tools: admin wallet only'); return }
+    // Gathering writes the tier into the pouch array; one past the last tier would leave holes the SDK refuses to store.
+    if (!Number.isInteger(data.rarityTier) || data.rarityTier < 0 || data.rarityTier >= RARITY_TIER_COUNT) {
+      sendNotice(address, `Test tools: rarity tier must be 0 to ${RARITY_TIER_COUNT - 1}`)
+      return
+    }
     const seed: SeedRecord = { id: `admin_${Date.now()}`, x: data.x, z: data.z, rarityTier: data.rarityTier, spawnedAt: Date.now(), gatheredBy: new Set() }
     activeSeeds.set(seed.id, seed)
     setTimeout(() => activeSeeds.delete(seed.id), SEED_LIFETIME_MS)
@@ -1851,6 +1890,7 @@ export async function server(): Promise<void> {
     if (!unlimited) pouch[tier] -= 1
     const now = Date.now()
     b.owner     = playerAddress
+    markSeen(playerAddress)   // an owner's last-seen time is stored from the moment they own something
     b.ownerName = leaderboard.get(playerAddress)?.displayName ?? playerAddress.slice(0, 8) + '…'
     b.rarityTier = tier
     b.plantedAt = now
@@ -1989,6 +2029,7 @@ export async function server(): Promise<void> {
     flowers.splice(idx, 1)
     const name = leaderboard.get(playerAddress)?.displayName ?? playerAddress.slice(0, 8) + '…'
     avenue.set(slot.slotId, { slotId: slot.slotId, owner: playerAddress, ownerName: name, keepsake: f, since: Date.now(), looks: 0 })
+    markSeen(playerAddress)
     const held = heldFlowers.get(playerAddress.toLowerCase())
     if (held && held.flower === f.flower && held.rarityTier === f.rarityTier) clearHeld(playerAddress.toLowerCase())
     console.log(`[Server] ${name} put ${f.flower} (tier ${f.rarityTier}) on the Avenue at ${slot.slotId}`)
@@ -2034,6 +2075,7 @@ export async function server(): Promise<void> {
       avenue.set(slot.slotId, { slotId: slot.slotId, owner: address, ownerName: name, keepsake: flower, since: Date.now(), looks: 0 })
       sendAvenue(avenue.get(slot.slotId)!)
     }
+    markSeen(address)
     void saveAvenue()
     console.log(`[Server] [Test] filled ${n} Avenue slot(s) for ${address}`)
   })

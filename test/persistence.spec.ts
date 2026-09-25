@@ -310,6 +310,51 @@ describe('when saving through a key writer', () => {
     })
   })
 
+  describe('and the SDK refuses the snapshot', () => {
+    let writer: KeyWriter
+    let errors: jest.SpyInstance
+    let problems: jest.Mock
+
+    beforeEach(async () => {
+      errors = jest.spyOn(console, 'error').mockImplementation(() => undefined)
+      problems = jest.fn()
+      persistence.onSaveProblem(problems)
+      mockPlayerSet.mockRejectedValueOnce(new TypeError('Storage.player.set(): address must be a 0x-prefixed 20-byte hex address.'))
+      writer = persistence.createPlayerWriter('guest', 'seeds', 1)
+      writer.enable()
+      writer.save({ common: 1 })
+      await writer.idle()
+      await settle(1500) // past the first retry delay, had it been scheduled
+    })
+
+    afterEach(() => {
+      errors.mockRestore()
+    })
+
+    it('should not retry a snapshot the SDK will refuse again', () => {
+      expect(mockPlayerSet).toHaveBeenCalledTimes(1)
+    })
+
+    it('should log the key and the reason', () => {
+      expect(errors).toHaveBeenCalledWith(expect.stringMatching(/seeds@guest: save refused, snapshot dropped — .*address must be/))
+    })
+
+    it('should tell the listener the save was refused, with the reason', () => {
+      expect(problems).toHaveBeenCalledWith('seeds@guest', expect.stringContaining('address must be'))
+    })
+
+    describe('and a later snapshot is accepted', () => {
+      beforeEach(async () => {
+        mockPlayerSet.mockResolvedValue(true)
+        writer.save({ common: 2 })
+        await writer.idle()
+      })
+
+      it('should write it', () => {
+        expect(mockPlayerSet).toHaveBeenLastCalledWith('guest', 'seeds', { v: 1, d: { common: 2 } })
+      })
+    })
+  })
   describe('and a newer snapshot arrives while an earlier one is failing', () => {
     let writer: KeyWriter
 
@@ -410,3 +455,22 @@ describe('when saving through a key writer', () => {
     })
   })
 })
+
+describe('when checking whether an address can key player storage', () => {
+  let persistence: Persistence
+
+  beforeEach(async () => {
+    persistence = await loadPersistence()
+  })
+
+  it.each([
+    ['a lowercase address', '0x1234567890abcdef1234567890abcdef12345678', true],
+    ['a checksummed address', '0x1234567890ABCDEF1234567890abcdef12345678', true],
+    ['a short address', '0x1234', false],
+    ['a guest name', 'guest', false],
+    ['a path segment', '..', false]
+  ])('should answer for %s', (_label, address, storable) => {
+    expect(persistence.isStorableAddress(address)).toBe(storable)
+  })
+})
+
