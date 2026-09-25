@@ -8,7 +8,7 @@
 // =============================================================
 
 export {
-  showToast, showDailyLimit, hideDailyLimit, showPersistent, hidePersistent,
+  showToast, showMoment, showDailyLimit, hideDailyLimit, showPersistent, hidePersistent,
   showBannerIdle, showBannerCountdown, updateBannerCountdown, showBannerBloom, updateBannerHealth,
   updatePlayerCount, updateBloomRemaining,
 } from './ui'

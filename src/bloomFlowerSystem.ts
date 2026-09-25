@@ -67,6 +67,7 @@ const FLOWER_ROTATION = Quaternion.fromEulerDegrees(90, 0, 0)
 // ---------------------------------------------------------------
 
 let flowerGen       = 0
+let flowerActive    = false   // the contributor holds the rose (even while the can hides it)
 let flowerParentEnt: Entity | null = null
 let flowerChildEnt:  Entity | null = null
 let flowerAnimPending = false   // start the idle loop once the child GLB reports loaded
@@ -76,31 +77,9 @@ let systemAdded       = false
 // Public API
 // ---------------------------------------------------------------
 
-/**
- * Attach a miniature healthy plant to the local player's right hand
- * if their display name appears in `contributorNames`.
- *
- * Pass the contributor set as an array BEFORE clearing it on bloomReset
- * (same call-site pattern as `startContributorCycle`).
- *
- * Safe to call multiple times — bumps the gen to cancel any previous
- * auto-stop timer and removes any previously attached flower first.
- */
-export function startBloomFlower(contributorNames: string[]): void {
-  stopBloomFlower()   // clean up any flower from a previous bloom cycle
-
-  const lp        = getPlayer()
-  const localName = lp?.name    ?? ''
-  const localId   = lp?.userId  ?? ''
-
-  // Match against both display name and userId for robustness
-  const isContributor = (localName && contributorNames.includes(localName))
-                     || (localId   && contributorNames.includes(localId))
-
-  if (!isContributor) return
-
-  const gen = ++flowerGen
-
+/** Create the hand entities. Separate from startBloomFlower so the hand arbiter can remove and
+ *  rebuild them: a rose hidden by scale was still showing next to the can (KJ 2026-09-24). */
+function buildFlower(): void {
   // ── Parent: AvatarAttach anchor (transform gets overwritten by DCL) ──
   const parent = engine.addEntity()
   AvatarAttach.create(parent, {
@@ -128,6 +107,40 @@ export function startBloomFlower(contributorNames: string[]): void {
   // Healthy idle loop once the GLB reports loaded (was a 1.2 s guess)
   flowerAnimPending = true
   if (!systemAdded) { systemAdded = true; engine.addSystem(flowerAnimInitSystem) }
+}
+
+function removeFlowerEntities(): void {
+  flowerAnimPending = false
+  if (flowerParentEnt !== null) { engine.removeEntity(flowerParentEnt); flowerParentEnt = null }
+  if (flowerChildEnt !== null)  { engine.removeEntity(flowerChildEnt);  flowerChildEnt = null }
+}
+
+/**
+ * Attach a miniature healthy plant to the local player's right hand
+ * if their display name appears in `contributorNames`.
+ *
+ * Pass the contributor set as an array BEFORE clearing it on bloomReset
+ * (same call-site pattern as `startContributorCycle`).
+ *
+ * Safe to call multiple times — bumps the gen to cancel any previous
+ * auto-stop timer and removes any previously attached flower first.
+ */
+export function startBloomFlower(contributorNames: string[]): void {
+  stopBloomFlower()   // clean up any flower from a previous bloom cycle
+
+  const lp        = getPlayer()
+  const localName = lp?.name    ?? ''
+  const localId   = lp?.userId  ?? ''
+
+  // Match against both display name and userId for robustness
+  const isContributor = (localName && contributorNames.includes(localName))
+                     || (localId   && contributorNames.includes(localId))
+
+  if (!isContributor) return
+
+  const gen = ++flowerGen
+  flowerActive = true
+  buildFlower()
 
   // Auto-remove after FLOWER_DURATION_MS
   timers.setTimeout(() => {
@@ -142,7 +155,7 @@ export function startBloomFlower(contributorNames: string[]): void {
  * Any in-progress auto-stop timer is invalidated via the gen-counter.
  */
 /** True while the contributor's hand-flower is attached (giftSystem hides the held keepsake then). */
-export function isBloomFlowerActive(): boolean { return flowerParentEnt !== null }
+export function isBloomFlowerActive(): boolean { return flowerActive }
 
 function flowerAnimInitSystem(): void {
   if (!flowerAnimPending || flowerChildEnt === null) return
@@ -153,15 +166,16 @@ function flowerAnimInitSystem(): void {
   Animator.createOrReplace(flowerChildEnt, { states: [{ clip: ANIM_HEALTHY, playing: true, loop: true }] })
 }
 
+/** Show/hide the contributor rose (the hand arbiter in giftSystem: one item per hand). Hiding
+ *  REMOVES its entities and showing rebuilds them; the rose's timer and gen are untouched. */
+export function setBloomFlowerVisible(visible: boolean): void {
+  if (!flowerActive) return
+  if (visible && flowerParentEnt === null) buildFlower()
+  else if (!visible && flowerParentEnt !== null) removeFlowerEntities()
+}
+
 export function stopBloomFlower(): void {
   flowerGen++
-  flowerAnimPending = false
-  if (flowerParentEnt !== null) {
-    engine.removeEntity(flowerParentEnt)
-    flowerParentEnt = null
-  }
-  if (flowerChildEnt !== null) {
-    engine.removeEntity(flowerChildEnt)
-    flowerChildEnt = null
-  }
+  flowerActive = false
+  removeFlowerEntities()
 }

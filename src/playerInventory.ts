@@ -58,6 +58,12 @@ export function heldFlowerIndex(): number | null {
  *  hours of this key) still registers the species, just with no rarity against it. */
 let discovered = new Map<string, Set<number>>()
 export function getDiscovered(): ReadonlyMap<string, ReadonlySet<number>> { return discovered }
+/** How many species × rarity stamps have been found (one per tier seen of each species). */
+export function stampsFound(): number {
+  let n = 0
+  discovered.forEach(tiers => { n += tiers.size })
+  return n
+}
 export function setDiscovered(entries: string[]): void {
   const next = new Map<string, Set<number>>()
   for (const e of entries) {

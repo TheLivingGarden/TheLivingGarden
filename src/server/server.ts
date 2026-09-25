@@ -15,6 +15,7 @@ import {
   executeTask,
 } from '@dcl/sdk/ecs'
 import { loadScene, loadPlayer, createSceneWriter, createPlayerWriter, KeyWriter } from './persistence'
+import { chooseHandSeed } from './hand'
 import { PlantSync }          from '../shared/schemas'
 import { room }               from '../shared/messages'
 import {
@@ -30,6 +31,12 @@ import {
   bloomSustainMs,
   BLOOM_WINDOWS,
   plantDecayMs,
+  HOLD_SWEET_BONUS,
+  BLOOM_KEEPS_WATERED,
+  BLOOM_OPEN_MS,
+  SEED_BURST_FRACTION,
+  TEND_SHAVE_FRACTION,
+  tendsAvailable,
   bloomScaleFor,
   flairTier,
   WEEKLY_RESET_MS,
@@ -43,6 +50,7 @@ import {
   seedRareChance,
   rollSeedTier,
   rollTierAtLeast,
+  GUARANTEED_MAX_TIER,
   GUARANTEED_RARE_AT_CONTRIBUTORS,
   GOLDEN_SEED_AT_FRACTION,
   rollRainbowTier,
@@ -194,8 +202,8 @@ function expiresInMs(plantId: string, now = Date.now()): number {
 }
 
 /** Mark `plantId` watered at `now` with decay for the gardeners present; returns expiresAt. */
-function armExpiry(plantId: string, entity: Entity, now: number): number {
-  const expiresAt = now + plantDecayMs(plantId, knownPlayers.size)
+function armExpiry(plantId: string, entity: Entity, now: number, bonus = 0): number {
+  const expiresAt = now + Math.round(plantDecayMs(plantId, knownPlayers.size) * (1 + bonus))
   plantExpiresAt.set(plantId, expiresAt)
   scheduleExpiry(plantId, entity, now, expiresAt - now)
   return expiresAt
@@ -598,6 +606,10 @@ let bloomSustainTimer:     ReturnType<typeof setTimeout> | null = null
 let bloomSustainStartedAt: number | null = null   // wall-clock ms when current run began
 let bloomSustainElapsedMs: number        = 0      // ms accumulated before current run
 let bloomCooldownUntil:    number        = 0      // no bloom may START before this (set by resetGarden)
+/** False after a bloom until health has dipped BELOW the threshold once. Plants watered during a
+ *  bloom are kept through the reset, so the garden can still be at/above the threshold — without
+ *  this, one more water starts the next bloom's hold (KJ playtest 2026-09-24). */
+let bloomArmed:             boolean       = true
 
 /** Pause the sustain countdown (health dipped below threshold).
  *  Preserves elapsed time so the timer resumes from where it left off. */
@@ -630,7 +642,9 @@ function checkBloomThreshold(): void {
   if (bloomActive || Date.now() < bloomCooldownUntil) return
   const count     = getWateredCount()
   const threshold = currentBloomThreshold()
+  if (count < threshold) bloomArmed = true
   if (count >= threshold) {
+    if (!bloomArmed) return   // still riding the last bloom's kept plants — let health dip first
     if (bloomSustainTimer === null) {
       const remaining = Math.max(0, bloomSustainMs(knownPlayers.size) - bloomSustainElapsedMs)
       bloomSustainStartedAt = Date.now()
@@ -708,16 +722,23 @@ const seedWaveTimers: Array<ReturnType<typeof setTimeout>> = []
 
 function scheduleSeedWaves(): void {
   cancelSeedWaves()
-  const total  = seedSpawnCount(bloomSeedContributors)
-  const window = Math.max(0, bloomDuration - SEED_LAST_WAVE_BEFORE_END_MS)
-  const waves  = Math.max(1, Math.min(total, Math.floor(window / SEED_WAVE_GAP_MS) + 1))
-  const gap    = waves > 1 ? window / (waves - 1) : 0
-  for (let w = 0; w < waves; w++) {
-    const n = Math.floor(total / waves) + (w < total % waves ? 1 : 0)
-    if (w === 0) { spawnBloomSeeds(n, bloomSeedContributors >= GUARANTEED_RARE_AT_CONTRIBUTORS); continue }
-    seedWaveTimers.push(setTimeout(() => executeTask(async () => { if (bloomActive) spawnBloomSeeds(n) }), Math.round(gap * w)))
+  const total   = seedSpawnCount(bloomSeedContributors)
+  const window  = Math.max(0, bloomDuration - SEED_LAST_WAVE_BEFORE_END_MS)
+  const openAt  = Math.min(BLOOM_OPEN_MS, Math.round(window / 2))   // the flower has to be open first
+  const burstN  = Math.min(total, Math.max(1, Math.ceil(total * SEED_BURST_FRACTION)))
+  const restN   = total - burstN
+  const guarantee = bloomSeedContributors >= GUARANTEED_RARE_AT_CONTRIBUTORS
+  seedWaveTimers.push(setTimeout(() => executeTask(async () => { if (bloomActive) spawnBloomSeeds(burstN, guarantee) }), openAt))
+  let waves = 0
+  if (restN > 0) {
+    waves = Math.max(1, Math.min(restN, Math.floor((window - openAt) / SEED_WAVE_GAP_MS)))
+    for (let w = 0; w < waves; w++) {
+      const n  = Math.floor(restN / waves) + (w < restN % waves ? 1 : 0)
+      const at = openAt + Math.round(((window - openAt) * (w + 1)) / waves)
+      seedWaveTimers.push(setTimeout(() => executeTask(async () => { if (bloomActive) spawnBloomSeeds(n) }), at))
+    }
   }
-  console.log(`[Server] Seed trickle: ${total} seeds in ${waves} wave(s) over ${Math.round(window / 1000)}s`)
+  console.log(`[Server] Seed shower: ${burstN} seeds when the flower opens (+${Math.round(openAt / 1000)}s), then ${restN} in ${waves} trickle wave(s) — ${total} total`)
 }
 
 // ── Golden seed chase ─────────────────────────────────────────
@@ -765,7 +786,7 @@ function spawnBloomSeeds(count: number, guaranteeRare = false): void {
       id:         `seed_${now}_${seedCounter++}`,
       x:          GARDEN_BOUNDS.xMin + Math.random() * (GARDEN_BOUNDS.xMax - GARDEN_BOUNDS.xMin),
       z:          GARDEN_BOUNDS.zMin + Math.random() * (GARDEN_BOUNDS.zMax - GARDEN_BOUNDS.zMin),
-      rarityTier: guaranteeRare && i === 0 ? rollTierAtLeast(2) : rollSeedTier(bloomSeedContributors, rareSeedMult),
+      rarityTier: guaranteeRare && i === 0 ? rollTierAtLeast(2, GUARANTEED_MAX_TIER) : rollSeedTier(bloomSeedContributors, rareSeedMult),
       spawnedAt:  now,
       gatheredBy: new Set(),
     }
@@ -890,13 +911,14 @@ interface BoxRecord {
   waters:      number   // Phase 4: how many visitors have watered this growing seed
   waterers:    string[] // their addresses (one water each) — server-only, not on the wire
   lastWaterer: string   // display name shown on the label
+  tends:       number   // times the OWNER tended this seedling (one per growth stage, see tendsAvailable)
 }
 
 const boxes     = new Map<string, BoxRecord>()                       // boxId → record
 const boxTimers = new Map<string, ReturnType<typeof setTimeout>>()  // boxId → open timer
 
 function emptyBox(boxId: string): BoxRecord {
-  return { boxId, owner: '', ownerName: '', rarityTier: 0, plantedAt: 0, opensAt: 0, opened: false, flower: '', waters: 0, waterers: [], lastWaterer: '' }
+  return { boxId, owner: '', ownerName: '', rarityTier: 0, plantedAt: 0, opensAt: 0, opened: false, flower: '', waters: 0, waterers: [], lastWaterer: '', tends: 0 }
 }
 
 /** "12 s" at the playtest base, "24 minutes" at the production one. */
@@ -906,7 +928,7 @@ function sendBox(b: BoxRecord, to?: string[]): void {
   const payload = {
     boxId: b.boxId, owner: b.owner, ownerName: b.ownerName, rarityTier: b.rarityTier,
     plantedAt: b.plantedAt, opensAt: b.opensAt, serverNow: Date.now(),
-    opened: b.opened, flower: b.flower, waters: b.waters, lastWaterer: b.lastWaterer,
+    opened: b.opened, flower: b.flower, waters: b.waters, lastWaterer: b.lastWaterer, tends: b.tends,
   }
   room.send('boxState', payload, to ? { to } : undefined)
 }
@@ -1123,17 +1145,10 @@ const heldSeeds = new Map<string, number>()   // address → rarity tier
  *  equipped seed itself, but GIFT RECEIPT puts a flower straight into `heldFlowers`, so
  *  the order here is what actually closes it. */
 function handSeedTier(address: string): number {
-  const key   = address.toLowerCase()
-  const pouch = pouchOf(address)
-  if (!pouch) return -1
-  if (heldFlowers.has(key)) return -1
-  const equipped = heldSeeds.get(key)
-  if (equipped !== undefined) {
-    if ((pouch[equipped] ?? 0) > 0) return equipped
-    heldSeeds.delete(key)        // planted the last one of that tier — fall through
-  }
-  for (let tier = pouch.length - 1; tier >= 0; tier--) if ((pouch[tier] ?? 0) > 0) return tier
-  return -1
+  const key = address.toLowerCase()
+  const { tier, equipped } = chooseHandSeed(pouchOf(address), heldFlowers.has(key), heldSeeds.get(key))
+  if (equipped === undefined) heldSeeds.delete(key)
+  return tier
 }
 
 /** Last seedTier broadcast per gardener (lowercase key) — a pouch changes on every single
@@ -1148,10 +1163,15 @@ function sendHeld(address: string, to?: string[]): void {
   room.send('heldFlower', { address: key, flower: h?.flower ?? '', rarityTier: h?.rarityTier ?? 0, seedTier }, to ? { to } : undefined)
 }
 
-/** Broadcast the hand only when the seed it should show has actually changed. */
+/** Called on every pouch update. Everyone else only hears about a CHANGE of the shown seed
+ *  (a bloom changes the pouch on every gather), but the gardener themself is told every time:
+ *  their hand is redrawn from the same message stream as their chip, so one dropped or
+ *  reordered message can never leave a seed in the hand that the pouch no longer has
+ *  (Week-2 notes: "a seed visible in-hand while the inventory reported no seed"). */
 function refreshHandSeed(address: string): void {
-  if (shownSeedTier.get(address.toLowerCase()) === handSeedTier(address)) return
-  sendHeld(address)
+  const changed = shownSeedTier.get(address.toLowerCase()) !== handSeedTier(address)
+  if (changed) { sendHeld(address); return }
+  sendHeld(address, [address])
 }
 function sendAllHeld(to: string[]): void { for (const a of heldFlowers.keys()) sendHeld(a, to) }
 function clearHeld(address: string): void { if (heldFlowers.delete(address)) sendHeld(address) }
@@ -1179,7 +1199,7 @@ function openBox(boxId: string): void {
   if (!b || !b.owner || b.opened) return
   boxTimers.delete(boxId)
   b.opened = true
-  b.flower = rollPlantSpecies()
+  b.flower = rollPlantSpecies(b.rarityTier)
   console.log(`[Server] ${b.boxId} opened for ${b.ownerName}: ${b.flower} (tier ${b.rarityTier})`)
   sendBox(b)
   void markDiscovered(b.owner, b.flower, b.rarityTier)   // revealed — counts whether or not they harvest it
@@ -1219,7 +1239,7 @@ async function loadBoxes(): Promise<boolean> {
         continue
       }
       if (live.owner) continue   // claimed this session — memory wins
-      const restored: BoxRecord = { ...emptyBox(r.boxId), ...r, waters: r.waters ?? 0, waterers: r.waterers ?? [], lastWaterer: r.lastWaterer ?? '' }
+      const restored: BoxRecord = { ...emptyBox(r.boxId), ...r, waters: r.waters ?? 0, waterers: r.waterers ?? [], lastWaterer: r.lastWaterer ?? '', tends: r.tends ?? 0 }
       boxes.set(r.boxId, restored)
       if (restored.owner) sendBox(restored)
     }
@@ -1482,7 +1502,7 @@ async function resetGarden(): Promise<void> {
     const ps     = PlantSync.getMutable(entity)
     // Watered during the bloom and still fresh — it stays (2026-09-22). Only dry plants,
     // or ones whose expiry is due this very tick, go back to droopy.
-    if (ps.isWatered && (plantExpiresAt.get(plantId) ?? 0) > now) { kept++; continue }
+    if (BLOOM_KEEPS_WATERED && ps.isWatered && (plantExpiresAt.get(plantId) ?? 0) > now) { kept++; continue }
     ps.isWatered = false
     ps.wateredAt = 0
     wateredByMap.delete(plantId)
@@ -1496,6 +1516,7 @@ async function resetGarden(): Promise<void> {
   // The garden may still be above threshold — hold the next trigger, then re-check once
   // the hold ends (nothing else calls checkBloomThreshold until the next water).
   bloomCooldownUntil = now + BLOOM_TRIGGER_COOLDOWN_MS
+  bloomArmed = getWateredCount() < currentBloomThreshold()   // armed only if the garden actually dropped
   setTimeout(() => executeTask(async () => { if (!bloomActive) checkBloomThreshold() }), BLOOM_TRIGGER_COOLDOWN_MS)
   console.log(`[Server] Garden reset complete — ${kept} watered plants kept, next bloom possible in ${BLOOM_TRIGGER_COOLDOWN_MS / 1000}s`)
 
@@ -1529,7 +1550,7 @@ function scheduleExpiry(
       console.log(`[Server] Plant expired: ${plantId}`)
       // Pause (not cancel) — preserves elapsed progress; timer resumes when health recovers.
       // Expiry must never start the sustain timer, only pause it.
-      if (getWateredCount() < currentBloomThreshold()) pauseBloomSustain()
+      if (getWateredCount() < currentBloomThreshold()) { bloomArmed = true; pauseBloomSustain() }
     })
   }, delayMs)
 }
@@ -1710,7 +1731,7 @@ export async function server(): Promise<void> {
   }
 
   // ── Message: waterPlant ──────────────────────────────────────
-  onRoomMessage<{ plantId: string }>('waterPlant', async (data, playerAddress) => {
+  onRoomMessage<{ plantId: string; sweet?: boolean }>('waterPlant', async (data, playerAddress) => {
     const { plantId } = data
     const entity      = plantEntities.get(plantId)
 
@@ -1760,7 +1781,9 @@ export async function server(): Promise<void> {
       savePlantStates()
       saveLeaderboard()
       void saveLifetimeFor(playerAddress)
-      const expiresAt = armExpiry(plantId, entity, now)
+      const bonus     = data.sweet === true ? HOLD_SWEET_BONUS : 0   // trusted flag; the bonus is small
+      const expiresAt = armExpiry(plantId, entity, now, bonus)
+      if (bonus > 0) console.log(`[Server] Just-right pour on ${plantId} by ${playerAddress} — watered time +${Math.round(bonus * 100)}%`)
 
       room.send('plantStateUpdate', { plantId, isWatered: true, wateredAt: now, wateredBy: displayName, expiresInMs: expiresAt - now, tier, almanac: almanacRankOf(playerAddress) })
       void markOnboarding(playerAddress, 'watered')
@@ -1860,6 +1883,7 @@ export async function server(): Promise<void> {
     b.waters    = 0
     b.waterers  = []
     b.lastWaterer = ''
+    b.tends = 0
     scheduleOpen(b)
     console.log(`[Server] ${b.ownerName} planted a tier-${tier} seed in ${b.boxId} (opens in ${formatGrowTime(growMsForTier(tier))})`)
     sendBox(b)
@@ -1932,6 +1956,24 @@ export async function server(): Promise<void> {
     const left = BOX_WATER_MAX - b.waters
     sendNotice(playerAddress, `You watered ${b.ownerName}'s seed — ${shaveText(growShaveMsForTier(b.rarityTier))} sooner${left > 0 ? `, ${left} more water${left === 1 ? '' : 's'} can help it` : ', and that is all it can take'}`)
     if (isConnected(b.owner)) sendNotice(b.owner, `${name} watered your seed`)
+  })
+
+  // ── Message: tendBox — the OWNER waters their own seedling, once per growth stage ──
+  onRoomMessage<{ boxId: string }>('tendBox', async (data, playerAddress) => {
+    const b = boxes.get(data.boxId)
+    if (!b || !b.owner) return
+    if (b.owner !== playerAddress) return
+    if (b.opened) return
+    const now = Date.now()
+    if (tendsAvailable(b.opensAt, now, b.rarityTier, b.tends) <= 0) { sendNotice(playerAddress, 'It has had all the water it wants for now - tend it again when it grows'); return }
+    const shave = Math.round(growMsForTier(b.rarityTier) * TEND_SHAVE_FRACTION)
+    b.tends += 1
+    b.opensAt = Math.max(now, b.opensAt - shave)
+    scheduleOpen(b)
+    console.log(`[Server] ${b.ownerName} tended ${b.boxId} (${b.tends}, -${Math.round(shave / 1000)}s)`)
+    sendBox(b)
+    void saveBoxes()
+    sendNotice(playerAddress, `You tended your seed - ${shaveText(shave)} sooner`)
   })
 
   // ── Message: giftFlower (Phase 4 — keepsakes) ───────────────
@@ -2027,8 +2069,9 @@ export async function server(): Promise<void> {
     const name = leaderboard.get(address)?.displayName ?? address.slice(0, 8) + '…'
     for (let i = 0; i < n; i++) {
       const slot = empties[i]
+      const tier = rollTierAtLeast(AVENUE_MIN_TIER, GUARANTEED_MAX_TIER)
       const flower: FlowerKeepsake = {
-        flower: rollPlantSpecies(), rarityTier: rollTierAtLeast(AVENUE_MIN_TIER), at: Date.now(),
+        flower: rollPlantSpecies(tier), rarityTier: tier, at: Date.now(),
         grownBy: name, plantedAt: Date.now(), openedAt: Date.now(), helpers: [],
       }
       avenue.set(slot.slotId, { slotId: slot.slotId, owner: address, ownerName: name, keepsake: flower, since: Date.now(), looks: 0 })

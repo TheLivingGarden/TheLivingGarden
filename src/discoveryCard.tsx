@@ -20,14 +20,16 @@
 // =============================================================
 
 import ReactEcs, { UiEntity, Label } from '@dcl/sdk/react-ecs'
-import { PLANT_SPECIES, rarityTierById, plantSpeciesById, DISCOVERY_CARD_MS, MILESTONE_CARD_MS, nextMilestone, milestoneTarget } from './shared/config'
-import { getDiscovered } from './playerInventory'
+import { timers } from '@dcl/sdk/ecs'
+import { PLANT_SPECIES, stampTotal, rarityTierById, plantSpeciesById, DISCOVERY_CARD_MS, MILESTONE_CARD_MS, nextMilestone, milestoneTarget } from './shared/config'
+import { getDiscovered, stampsFound } from './playerInventory'
 import { room } from './shared/messages'
 
-interface Discovery { flower: string; tier: number; isNew: boolean; newTier: boolean; found: number }
+interface Discovery { flower: string; tier: number; isNew: boolean; newTier: boolean; found: number; stamps: number }
 
 let card: Discovery | null = null
 let shownAt = 0
+let cardDueAt = 0   // a delayed card is on its way — milestones wait for it
 
 const FADE_MS = 400
 const DARK  = { r: 0.07, g: 0.063, b: 0.055, a: 0.94 }
@@ -59,13 +61,14 @@ function closeButton(px: (n: number) => number, fs: (n: number) => number, a: nu
  *  was a moment ago — which is exactly the question being asked. If the push wins the
  *  race the card simply reads "You discovered" instead of "New species!"; the Almanac
  *  is right either way, because the server owns the set. */
-export function showDiscovery(flower: string, tier: number): void {
-  const seen = getDiscovered()
+export function showDiscovery(flower: string, tier: number, delayMs = 0): void {
+  const seen = getDiscovered()   // snapshotted NOW, even when the card is delayed for the reveal beat
   // Two different "new": a species never seen at all, and a species seen but never at
   // THIS rarity. The headline count is species, so only the former says "New species!".
-  card = { flower, tier, isNew: !seen.has(flower), newTier: !seen.get(flower)?.has(tier), found: seen.size }
-  shownAt = Date.now()
-  console.log(`[Discovery] ${flower} tier=${tier} new=${card.isNew} newTier=${card.newTier} found=${card.found}/${PLANT_SPECIES.length}`)
+  const c = { flower, tier, isNew: !seen.has(flower), newTier: !seen.get(flower)?.has(tier), found: seen.size, stamps: stampsFound() }
+  const show = () => { card = c; shownAt = Date.now(); cardDueAt = 0 }
+  if (delayMs > 0) { cardDueAt = Date.now() + delayMs; timers.setTimeout(show, delayMs) } else show()
+  console.log(`[Discovery] ${flower} tier=${tier} new=${c.isNew} newTier=${c.newTier} found=${c.found}/${PLANT_SPECIES.length}`)
 }
 
 // ── Almanac milestone — the bigger, rarer beat that sits on top of a discovery.
@@ -88,6 +91,7 @@ export function setupDiscoveryCard(): void {
 
 /** Start the next milestone once the current card (and any discovery card) has finished. */
 function pumpMilestones(now: number): void {
+  if (now < cardDueAt) return
   if (milestone && now < milestoneAt + MILESTONE_CARD_MS) return
   const next = milestoneQueue.shift()
   if (!next) return
@@ -186,6 +190,14 @@ export function DiscoveryCardUi(props: { px: (n: number) => number; fs: (n: numb
           textAlign="middle-center"
           textWrap="wrap"
           uiTransform={{ width: '100%', height: fs(20), margin: { top: px(10) } }}
+        />
+        <Label
+          value={`${c.stamps + (c.newTier ? 1 : 0)} of ${stampTotal()} rarity stamps${c.newTier ? '  (+1 new)' : ''}`}
+          fontSize={fs(13)}
+          color={{ ...(c.newTier ? NEW : DIM), a: a * 0.85 }}
+          textAlign="middle-center"
+          textWrap="wrap"
+          uiTransform={{ width: '100%', height: fs(20), margin: { top: px(2) } }}
         />
       </UiEntity>
     </UiEntity>

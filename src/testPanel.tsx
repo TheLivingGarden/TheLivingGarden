@@ -33,11 +33,13 @@ import { vfxFlags, setVfxFlag } from './plantVfx'
 import { waterFxFlags } from './sparkleSystem'
 import { isLayoutToolOn, setLayoutTool, layoutCount, layoutSelectedInfo, layoutIsCarrying, layoutSelectNearest, layoutPickUpOrDrop, layoutNudge, layoutRotateLeft, layoutRotateRight, layoutSnap90, layoutAddHere, layoutDelete, layoutExport } from './planterLayoutTool'
 import { isPerfOff, setPerfOff, perfLabel, getFpsAvg, resetFpsAvg, PerfToggle } from './potStressTest'
+import { isPropToolOn, setPropTool, propToolCount, propSelectedInfo, propIsCarrying, propSelectNearest, propPickUpOrDrop, propNudge, propRotateLeft, propRotateRight, propSnap90, propExport } from './propLayoutTool'
 import { isPlantToolOn, setPlantTool, plantToolCount, plantSelectedInfo, plantIsCarrying, plantSelectNearest, plantPickUpOrDrop, plantNudge, plantRotateLeft, plantRotateRight, plantSnap90, plantExport } from './plantLayoutTool'
 import { isTributeToolOn, setTributeTool, tributeCount, tributeSelectedInfo, tributeIsCarrying, tributeSelectNearest, tributePickUpOrDrop, tributeNudge, tributeRotateLeft, tributeRotateRight, tributeSnap90, tributeFaceMe, tributeExport } from './tributeLayoutTool'
 import {
   adminSpawnLocalSeed,
   adminSpawnSeedLadder,
+  adminSeedShower,
   adminRequestServerSeed,
   adminScaleSeeds,
   adminShiftSeedHeight,
@@ -406,6 +408,34 @@ export function TestPanelUi() {
           <SeedBtn label="Save / export" color={BTN_BLOOM} onClick={plantExport} last />
         </UiEntity>
 
+        {/* Prop editor — lampposts (post + its 3 light overlays move as one), sit spots and the Discord
+            buttons. Client-only: Save / export prints a PROP_LAYOUT block to the console. */}
+        <UiEntity uiTransform={{ width: '100%', height: 36, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', margin: { bottom: 4 } }}>
+          <Label value={isPropToolOn() ? `Prop editor  (${propToolCount()})` : 'Prop editor (lamps, sit spots)'} fontSize={12} color={WHITE} uiTransform={{ flexGrow: 1 }} />
+          <ToggleButton value={isPropToolOn()} onChange={setPropTool} />
+        </UiEntity>
+        <Label value={propSelectedInfo()} fontSize={11} color={MUTED} uiTransform={{ display: isPropToolOn() ? 'flex' : 'none', width: '100%', height: 18, margin: { bottom: 4 } }} />
+        <UiEntity uiTransform={{ display: isPropToolOn() ? 'flex' : 'none', width: '100%', flexDirection: 'row', margin: { bottom: 4 } }}>
+          <SeedBtn label="Select nearest" color={BTN_OFF} onClick={propSelectNearest} />
+          <SeedBtn label={propIsCarrying() ? 'Drop' : 'Pick up'} color={BTN_ON} onClick={propPickUpOrDrop} last />
+        </UiEntity>
+        <UiEntity uiTransform={{ display: isPropToolOn() ? 'flex' : 'none', width: '100%', flexDirection: 'row', margin: { bottom: 4 } }}>
+          <SeedBtn label="Nudge fwd" color={BTN_OFF} onClick={() => propNudge('fwd')} />
+          <SeedBtn label="Nudge back" color={BTN_OFF} onClick={() => propNudge('back')} />
+          <SeedBtn label="Nudge left" color={BTN_OFF} onClick={() => propNudge('left')} />
+          <SeedBtn label="Nudge right" color={BTN_OFF} onClick={() => propNudge('right')} last />
+        </UiEntity>
+        <UiEntity uiTransform={{ display: isPropToolOn() ? 'flex' : 'none', width: '100%', flexDirection: 'row', margin: { bottom: 4 } }}>
+          <SeedBtn label="Up" color={BTN_OFF} onClick={() => propNudge('up')} />
+          <SeedBtn label="Down" color={BTN_OFF} onClick={() => propNudge('down')} />
+          <SeedBtn label="Turn -15" color={BTN_OFF} onClick={propRotateLeft} />
+          <SeedBtn label="Turn +15" color={BTN_OFF} onClick={propRotateRight} last />
+        </UiEntity>
+        <UiEntity uiTransform={{ display: isPropToolOn() ? 'flex' : 'none', width: '100%', flexDirection: 'row', margin: { bottom: 8 } }}>
+          <SeedBtn label="Snap 90" color={BTN_OFF} onClick={propSnap90} />
+          <SeedBtn label="Export to console" color={BTN_BLOOM} onClick={propExport} last />
+        </UiEntity>
+
         {/* Tribute plot editor — same verbs as the planter editor. Edits the PLOTS, not
             the planted roses: only the founding rose exists in-world, so ghost roses stand
             at every plot while this is on (KJ 2026-09-21). */}
@@ -487,7 +517,7 @@ export function TestPanelUi() {
         <Label value={`SEEDS  ·  live: ${getSeedCount()}`} fontSize={10} color={MUTED} uiTransform={{ margin: { bottom: 6 } }} />
 
         <UiEntity uiTransform={{ width: '100%', height: 32, flexDirection: 'row', margin: { bottom: 5 } }}>
-          <SeedBtn label="Spawn LOCAL"  color={BTN_WATER} onClick={() => adminSpawnLocalSeed(0)} />
+          <SeedBtn label="Seed SHOWER" color={BTN_BLOOM} onClick={() => adminSeedShower()} />
           <SeedBtn label="LOCAL ladder" color={BTN_WATER} onClick={() => adminSpawnSeedLadder()} />
           <SeedBtn label="Spawn SERVER" color={BTN_BLOOM} onClick={() => adminRequestServerSeed(0)} last />
         </UiEntity>

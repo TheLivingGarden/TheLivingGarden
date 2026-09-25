@@ -42,7 +42,8 @@ import { getPlayer } from '@dcl/sdk/players'
 import { getFlowers, setFlowers, setBoxCap, setAvenueSlotsFree, registerGiftApi, Keepsake, setHeld, heldFlowerIndex, setDiscovered } from './playerInventory'
 import { getSelectedGiftIndex, openSeedMenu } from './seedMenu'
 import { rarityTierById, plantSpeciesById, withArticle, seedModelSrc, SEED_HAND_SCALE } from './shared/config'
-import { isBloomFlowerActive } from './bloomFlowerSystem'
+import { isBloomFlowerActive, setBloomFlowerVisible } from './bloomFlowerSystem'
+import { isWateringEmoteActive } from './wateringSystem'
 import { playSfx } from './sounds'
 
 // ---------------------------------------------------------------
@@ -75,7 +76,6 @@ const SEED_HAND_LIFT     = 0.05
 let scanAccum = 0
 const tags = new Map<string, Entity>()   // remote address → AvatarAttach parent
 const hands = new Map<string, Entity>()  // address → held-flower AvatarAttach parent (mine included)
-let   myHolder: Entity | null = null       // my keepsake's holder — scaled to 0 while the bloom flower is out
 
 
 
@@ -107,12 +107,33 @@ function localAddress(): string { return (getPlayer()?.userId ?? '').toLowerCase
 
 /** Show what a gardener holds in their right hand: their keepsake if they hold one,
  *  otherwise the rarest seed in their pouch (seedTier -1 = nothing to show). The server
- *  decides which, so the two can never collide and only one entity is ever attached. */
+ *  decides which, so the two can never collide and only one entity is ever attached.
+ *
+ *  MY hand additionally obeys the one-item-per-hand rule (KJ 2026-09-24: "a rose, a seed and
+ *  the watering can"). Hiding by scale left the item showing on the client, so it is now
+ *  STRUCTURAL: while the can or the Bloom rose owns the hand, my item's entity does not
+ *  exist at all, and it is rebuilt from `myHandArgs` when the hand frees up. */
+interface HandArgs { flower: string; rarityTier: number; seedTier: number }
+let myHandArgs: HandArgs | null = null   // what the server says my hand holds (whether or not it is shown right now)
+
 function setHand(address: string, flower: string, rarityTier: number, seedTier: number): void {
+  if (address === localAddress()) {
+    setHeld(flower ? { flower, rarityTier } : null)
+    myHandArgs = { flower, rarityTier, seedTier }
+    removeHand(address)   // args changed — rebuild from scratch
+    applyMyHand()
+    return
+  }
+  buildHand(address, flower, rarityTier, seedTier, false)
+}
+
+function removeHand(address: string): void {
   const old = hands.get(address)
   if (old !== undefined) { engine.removeEntityWithChildren(old); hands.delete(address) }
-  const mine = address === localAddress()
-  if (mine) { setHeld(flower ? { flower, rarityTier } : null); myHolder = null }
+}
+
+function buildHand(address: string, flower: string, rarityTier: number, seedTier: number, mine: boolean): void {
+  removeHand(address)
   const species = flower ? plantSpeciesById(flower) : null
   if (!species && seedTier < 0) return
   const parent = engine.addEntity()
@@ -121,7 +142,6 @@ function setHand(address: string, flower: string, rarityTier: number, seedTier: 
     : { avatarId: address, anchorPointId: AvatarAnchorPointType.AAPT_RIGHT_HAND })
   const holder = engine.addEntity()
   Transform.create(holder, { parent, position: HAND_OFFSET, rotation: HAND_ROTATION })
-  if (mine) { myHolder = holder; syncMyHand() }
   const model = engine.addEntity()
   if (species) {
     const k = species.scale * HAND_K
@@ -145,13 +165,30 @@ function setHand(address: string, flower: string, rarityTier: number, seedTier: 
   hands.set(address, parent)
 }
 
-/** Hide my keepsake while the bloom hand-flower occupies the same hand. */
-function syncMyHand(): void {
-  if (myHolder === null) return
-  const k = isBloomFlowerActive() ? 0 : 1
-  const tr = Transform.getMutable(myHolder)
-  if (tr.scale.x !== k) tr.scale = { x: k, y: k, z: k }
+/** Build or remove MY hand item to match who owns the hand right now. Priority: the watering
+ *  can (its emote is playing) > the Bloom rose > my keepsake / seed. */
+let lastHandLog = ''
+function applyMyHand(): void {
+  const me = localAddress()
+  if (!me) return
+  const can = isWateringEmoteActive(), rose = isBloomFlowerActive()
+  const taken = can || rose
+  const has = hands.has(me)
+  // Change-only log, so a "seed in hand with the can" report can be read straight from the console
+  const state = `${can ? 'CAN' : '-'} ${rose ? 'ROSE' : '-'} item=${has ? 'shown' : 'none'} want=${myHandArgs ? (myHandArgs.flower || `seed${myHandArgs.seedTier}`) : 'none'}`
+  if (state !== lastHandLog) { lastHandLog = state; console.log(`[Hand] ${state}`) }
+  if (taken) { if (has) removeHand(me); return }
+  if (!has && myHandArgs && (myHandArgs.flower ? plantSpeciesById(myHandArgs.flower) !== null : myHandArgs.seedTier >= 0)) buildHand(me, myHandArgs.flower, myHandArgs.rarityTier, myHandArgs.seedTier, true)
 }
+
+/** The Bloom rose gives way to the can; my item gives way to both. */
+export function syncMyHand(): void {
+  setBloomFlowerVisible(!isWateringEmoteActive())
+  applyMyHand()
+}
+
+/** Every frame, not just on the scan tick: an item must vanish the frame the hand is taken. */
+function handArbiterSystem(): void { syncMyHand() }
 
 function createTag(address: string): Entity {
   const parent = engine.addEntity()
@@ -233,5 +270,6 @@ export function setupGiftSystem(): void {
     holdSeed: (rarityTier) => { console.log(`[Gift] equip seed tier ${rarityTier}`); room.send('holdSeed', { rarityTier }) },
   })
   engine.addSystem(tagScanSystem)
+  engine.addSystem(handArbiterSystem)
   console.log(`[Gift] ready · notice listeners=${room.listenerCount('notice')}`)
 }

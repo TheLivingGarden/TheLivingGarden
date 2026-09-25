@@ -33,9 +33,10 @@ import { Quaternion, Vector3, Color4 } from '@dcl/sdk/math'
 import { room } from './shared/messages'
 import { PlantData } from './wateringSystem'
 import { isBloomActive } from './bloomSystem'
-import { nearestFreePlanter, freePlanterPos, myOpenedPlanter, myOpenedPlanters, myPlanters } from './boxSystem'
+import { nearestFreePlanter, freePlanterPos, myOpenedPlanter, myOpenedPlanters, myPlanters, myGrowingStatus, myPlanterCount } from './boxSystem'
+import { getSeedCount } from './seedSystem'
 import { nearestFreeAvenueSlot } from './avenueSystem'
-import { getFlowers, gardenersHere, setPouchHint, registerPouchOpened, getAvenueSlotsFree, getArmedAvenueFlower } from './playerInventory'
+import { getFlowers, gardenersHere, setPouchHint, registerPouchOpened, getAvenueSlotsFree, getArmedAvenueFlower, getPouch, getBoxCap } from './playerInventory'
 import { showPersistent, hidePersistent, showToast } from './notifications'
 import {
   ARROW_MODEL_SRC, ARROW_SCALE, ARROW_FORWARD_YAW, ARROW_STANDOFF, ARROW_GROUND_LIFT,
@@ -328,6 +329,36 @@ function applyStage(): void {
 
 // ── System ────────────────────────────────────────────────────
 
+// ── Idle guide ────────────────────────────────────────────────
+// Playtest 2026-09-24: "it isn't clear what to do in the meantime". The stages above end
+// once you have done each thing once; after that the pill went blank. This keeps ONE line
+// on screen saying the next useful thing, in priority order. Re-asserted about once a
+// second because the watering system hides the shared pill on bloom start/reset.
+const IDLE_GUIDE_EVERY_S = 1
+let idleAccum = 0
+
+function idleGuide(dt: number, player: { x: number; z: number } | undefined): void {
+  idleAccum -= dt
+  if (idleAccum > 0) return
+  idleAccum = IDLE_GUIDE_EVERY_S
+  if (!player) return
+  const seeds = getPouch().reduce((a, n) => a + n, 0)
+  const growing = myGrowingStatus()
+  if (getSeedCount() > 0) {
+    showPersistent('The Bloom is dropping seeds - walk into them to catch them')
+  } else if (seeds > 0 && myPlanterCount() < getBoxCap() && nearestFreePlanter(player)) {
+    showPersistent(`You have ${seeds} seed${seeds === 1 ? '' : 's'} - tap a free planter to plant one`)
+  } else if (growing.count > 0) {
+    const s = Math.ceil(growing.nextMs / 1000)
+    const when = s >= 3600 ? `${Math.floor(s / 3600)}h ${Math.floor((s % 3600) / 60)}m` : `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`
+    showPersistent(`Your seed opens in ${when} - water plants, or help a neighbour's seedling`)
+  } else if (myOpenedPlanters(player).length > 0) {
+    hidePersistent()   // a flower is ready: the balloon and the gold planter already say so
+  } else {
+    showPersistent('Water plants to wake the Bloom - it rains seeds when it blooms')
+  }
+}
+
 function onboardingSystem(dt: number): void {
   elapsed += dt
   const player = Transform.getOrNull(engine.PlayerEntity)?.position
@@ -352,7 +383,7 @@ function onboardingSystem(dt: number): void {
     showAvenueArrow(stage === 'avenue' || getArmedAvenueFlower() !== null ? nearestFreeAvenueSlot(player) : null)
   }
 
-  if (stage === 'none') return
+  if (stage === 'none') { idleGuide(dt, player); return }
 
   // (Watering during a bloom is allowed since 2026-09-22, so the water stage no longer
   // pauses for one — plants droop and carry drops under the spectacle too.)

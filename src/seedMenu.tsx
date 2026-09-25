@@ -16,8 +16,8 @@
 // =============================================================
 
 import ReactEcs, { UiEntity, Label } from '@dcl/sdk/react-ecs'
-import { PLANT_SPECIES, RARITY_TIERS, rarityTierById, plantSpeciesById, nextMilestone, milestoneTarget, milestoneTitle, growMsForTier, shortGrowTime, AVENUE_MIN_TIER } from './shared/config'
-import { setPreferredTier, nextSeedTier, getPouch, getFlowers, getDiscovered, gardenersHere, giveFlower, getHeld, holdFlower, holdSeed, displayOnAvenue, armAvenuePlacement } from './playerInventory'
+import { PLANT_SPECIES, RARITY_TIERS, rarityTierById, plantSpeciesById, nextMilestone, milestoneTarget, milestoneTitle, growMsForTier, shortGrowTime, AVENUE_MIN_TIER, stampTotal } from './shared/config'
+import { setPreferredTier, nextSeedTier, getPouch, getFlowers, getDiscovered, stampsFound, gardenersHere, giveFlower, getHeld, holdFlower, holdSeed, displayOnAvenue, armAvenuePlacement } from './playerInventory'
 import { showToast } from './notifications'
 
 /** 128 px thumbnails made from each species' asset-pack thumbnail.png (assets/images/plantThumbs). */
@@ -40,6 +40,8 @@ let avenueSlot: string | null = null   // set when opened by tapping an empty Av
 export function isSeedMenuOpen(): boolean { return open }
 export function toggleSeedMenu(): void { open = !open; if (!open) { selectedKey = ''; giftMode = false; giftPage = 0; page = 0; almanacPage = 0; almanacSel = null; tierFilter = null; avenueSlot = null } }
 export function openSeedMenu(): void { open = true }
+/** Opened from the world seed rack's gift board: the Flowers tab, where a kept flower is picked and given. */
+export function openSeedMenuFlowers(): void { open = true; tab = 'flowers'; selectedKey = ''; giftMode = false; page = 0 }
 /** Tapped an empty Avenue planter with nothing in hand: open Flowers so they can pick one for it. */
 export function openSeedMenuForAvenue(slotId: string): void { open = true; tab = 'flowers'; avenueSlot = slotId; selectedKey = ''; giftMode = false; page = 0; armAvenuePlacement(null) }
 
@@ -449,6 +451,13 @@ export function SeedMenuUi(props: { px: (n: number) => number; fs: (n: number) =
         <UiEntity uiTransform={{ width: '100%', height: px(8), margin: { top: px(2), bottom: px(10) }, borderRadius: px(4) }} uiBackground={{ color: { r: 1, g: 1, b: 1, a: 0.1 } }}>
           <UiEntity uiTransform={{ width: `${Math.round((speciesFound / Math.max(1, PLANT_SPECIES.length)) * 100)}%`, height: '100%', borderRadius: px(3) }} uiBackground={{ color: MOSS }} />
         </UiEntity>
+
+        {/* The long tail: every species in every rarity. Species alone runs out; this does not. */}
+        <Label
+          value={`${stampsFound()} of ${stampTotal()} rarity stamps - each species in each rarity`}
+          fontSize={fs(13)} color={{ ...CREAM, a: 0.7 }} textAlign="middle-left" textWrap="nowrap"
+          uiTransform={{ width: '100%', height: fs(20), margin: { bottom: px(4) } }}
+        />
 
         {/* Name the next rung outright. The goal being invisible is the whole reason the
             collection did not scratch (Fin 2026-09-21) — so the Almanac states it. */}

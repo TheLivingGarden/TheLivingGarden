@@ -34,18 +34,35 @@ import { isMobile } from '@dcl/sdk/platform'
 import { getPlayer } from '@dcl/sdk/players'
 import { room } from './shared/messages'
 import {
-  SEED_FALL_MS,
+  SEED_FLIGHT_SPEED,
+  SEED_FLIGHT_MIN_MS,
+  SEED_FLIGHT_MAX_MS,
+  SEED_LAUNCH_STAGGER_MS,
+  SEED_FLIGHT_SCALE,
+  SEED_DODGES_BY_TIER,
+  SEED_DODGES_MOBILE_MAX,
+  SEED_DODGE_TRIGGER_M,
+  SEED_HOP_M_LOW,
+  SEED_HOP_M_HIGH,
+  SEED_HOP_MS,
+  SEED_HOP_ARC_H,
+  SEED_HOP_COOLDOWN_MS,
+  SEED_NO_DODGE_LAST_MS,
+  GARDEN_BOUNDS,
+  SEED_ARC_H,
+  BLOOM_SEED_ORIGIN,
+  SEED_ORIGIN_SPREAD_M,
   SEED_LIFETIME_MS,
   SEED_GATHER_RADIUS,
   SEED_COLLECT_RADIUS,
-  SEED_SPAWN_HEIGHT,
   SEED_MODEL_HEIGHT,
   SPARKLE_SRC,
   seedModelSrc,
   rarityTierById,
   withArticle,
 } from './shared/config'
-import { showToast } from './notifications'
+import { showToast, showMoment } from './notifications'
+import { triggerSparkle } from './sparkleSystem'
 import { getPouch } from './playerInventory'
 import { setupGoldenSeed } from './goldenSeed'
 import { playSfx } from './sounds'
@@ -159,6 +176,15 @@ interface Seed {
   phase:       number    // per-seed offset so bobbing isn't synchronized
   drifting:    boolean   // player is close — seed is chasing them
   gatherSentAt: number   // 0 = not requested; else local ms of last request
+  dodgesLeft:  number    // hops it will still make away from an approaching player
+  hop:         { fromX: number; fromZ: number; toX: number; toZ: number; startMs: number } | null
+  hopReadyAt:  number    // local ms — earliest the next hop may start
+  originX:     number    // where it leaves the Bloom's crown (jittered per seed)
+  originY:     number
+  originZ:     number
+  launchAt:    number    // local ms — when it leaves the Bloom (staggered); hidden at the Bloom until then
+  flightMs:    number    // its arc's duration, longer for a farther landing spot
+  trail:       Entity | null   // comet-tail emitter, removed when it lands
 }
 
 const seeds = new Map<string, Seed>()   // seedId → live seed
@@ -180,8 +206,10 @@ function spawnSeed(rec: { id: string; x: number; z: number; rarityTier: number; 
 
   const entity = engine.addEntity()
   const scale  = seedScaleForTier(rec.rarityTier)
+  const oa = Math.random() * Math.PI * 2, orad = Math.sqrt(Math.random()) * SEED_ORIGIN_SPREAD_M
+  const originX = BLOOM_SEED_ORIGIN.x + Math.cos(oa) * orad, originZ = BLOOM_SEED_ORIGIN.z + Math.sin(oa) * orad, originY = BLOOM_SEED_ORIGIN.y
   Transform.create(entity, {
-    position: { x: rec.x, y: SEED_SPAWN_HEIGHT, z: rec.z },
+    position: { x: originX, y: originY, z: originZ },   // pours out of the Bloom's crown, see the flight in seedDriftSystem
     scale:    { x: scale, y: scale, z: scale },
   })
   // KJ's tier seed model (was a greybox sphere). Proximity-collected, so no colliders;
@@ -204,8 +232,32 @@ function spawnSeed(rec: { id: string; x: number; z: number; rarityTier: number; 
     phase:        Math.random() * Math.PI * 2,
     drifting:     false,
     gatherSentAt: 0,
+    dodgesLeft:   Math.min(SEED_DODGES_BY_TIER[rec.rarityTier] ?? 0, isMobile() ? SEED_DODGES_MOBILE_MAX : Infinity),
+    hop:          null,
+    hopReadyAt:   0,
+    originX, originY, originZ,
+    launchAt:     localSpawn + Math.random() * SEED_LAUNCH_STAGGER_MS,
+    flightMs:     Math.max(SEED_FLIGHT_MIN_MS, Math.min(SEED_FLIGHT_MAX_MS, Math.hypot(rec.x - originX, rec.z - originZ) / SEED_FLIGHT_SPEED * 1000)),
+    trail:        null,
   })
-  console.log(`[Seeds] spawned ${rec.id} tier=${rec.rarityTier} at (${rec.x.toFixed(1)}, ${SEED_SPAWN_HEIGHT}, ${rec.z.toFixed(1)}) → rest y=${SEED_REST_Y}`)
+  // Comet tail while it flies, so the launch reads as coming OUT of the Bloom
+  const rec2 = seeds.get(rec.id)!
+  const tc = rarityTierById(rec.rarityTier).seedColor
+  const tail = engine.addEntity()
+  Transform.create(tail, { parent: entity })
+  ParticleSystem.create(tail, {
+    shape: ParticleSystem.Shape.Sphere({ radius: 0.15 }),
+    rate: 40, maxParticles: 60, lifetime: 1.0, gravity: 0,
+    initialVelocitySpeed: { start: 0, end: 0.15 },
+    initialSize: { start: 0.8, end: 1.0 }, sizeOverTime: { start: 1, end: 0 },
+    initialColor: { start: Color4.create(tc.r, tc.g, tc.b, 1), end: Color4.create(1, 1, 1, 1) },
+    colorOverTime: { start: Color4.create(1, 1, 1, 1), end: Color4.create(1, 1, 1, 0) },
+    texture: { src: SPARKLE_SRC }, billboard: true, blendMode: PSB_ALPHA,
+    simulationSpace: PSS_WORLD,
+    loop: true, prewarm: false, active: true, playbackState: PS_PLAYING,
+  })
+  rec2.trail = tail
+  console.log(`[Seeds] spawned ${rec.id} tier=${rec.rarityTier}: leaves the Bloom at (${originX.toFixed(1)}, ${originY.toFixed(1)}, ${originZ.toFixed(1)}), lands (${rec.x.toFixed(1)}, ${rec.z.toFixed(1)}) in ${Math.round(rec2.flightMs)} ms`)
 }
 
 function despawnSeed(id: string): void {
@@ -234,6 +286,18 @@ export function adminSpawnLocalSeed(rarityTier = 0): void {
 
 /** Test panel: one LOCAL seed of every tier (Common → Unique) in a row 4 m out, 1.2 m apart —
  *  compare the whole FX ladder side by side. Local seeds self-collect on contact. */
+/** Test panel: a local seed shower — 8 seeds pour out of the Bloom and land around the player
+ *  through the REAL flight code, no server Bloom needed. Local seeds self-collect on contact. */
+export function adminSeedShower(): void {
+  const p = Transform.getOrNull(engine.PlayerEntity)?.position
+  if (!p) return
+  for (let i = 0; i < 8; i++) {
+    const a = (i / 8) * Math.PI * 2
+    spawnSeed({ id: `local_${Date.now()}_${i}`, x: p.x + Math.cos(a) * 5, z: p.z + Math.sin(a) * 5, rarityTier: i % 4 === 0 ? 3 : 0, spawnedAt: Date.now() })
+  }
+  triggerSparkle({ x: BLOOM_SEED_ORIGIN.x, y: BLOOM_SEED_ORIGIN.y, z: BLOOM_SEED_ORIGIN.z })
+}
+
 export function adminSpawnSeedLadder(): void {
   const p = Transform.getOrNull(engine.PlayerEntity)?.position
   if (!p) return
@@ -278,6 +342,24 @@ export function getSeedCount(): number { return seeds.size }
 // Per-frame: fall, sway, bob, drift-to-player, collect
 // ---------------------------------------------------------------
 
+/** Hop directly away from the player (±jitter), clamped inside the garden. If every angle is
+ *  boxed in by the bounds the seed gives up dodging, so a cornered seed is always catchable. */
+function startHop(seed: Seed, sx: number, sz: number, px: number, pz: number, now: number): void {
+  const away = Math.atan2(sz - pz, sx - px)
+  const dist = seed.rarityTier >= 3 ? SEED_HOP_M_HIGH : SEED_HOP_M_LOW
+  const m = 0.5
+  for (const off of [0, 0.7, -0.7, 1.4, -1.4]) {
+    const a = away + off + (Math.random() - 0.5) * 0.5
+    const tx = Math.max(GARDEN_BOUNDS.xMin + m, Math.min(GARDEN_BOUNDS.xMax - m, sx + Math.cos(a) * dist))
+    const tz = Math.max(GARDEN_BOUNDS.zMin + m, Math.min(GARDEN_BOUNDS.zMax - m, sz + Math.sin(a) * dist))
+    if (Math.hypot(tx - sx, tz - sz) < 1.5) continue   // squeezed by the bounds — try another angle
+    seed.hop = { fromX: sx, fromZ: sz, toX: tx, toZ: tz, startMs: now }
+    seed.dodgesLeft--
+    return
+  }
+  seed.dodgesLeft = 0   // cornered: let the player have it
+}
+
 function seedDriftSystem(dt: number): void {
   if (seeds.size === 0) return
   const now       = Date.now()
@@ -286,8 +368,9 @@ function seedDriftSystem(dt: number): void {
   for (const seed of [...seeds.values()]) {
     if (now >= seed.despawnAtMs) { despawnSeed(seed.id); continue }
 
+    if (seed.trail !== null && now - seed.launchAt >= seed.flightMs) { engine.removeEntity(seed.trail); seed.trail = null }   // landed: comet tail off
     const t  = Transform.getMutable(seed.entity)
-    const fallElapsed = now - seed.spawnLocalMs
+    const flown = now - seed.launchAt   // <0: still waiting inside the Bloom for its turn to launch
     // Tier motion — all in this one Transform write (no extra messages)
     const fx = seed.fx, tS = now / 1_000
     const tilt = fx.wobbleDeg * Math.sin(tS * 1.7 + seed.phase)
@@ -295,14 +378,27 @@ function seedDriftSystem(dt: number): void {
     const k = seed.baseScale * (1 + (fx.throb ? fx.throb.amp * heartbeat(tS + seed.phase, fx.throb.periodS) : 0))
     t.scale = { x: k, y: k, z: k }
 
-    if (fallElapsed < SEED_FALL_MS && !seed.drifting) {
-      // ── Falling: ease down with a gentle horizontal sway ──
-      const p = fallElapsed / SEED_FALL_MS
-      t.position.y = SEED_SPAWN_HEIGHT - (SEED_SPAWN_HEIGHT - SEED_REST_Y) * p
-      // Rarer tiers spiral down wider and with more turns (fx.spiral)
+    if (flown < seed.flightMs && !seed.drifting) {
+      // ── Flight: seeds burst OUT of the Bloom and arc to where they land (playtest
+      // 2026-09-24: "the Bloom is dropping seeds but they just float into the scene").
+      // Horizontal eases out, height is a straight fall plus an arc; rarer tiers still
+      // spiral (fx.spiral) around their landing spot as they come in.
+      const p = Math.max(0, flown / seed.flightMs)
+      const ease = 1 - (1 - p) * (1 - p)
+      const big = flown < 0 ? 0 : seed.baseScale * (SEED_FLIGHT_SCALE + (1 - SEED_FLIGHT_SCALE) * ease)   // hidden until it launches, big at launch, normal on landing
+      t.scale = { x: big, y: big, z: big }
+      t.position.y = seed.originY + (SEED_REST_Y - seed.originY) * p + SEED_ARC_H * 4 * p * (1 - p)
       const turns = Math.PI * 3 * fx.spiral, amp = SEED_SWAY_AMPL * fx.spiral * (1 - p)
-      t.position.x = seed.baseX + Math.sin(seed.phase + p * turns) * amp
-      t.position.z = seed.baseZ + Math.cos(seed.phase + p * turns) * amp
+      t.position.x = seed.originX + (seed.baseX - seed.originX) * ease + Math.sin(seed.phase + p * turns) * amp
+      t.position.z = seed.originZ + (seed.baseZ - seed.originZ) * ease + Math.cos(seed.phase + p * turns) * amp
+    } else if (seed.hop !== null) {
+      // ── Hopping away from the player (see startHop) ──
+      const h = seed.hop, p = Math.min(1, (now - h.startMs) / SEED_HOP_MS)
+      const ease = 1 - (1 - p) * (1 - p)
+      t.position.x = h.fromX + (h.toX - h.fromX) * ease
+      t.position.z = h.fromZ + (h.toZ - h.fromZ) * ease
+      t.position.y = SEED_REST_Y + SEED_HOP_ARC_H * 4 * p * (1 - p)
+      if (p >= 1) { seed.baseX = h.toX; seed.baseZ = h.toZ; seed.hop = null; seed.hopReadyAt = now + SEED_HOP_COOLDOWN_MS }
     } else if (!seed.drifting) {
       // ── Landed: idle bob ──
       t.position.y = SEED_REST_Y + Math.abs(Math.sin(now / 1_000 * SEED_BOB_SPEED + seed.phase)) * fx.bob
@@ -330,7 +426,11 @@ function seedDriftSystem(dt: number): void {
         console.log(`[Seeds] Requesting gather: ${seed.id}`)
         room.send('gatherSeed', { seedId: seed.id })
       }
-    } else if (dist < SEED_GATHER_RADIUS) {
+    } else if (seed.dodgesLeft > 0 && !seed.drifting && flown >= seed.flightMs && dist < SEED_DODGE_TRIGGER_M) {
+      // ── Rare+ seed: don't be caught yet — hop away (mid-hop it just keeps going) ──
+      if (seed.despawnAtMs - now <= SEED_NO_DODGE_LAST_MS) seed.dodgesLeft = 0   // about to evaporate: let it be caught
+      else if (seed.hop === null && now >= seed.hopReadyAt) startHop(seed, t.position.x, t.position.z, playerPos.x, playerPos.z, now)
+    } else if (seed.dodgesLeft === 0 && seed.hop === null && dist < SEED_GATHER_RADIUS) {
       // ── Walk-through magnetism: drift toward the player, faster as it closes ──
       seed.drifting = true
       const closeness = 1 - dist / SEED_GATHER_RADIUS   // 0 at leash edge → 1 touching
@@ -356,6 +456,12 @@ function seedDriftSystem(dt: number): void {
 
 export function setupSeedSystem(): void {
   room.onMessage('seedSpawned', (data) => {
+    // First seed of a shower: the Bloom visibly shakes them loose, and a big centre-screen
+    // line says what to do (Week-2 notes: "the Bloom-to-seed transition must be unmistakable").
+    if (seeds.size === 0 && !seeds.has(data.id)) {
+      triggerSparkle({ x: BLOOM_SEED_ORIGIN.x, y: BLOOM_SEED_ORIGIN.y, z: BLOOM_SEED_ORIGIN.z })
+      showMoment('The Bloom is dropping seeds!', 'Chase them down and walk into them', 4_500)
+    }
     spawnSeed(data)
   })
 

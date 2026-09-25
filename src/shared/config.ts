@@ -44,7 +44,43 @@ const SEEDS_BY_CONTRIBUTORS     = [4, 5, 6, 7, 8, 10]            // TUNING — 1
 const RARE_MULT_BY_CONTRIBUTORS = [1, 1.4, 1.8, 2.2, 2.6, 3]     // TUNING — × SEED_RARE_AT_SOLO
 export const SEED_RARE_AT_SOLO  = 0.10      // TUNING — "mostly normal, occasionally rare"
 export const GUARANTEED_RARE_AT_CONTRIBUTORS = 4   // TUNING — one seed of tier ≥ Rare from here
-export const SEED_FALL_MS       = 5_000     // drift-down duration from spawn height to ground
+/** Press-and-hold watering (KJ 2026-09-24, replacing the timing bar). A tap waters as always.
+ *  Holding fills a meter over HOLD_FILL_MS: release inside [HOLD_SWEET_LO, HOLD_SWEET_HI] and the
+ *  plant stays watered HOLD_SWEET_BONUS longer; release past HOLD_OVER_AT (or let it fill) and it
+ *  is too much water — the plant is NOT watered. The server applies the bonus; it only sees the flag. */
+/** Off since 2026-09-24 (KJ: "crap, and can be overridden with a tap"). pourOnto then waters on the tap, as before. */
+export const HOLD_WATERING_ENABLED = false
+export const HOLD_FILL_MS = 2_000          // TUNING
+export const HOLD_SWEET_LO = 0.5           // TUNING
+export const HOLD_SWEET_HI = 0.78          // TUNING
+export const HOLD_OVER_AT = 0.88           // TUNING
+export const HOLD_SWEET_BONUS = 0.4        // TUNING — fraction of the plant's normal watered time added
+export const HOLD_SHOW_AFTER_MS = 250      // shorter than this is a plain tap: no meter
+/** A Bloom keeps the plants watered during it through the reset (2026-09-22). Playtest
+ *  2026-09-24: the garden still sitting healthy after a Bloom made the loop confusing. */
+export const BLOOM_KEEPS_WATERED = false
+/** Seed chase (KJ 2026-09-24): rarer seeds hop away from an approaching gardener, a limited
+ *  number of times, then let themselves be caught. Index = rarity tier (Common .. Unique).
+ *  Cosmetic and client-side — every seed is still gathered through the server. */
+export const SEED_DODGES_BY_TIER: ReadonlyArray<number> = [0, 2, 2, 4, 4, 4, 4, 4]   // TUNING
+export const SEED_DODGES_MOBILE_MAX = 1     // TUNING — the phone joystick is imprecise
+export const SEED_DODGE_TRIGGER_M = 3.0     // m — a dodger hops when you get this close
+export const SEED_HOP_M_LOW  = 2.5          // m per hop, Uncommon / Rare
+export const SEED_HOP_M_HIGH = 3.5          // m per hop, Epic and above
+export const SEED_HOP_MS     = 600          // TUNING
+export const SEED_HOP_ARC_H  = 0.7          // m the hop rises
+export const SEED_HOP_COOLDOWN_MS = 350     // after landing, before it can hop again
+export const SEED_NO_DODGE_LAST_MS = 20_000 // stop dodging this close to a seed's evaporation
+export const SEED_FLIGHT_SPEED  = 4.0       // TUNING — m/s along the ground, so a far seed takes longer and stays visible
+export const SEED_FLIGHT_MIN_MS = 2_600
+export const SEED_FLIGHT_MAX_MS = 5_000
+export const SEED_LAUNCH_STAGGER_MS = 1_200 // TUNING — seeds leave the Bloom one by one over this window
+export const SEED_ARC_H         = 4.0       // TUNING — m the arc rises above the straight line
+export const SEED_FLIGHT_SCALE  = 3.0       // TUNING — seeds are this much bigger at launch, easing to normal on landing
+/** Where seeds pour out of the Bloom: the crown of the flower, measured from Models/Bloom/Bloom.glb
+ *  (node at 5.81, -0.66, 23.91; ~6.5 m wide, top at y≈5.6). Each seed starts within SEED_ORIGIN_SPREAD_M of it. */
+export const BLOOM_SEED_ORIGIN = { x: 5.8, y: 5.3, z: 23.9 } as const
+export const SEED_ORIGIN_SPREAD_M = 1.2
 export const SEED_LIFETIME_MS   = 120_000   // ungathered seeds fade after 2 min (the trickle's last wave lands 1 min before the end)
 export const SEED_GATHER_RADIUS = 2.0       // m — walking this close starts the drift toward you
 export const SEED_COLLECT_RADIUS = 0.7      // m — seed this close is gathered (client sends request)
@@ -106,6 +142,12 @@ export function bloomDurationMs(contributors: number): number {
  *  before the bloom ends so it can still be gathered in the bloom. */
 export const SEED_WAVE_GAP_MS             = 30_000   // TUNING
 export const SEED_LAST_WAVE_BEFORE_END_MS = 60_000   // TUNING
+/** The Bloom's OpenAction plays at 0.25x speed and it reaches OpenIdle 20 s after the trigger
+ *  (bloomSystem BLOOM_SWITCH_TO_OPEN_MS). Seeds used to leave at t=0, out of a still-closed flower
+ *  (KJ client log 2026-09-24). The opening burst now waits for the flower to be open, and carries
+ *  most of the seeds so it reads as a shower; the rest trickle in afterwards. */
+export const BLOOM_OPEN_MS = 20_000
+export const SEED_BURST_FRACTION = 0.6   // TUNING — share of a bloom's seeds in the opening burst
 
 // ── Scene-wide spatial / asset constants ─────────────────────
 /** World-space centre of the Bloom model — used for sound, sparkles, shockwaves. */
@@ -455,6 +497,25 @@ export function growMsForTier(tier: number): number {
  *  10% of a Common was the whole point of the gesture, and the same milliseconds off a
  *  Unique would be a rounding error. Still capped by BOX_WATER_MAX per box. */
 export const BOX_WATER_SHAVE_FRACTION = 0.10   // TUNING
+
+/** Growth stages (a seedling steps up at these fractions of ITS OWN timer) and TENDING: the
+ *  owner may water their own seedling once per stage reached, each worth TEND_SHAVE_FRACTION
+ *  of the whole timer (KJ 2026-09-25: "what can I do instead of waiting?"). 4 stages x 5% =
+ *  at most 20% off — a nudge, never a skip, so the come-back-later hook survives. Shared so
+ *  the server's rule and the client's water drop can never disagree about the stage. */
+export const GROW_STAGE_AT: ReadonlyArray<number> = [0, 0.25, 0.55, 0.8]   // TUNING
+export const TEND_SHAVE_FRACTION = 0.05   // TUNING
+export function growStageOf(opensAt: number, now: number, tier: number): number {
+  const total = growMsForTier(tier)
+  const progress = Math.max(0, Math.min(1, 1 - Math.max(0, opensAt - now) / total))
+  let stage = 0
+  for (let i = 0; i < GROW_STAGE_AT.length; i++) if (progress >= GROW_STAGE_AT[i]) stage = i
+  return stage
+}
+/** Tends the owner can make right now: one per stage reached, minus those already used. */
+export function tendsAvailable(opensAt: number, now: number, tier: number, used: number): number {
+  return growStageOf(opensAt, now, tier) + 1 - used
+}
 export function growShaveMsForTier(tier: number): number {
   return Math.round(growMsForTier(tier) * BOX_WATER_SHAVE_FRACTION)
 }
@@ -614,6 +675,14 @@ export function withArticle(word: string, capital = false): string {
   return `${capital ? art[0].toUpperCase() + art.slice(1) : art} ${word}`
 }
 
+/** Rarity stamps: one per species per rarity tier (KJ 2026-09-25 — the long tail of the collection). */
+export function stampTotal(): number {
+  // Tiers 0..5 pair every regular species; Mythic and Unique pair only their own bespoke plants
+  // (until a pool has plants, that tier still uses the regular catalogue).
+  const regular = PLANT_SPECIES.length * (RARITY_TIERS.length - 2)
+  return regular + (MYTHIC_PLANTS.length || PLANT_SPECIES.length) + (UNIQUE_PLANTS.length || PLANT_SPECIES.length)
+}
+
 export function rarityTierById(id: number): RarityTierDef {
   return RARITY_TIERS[id] ?? RARITY_TIERS[0]
 }
@@ -622,7 +691,9 @@ export function rarityTierById(id: number): RarityTierDef {
  *  see seedRareChance. Mythic/Unique joined the roll 2026-09-19 (KJ) now that their seed
  *  models exist: per seed ≈ Mythic 1 in 2,500 solo → 1 in 840 at 6+ gardeners, Unique
  *  1 in 10,000 → 1 in 3,350. The rainbow seed (rollRainbowTier) is the realistic route. */
-const TIER_ROLL_WEIGHTS: ReadonlyArray<number> = [55, 30, 10, 4, 1, 0.4, 0.1]   // TUNING — tier 1..7
+// Mythic and Unique are meant to be HARD (KJ 2026-09-25). Weights were [.., 0.4, 0.1]; now 0.15 and 0.03,
+// i.e. a share of about 0.15% and 0.03% of the above-Common seeds (was 0.4% / 0.1%). See design/rarity-notes.md.
+const TIER_ROLL_WEIGHTS: ReadonlyArray<number> = [55, 30, 10, 4, 1, 0.15, 0.03]   // TUNING — tier 1..7
 
 /** Rolls a rarity tier for a newly-spawned seed: seedRareChance(...) decides whether
  *  it beats Common at all, then this weights which of Uncommon..Exotic it lands on. */
@@ -632,9 +703,16 @@ export function rollSeedTier(contributors: number, rareSeedMult = 1): number {
 }
 
 /** A tier ≥ `minTier` (1..7) by TIER_ROLL_WEIGHTS — the guaranteed Rare+ seed uses 2. */
-export function rollTierAtLeast(minTier: number): number {
+/** The guaranteed Rare+ seed (4+ gardeners) may roll up to this tier and no higher. KJ 2026-09-25:
+ *  Mythic and Unique must be HARD. Uncapped, that one guaranteed roll made them ~9x easier in a
+ *  populated Bloom than solo (a Mythic about 1 Bloom in 190 instead of 1 in 510). Now Mythic and
+ *  Unique only come from the ordinary roll. */
+export const GUARANTEED_MAX_TIER = 5   // Exotic
+
+export function rollTierAtLeast(minTier: number, maxTier = TIER_ROLL_WEIGHTS.length): number {
   const from    = Math.max(1, Math.min(TIER_ROLL_WEIGHTS.length, minTier))
-  const weights = TIER_ROLL_WEIGHTS.slice(from - 1)
+  const to      = Math.max(from, Math.min(TIER_ROLL_WEIGHTS.length, maxTier))
+  const weights = TIER_ROLL_WEIGHTS.slice(from - 1, to)
   let r = Math.random() * weights.reduce((a, b) => a + b, 0)
   for (let i = 0; i < weights.length; i++) {
     r -= weights[i]
@@ -646,8 +724,20 @@ export function rollTierAtLeast(minTier: number): number {
 /** Rolls a species for a revealed plant — uniform across the committed catalog for now
  *  (all 78 equally likely); rarity tier is a fully separate axis, rolled independently
  *  at the seed stage via rollSeedTier. */
-export function rollPlantSpecies(): string {
-  return PLANT_SPECIES[Math.floor(Math.random() * PLANT_SPECIES.length)].id
+export function rollPlantSpecies(tier = 0): string {
+  const pool = bespokePool(tier)
+  const list = pool.length > 0 ? pool : PLANT_SPECIES
+  return list[Math.floor(Math.random() * list.length)].id
+}
+
+/** BESPOKE plants (KJ 2026-09-25): a Mythic or Unique seed opens into one of these hand-made plants, not a
+ *  regular species with a tint. While a pool is EMPTY that tier falls back to the regular catalogue, so the game
+ *  keeps working until the art lands. To add one: append an entry here (id, name, modelSrc, scale/offsets as for
+ *  PLANT_SPECIES) and drop `assets/images/plantThumbs/<id>.png`. See design/bespoke-plants.md. Plan: 12 Mythic, 6 Unique. */
+export const MYTHIC_PLANTS: ReadonlyArray<PlantSpecies> = []
+export const UNIQUE_PLANTS: ReadonlyArray<PlantSpecies> = []
+export function bespokePool(tier: number): ReadonlyArray<PlantSpecies> {
+  return tier === 6 ? MYTHIC_PLANTS : tier === 7 ? UNIQUE_PLANTS : []
 }
 /** Species retired from the pool, mapped to the one that replaced them. KJ 2026-09-20:
  *  the voxel pack shipped three near-identical grasses (grass_long, grass_long_2,
@@ -660,7 +750,7 @@ const RETIRED_SPECIES: Readonly<Record<string, string>> = {
 }
 export function plantSpeciesById(id: string): PlantSpecies | null {
   const key = RETIRED_SPECIES[id] ?? id
-  return PLANT_SPECIES.find(s => s.id === key) ?? null
+  return PLANT_SPECIES.find(s => s.id === key) ?? MYTHIC_PLANTS.find(s => s.id === key) ?? UNIQUE_PLANTS.find(s => s.id === key) ?? null
 }
 
 /** How long the bloom finale card holds after a bloom ends, and the rarity tier at

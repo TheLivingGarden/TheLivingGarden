@@ -42,15 +42,17 @@ import {
   GltfContainerLoadingState,
   Tween,
   TweenSequence,
+  EasingFunction,
   timers, VisibilityComponent } from '@dcl/sdk/ecs'
 import { Quaternion } from '@dcl/sdk/math'
 import { getPlayer } from '@dcl/sdk/players'
 import { room } from './shared/messages'
-import { BOX_POSITIONS, BOX_WATER_MAX, WATER_DROP_MODEL_SRC, BOX_MODEL_SRC, BOX_MODEL_SCALE, BOX_MODEL_RIM_Y, BALLOON_MODEL_SRC, BALLOON_ANIM_CLIPS, SEEDLING_MODEL_SRC_NORMAL, SEEDLING_MODEL_SRC_RARE, rarityTierById, plantSpeciesById, withArticle } from './shared/config'
+import { BOX_POSITIONS, BOX_WATER_MAX, WATER_DROP_MODEL_SRC, BOX_MODEL_SRC, BOX_MODEL_SCALE, BOX_MODEL_RIM_Y, growMsForTier, growStageOf, tendsAvailable, BALLOON_MODEL_SRC, BALLOON_ANIM_CLIPS, SEED_MODEL_HEIGHT, seedModelSrc, SEEDLING_MODEL_SRC_NORMAL, SEEDLING_MODEL_SRC_RARE, rarityTierById, plantSpeciesById, withArticle } from './shared/config'
 import { showToast } from './notifications'
 import { attachPlantVfx, attachSeedlingVfx, detachPlantVfx, setupPlantVfx } from './plantVfx'
 import { setupGiftSystem } from './giftSystem'
 import { showDiscovery } from './discoveryCard'
+import { triggerSparkle } from './sparkleSystem'
 import { setPouch, getBoxCap, nextSeedTier } from './playerInventory'
 import { createSign, moveSign, setupSignSystem, Sign } from './signs'
 import { BALLOON_TEXT_TRACK } from './balloonTextTrack'
@@ -117,6 +119,8 @@ interface BoxView {
   waters:       number
   lastWaterer:  string
   drop:         Entity | null   // water-drop marker: a growing seed of someone else's that I can still help
+  stage:        number          // growth stage shown by the seedling (0..GROW_STAGES.length-1), only ever rises
+  tends:        number          // times the owner has tended this seedling (server-confirmed), one allowed per stage
 }
 
 const views  = new Map<string, BoxView>()
@@ -210,6 +214,15 @@ export function freePlanterPos(boxId: string): { x: number; z: number; rot: numb
 
 function localId(): string { return (getPlayer()?.userId ?? '').toLowerCase() }
 function isMine(v: BoxView): boolean { return !!v.owner && v.owner.toLowerCase() === localId() }
+/** For the idle guide (onboarding.ts): how many of MY seeds are still growing, and the
+ *  soonest opening in ms. */
+export function myGrowingStatus(): { count: number; nextMs: number } {
+  const now = Date.now()
+  let count = 0, nextMs = Infinity
+  for (const v of views.values()) if (isMine(v) && !v.opened) { count++; nextMs = Math.min(nextMs, Math.max(0, v.opensLocalAt - now)) }
+  return { count, nextMs }
+}
+export function myPlanterCount(): number { return myBoxCount() }
 function myBoxCount(): number { let n = 0; for (const v of views.values()) if (isMine(v)) n++; return n }
 
 // ---------------------------------------------------------------
@@ -248,7 +261,7 @@ function balloonTextFor(v: BoxView, now: number): string {
 /** Hover prompt for the one tap the box currently offers. */
 function hoverFor(v: BoxView): string {
   if (!v.owner) return 'Plant seed'
-  if (isMine(v)) return v.opened ? 'Harvest (or leave it on show)' : 'Growing…'
+  if (isMine(v)) return v.opened ? 'Harvest (or leave it on show)' : tendReady(v, Date.now()) ? 'Tend your seed' : 'Growing…'
   if (v.opened) return `${v.ownerName}'s flower`
   return v.waters >= BOX_WATER_MAX ? 'Fully watered' : 'Water'
 }
@@ -285,7 +298,8 @@ function setPlantVisual(v: BoxView, pos: PlanterPos): void {
     // Growing: KJ's seedling model — only a normal/rare tint is baked into art so
     // far (SEEDLING_MODEL_SRC_NORMAL/_RARE), so tier 0 (Common) gets normal and
     // everything above it borrows the rare variant until per-tier seedling art exists.
-    const k = SEEDLING_SCALE
+    v.stage = stageFor(v, Date.now())
+    const k = SEEDLING_SCALE * GROW_STAGES[v.stage].scale
     Transform.create(e, { position: { x: pos.x, y: BOX_MODEL_RIM_Y - SEEDLING_MODEL_MIN_Y * k, z: pos.z }, rotation: planterRotation(pos), scale: { x: k, y: k, z: k } })
     const src = v.rarityTier > 0 ? SEEDLING_MODEL_SRC_RARE : SEEDLING_MODEL_SRC_NORMAL
     GltfContainer.create(e, { src, visibleMeshesCollisionMask: ColliderLayer.CL_NONE, invisibleMeshesCollisionMask: ColliderLayer.CL_NONE })
@@ -394,6 +408,68 @@ function plantRevealSystem(): void {
   pendingPlant.delete(best)
   setPlantVisual(best, layout.get(best.boxId)!)
   best.plantKey = plantKeyFor(best)
+  if (popIn.delete(best.boxId) && best.plant !== null && Transform.has(best.plant)) {
+    const to = { ...Transform.get(best.plant).scale }
+    Tween.setScale(best.plant, { x: 0.001, y: 0.001, z: 0.001 }, to, POP_MS, EasingFunction.EF_EASEOUTBACK)
+  }
+}
+
+// ---------------------------------------------------------------
+// Plant / reveal sequences. Until now planting swapped the model instantly and opening
+// was just the discovery card. Now: seed drops in → seedling pops up; on opening the
+// seedling swells, bursts, the flower pops out, THEN the card. `held` keeps refresh()
+// from swapping the visual while a beat is still playing; `popIn` scales the next-built
+// plant up from nothing. Client-only, live events only (never the join snapshot).
+// ---------------------------------------------------------------
+
+const held  = new Set<string>()
+const popIn = new Set<string>()
+const SEED_DROP_MS   = 550
+const SEED_DROP_H    = 1.6    // m above the rim the seed falls from
+const SEED_WORLD_H   = 0.3    // m — the falling seed's size
+const SWELL_MS       = 1100   // seedling swells before it opens
+const SWELL_MULT     = 1.3
+const POP_MS         = 650
+const CARD_AFTER_MS  = 900    // discovery card lands once the flower has mostly popped
+
+function releaseHold(v: BoxView): void {
+  held.delete(v.boxId)
+  pendingPlant.add(v)
+}
+
+function playPlantBeat(v: BoxView): void {
+  const pos = layout.get(v.boxId)
+  if (!pos) return
+  held.add(v.boxId)
+  const seed = engine.addEntity()
+  const k = SEED_WORLD_H / SEED_MODEL_HEIGHT
+  const rim = BOX_MODEL_RIM_Y + 0.15
+  Transform.create(seed, { position: { x: pos.x, y: rim + SEED_DROP_H, z: pos.z }, scale: { x: k, y: k, z: k } })
+  GltfContainer.create(seed, { src: seedModelSrc(v.rarityTier), visibleMeshesCollisionMask: ColliderLayer.CL_NONE, invisibleMeshesCollisionMask: ColliderLayer.CL_NONE })
+  Tween.setMove(seed, { x: pos.x, y: rim + SEED_DROP_H, z: pos.z }, { x: pos.x, y: rim, z: pos.z }, SEED_DROP_MS, EasingFunction.EF_EASEINQUAD)
+  timers.setTimeout(() => {
+    engine.removeEntity(seed)
+    playSfx('plant', { x: pos.x, y: 1, z: pos.z })
+    popIn.add(v.boxId)
+    releaseHold(v)
+  }, SEED_DROP_MS)
+}
+
+function playRevealBeat(v: BoxView): void {
+  const pos = layout.get(v.boxId)
+  if (!pos) return
+  held.add(v.boxId)
+  if (isMine(v)) showDiscovery(v.flower, v.rarityTier, SWELL_MS + CARD_AFTER_MS)   // state snapshotted now, shown after the beat
+  if (v.plant !== null && Transform.has(v.plant)) {
+    const k = Transform.get(v.plant).scale.x
+    Tween.setScale(v.plant, { x: k, y: k, z: k }, { x: k * SWELL_MULT, y: k * SWELL_MULT, z: k * SWELL_MULT }, SWELL_MS, EasingFunction.EF_EASEINSINE)
+  }
+  timers.setTimeout(() => {
+    triggerSparkle({ x: pos.x, y: BOX_MODEL_RIM_Y, z: pos.z })
+    playSfx('flowerOpen', { x: pos.x, y: 1, z: pos.z })
+    popIn.add(v.boxId)
+    releaseHold(v)
+  }, SWELL_MS)
 }
 
 // Week-2 playtest 2026-09-22 ("add a water drop icon"): the same marker the garden plants
@@ -403,8 +479,14 @@ function plantRevealSystem(): void {
 const wateredByMe = new Set<string>()   // boxIds I watered this session, client-side only
 const SEEDLING_DROP_Y = 0.8             // above the rim, like WATER_DROP_Y over a garden plant
 
+/** My own seedling has reached a stage I have not yet tended (tending = the owner's water, once per stage). */
+function tendReady(v: BoxView, now: number): boolean {
+  return isMine(v) && !!v.owner && !v.opened && tendsAvailable(v.opensLocalAt, now, v.rarityTier, v.tends) > 0
+}
 function wantsDrop(v: BoxView): boolean {
-  return !!v.owner && !v.opened && !isMine(v) && v.waters < BOX_WATER_MAX && !wateredByMe.has(v.boxId)
+  if (!v.owner || v.opened) return false
+  if (isMine(v)) return tendReady(v, Date.now())
+  return v.waters < BOX_WATER_MAX && !wateredByMe.has(v.boxId)
 }
 function removeSeedlingDrop(v: BoxView): void {
   if (v.drop === null) return
@@ -424,7 +506,7 @@ function setSeedlingDrop(v: BoxView, pos: PlanterPos): void {
 function refresh(v: BoxView): void {
   if (deleted.has(v.boxId)) return   // removed in the layout editor — stays hidden until the bake
   const pos = layout.get(v.boxId)!
-  if (plantKeyFor(v) !== v.plantKey) pendingPlant.add(v)   // built by plantRevealSystem
+  if (plantKeyFor(v) !== v.plantKey && !held.has(v.boxId)) pendingPlant.add(v)   // built by plantRevealSystem
   setSeedlingDrop(v, pos)
   setBalloonVisual(v, pos)
   if (v.balloonText !== null) setBalloonText(v, Date.now())
@@ -458,7 +540,15 @@ function onTap(v: BoxView): void {
   if (!v.owner) { tryPlant(v); return }
   if (isMine(v)) {
     if (v.opened) { console.log(`[Boxes] harvesting ${v.boxId}`); room.send('harvestBox', { boxId: v.boxId }); return }
-    showToast(`Still growing — ready in ${countdown(v, Date.now())}`, TOAST_MS, false)
+    if (tendReady(v, Date.now())) {
+      console.log(`[Boxes] tending ${v.boxId}`)
+      playWateringBeat()
+      room.send('tendBox', { boxId: v.boxId })
+      v.tends += 1          // optimistic; the next boxState carries the server's count
+      removeSeedlingDrop(v)
+      return
+    }
+    showToast(`Still growing — ready in ${countdown(v, Date.now())}. Tend it again when it grows`, TOAST_MS, false)
     return
   }
   if (v.opened) { showToast(`${v.ownerName}'s ${flowerName(v)}, on show`, TOAST_MS, false); return }
@@ -492,7 +582,7 @@ function createBox(p: PlanterPos & { id: string }): BoxView {
   Transform.create(hit, { parent: base, position: PLANTER_COLLIDER_CENTER, scale: PLANTER_COLLIDER_SIZE })
   MeshCollider.setBox(hit, ColliderLayer.CL_POINTER | ColliderLayer.CL_PHYSICS)
 
-  const v: BoxView = { boxId: p.id, base, hit, labelText: '', plant: null, plantKey: '', balloon: null, balloonText: null, balloonMover: null, balloonPivot: null, balloonAnimPending: false, balloonLive: false, owner: '', ownerName: '', rarityTier: 0, opened: false, flower: '', opensLocalAt: 0, waters: 0, lastWaterer: '', drop: null }
+  const v: BoxView = { boxId: p.id, base, hit, labelText: '', plant: null, plantKey: '', balloon: null, balloonText: null, balloonMover: null, balloonPivot: null, balloonAnimPending: false, balloonLive: false, owner: '', ownerName: '', rarityTier: 0, opened: false, flower: '', opensLocalAt: 0, waters: 0, lastWaterer: '', drop: null, stage: 0, tends: 0 }
   pointerEventsSystem.onPointerDown(
     { entity: hit, opts: { button: InputAction.IA_POINTER, hoverText: 'Plant seed', maxDistance: TAP_DISTANCE } },
     () => onTap(v),
@@ -635,7 +725,50 @@ function boxTickSystem(dt: number): void {
   if (tickAccum < LABEL_TICK_MS) return
   tickAccum = 0
   const now = Date.now()
-  for (const v of views.values()) if (v.balloonLive) setBalloonText(v, now)
+  for (const v of views.values()) {
+    if (v.balloonLive) setBalloonText(v, now)
+    if (v.owner && !v.opened && v.plant !== null && !held.has(v.boxId)) {
+      const s = stageFor(v, now)
+      if (s > v.stage) growTo(v, s)
+    }
+    if (isMine(v) && v.owner && !v.opened) {   // a new stage means a new tend: the drop and hover follow the clock, not just boxState
+      const pos = layout.get(v.boxId)
+      if (pos) setSeedlingDrop(v, pos)
+      const pe = PointerEvents.getMutableOrNull(v.hit)?.pointerEvents[0]?.eventInfo
+      if (pe) pe.hoverText = hoverFor(v)
+    }
+  }
+}
+
+// ---------------------------------------------------------------
+// Growth stages (playtest 2026-09-24: "we could have a lot more progression here"). The
+// seedling used to sit at one size until the flower opened. Now it steps through four
+// stages by how much of ITS OWN timer has elapsed (a Rare's 6-minute wait and a Common's
+// 2-minute wait both read as seed → sprout → seedling → bud), popping at each step.
+// Progress is elapsed/total, so a visitor's watering shave makes the next pop come sooner.
+// ---------------------------------------------------------------
+const GROW_STAGES: ReadonlyArray<{ scale: number }> = [   // WHEN each stage starts is GROW_STAGE_AT in config
+  { scale: 0.5  },   // seed just in the soil
+  { scale: 0.7  },   // sprout
+  { scale: 0.9  },   // seedling
+  { scale: 1.15 },   // bud, about to open
+]   // TUNING
+const GROW_POP_MS = 600
+
+function stageFor(v: BoxView, now: number): number {
+  return growStageOf(v.opensLocalAt, now, v.rarityTier)
+}
+
+function growTo(v: BoxView, stage: number): void {
+  const pos = layout.get(v.boxId)
+  if (!pos || v.plant === null || !Transform.has(v.plant)) return
+  const from = Transform.get(v.plant).scale.x
+  const k = SEEDLING_SCALE * GROW_STAGES[stage].scale
+  v.stage = stage
+  // Keep the base in the soil: the seedling's geometry starts SEEDLING_MODEL_MIN_Y*k above its origin.
+  Transform.getMutable(v.plant).position.y = BOX_MODEL_RIM_Y - SEEDLING_MODEL_MIN_Y * k
+  Tween.setScale(v.plant, { x: from, y: from, z: from }, { x: k, y: k, z: k }, GROW_POP_MS, EasingFunction.EF_EASEOUTBACK)
+  if (isMine(v)) triggerSparkle({ x: pos.x, y: BOX_MODEL_RIM_Y, z: pos.z })
 }
 
 /** Write a balloon's text only when it changed ("Ready to Harvest" never does; a countdown
@@ -789,22 +922,22 @@ export function setupBoxSystem(): void {
     v.flower    = data.flower
     v.waters      = data.waters
     v.lastWaterer = data.lastWaterer
+    v.tends       = data.tends ?? 0
     // Countdown from the server's own clock delta — clockSync is unreliable here
     v.opensLocalAt = Date.now() + (Number(data.opensAt) - Number(data.serverNow))
+    const planting  = live && !wasOwned && !!v.owner && !v.opened
+    const revealing = live && !wasOpened && v.opened && !!v.owner
+    if (planting || revealing) held.add(v.boxId)   // before refresh(): keep the old visual for the beat
     refresh(v)
-    // Sounds (sounds.ts): planting + opening play AT the planter so neighbours hear them too
-    const p = layout.get(v.boxId)
-    const at = p ? { x: p.x, y: 1, z: p.z } : undefined
-    if (live && !wasOwned && v.owner) playSfx('plant', at)
-    if (live && !wasOpened && v.opened) playSfx('flowerOpen', at)
+    // planting + opening sounds are played by the beats below, AT the planter so neighbours hear them too
+    if (planting) playPlantBeat(v)
+    if (revealing) playRevealBeat(v)
     if (live && wasMine && wasOpened && !v.owner) playSfx('harvest')
     // `live` matters here: the join/resync snapshot arrives with opened=true and
     // wasOpened=false for every planter already standing open, so an ungated branch
     // replays the whole beat on every rejoin. It was only a toast before; as a card it
     // would be a faceful of "you discovered" for flowers opened days ago.
-    if (live && !wasOpened && v.opened && isMine(v)) {
-      showDiscovery(v.flower, v.rarityTier)
-    } else if (live && !wasMine && isMine(v) && !v.opened) {
+    if (live && !wasMine && isMine(v) && !v.opened) {
       showToast('Seed planted — come back when it opens', TOAST_MS, false)
     }
   })

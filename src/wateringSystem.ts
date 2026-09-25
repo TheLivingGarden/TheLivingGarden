@@ -46,12 +46,15 @@ import { setupSparkleSystem, triggerSparkle, triggerWateringTribute, triggerBloo
 import { setupAmbientFX, triggerGroundRipple, stopFireflies, ambientFXSystem }                                        from './ambientFX'
 import { setupProgressBars, updateProgressBars, setBloomRatio } from './progressBarsSystem'
 import { setupGroundLights, updateGroundLights, triggerGroundLightBurst }                       from './groundLightSystem'
-import { flairIcon, almanacTitleByRank, bloomSustainMs, bloomVariantById, bloomFxLevel, withArticle } from './shared/config'
+import { flairIcon, almanacTitleByRank, bloomSustainMs, bloomVariantById, bloomFxLevel, withArticle, HOLD_WATERING_ENABLED } from './shared/config'
 import { setBloomSparklePalette } from './sparkleSystem'
 import { setAmbientPalette } from './ambientFX'
 import { startMoonlight, stopMoonlight } from './moonlight'
 import { setupLeaderboardBoards, updateLeaderboardDisplay, setYourStanding, BoardEntry }   from './leaderboardSystem'
 import { setupFairyLights, setFairyLightsBloom }             from './fairyLightSystem'
+import { syncMyHand } from './giftSystem'
+import { beginHold, isHolding } from './skillCheck'
+import { applyPropLayout } from './propLayoutTool'
 import { showToast, showDailyLimit, hideDailyLimit, showPersistent, hidePersistent, showBannerIdle, showBannerCountdown, updateBannerCountdown, showBannerBloom, updateBannerHealth, updatePlayerCount, updateBloomRemaining, formatBloomCountdown, getMsUntilBloom, setNextBloomLocalTime } from './notifications'
 import { clockSync } from './shared/clockSync'
 import { triggerSceneEmote }  from '~system/RestrictedActions'
@@ -162,7 +165,8 @@ const CLICKBOX_SCALE = { x: 1.5, y: 2, z: 1.5 }   // initial only — resizeClic
 // full-size plant's box 1.5 m wide × 2 m tall while a 0.38-scale fast plant 0.5 m away
 // got 0.57 m — inside its neighbour's box, so small plants were untappable everywhere.
 const CLICKBOX_W_MAX   = 1.2    // m — never wider than this, however isolated the plant
-const CLICKBOX_W_MIN   = 0.4    // m — touch floor, even for the tightest pairs (0.49 m apart)
+const CLICKBOX_W_MIN   = 0.24   // m — touch floor. Was 0.4, which forced FastPlant_4/Plant_18 (0.42 m apart) and FastPlant_3/Plant_3 (0.54 m) to overlap;
+                                //     0.24 leaves zero overlapping pairs across the 38-plant layout (KJ 2026-09-24: fast roses overlap their neighbours)
 const CLICKBOX_GAP     = 0.96   // fraction of the neighbour gap the two boxes may fill together
 const CLICKBOX_H_PER_SCALE = 1.9  // m of box height per unit of plant scale
 const CLICKBOX_H_MIN   = 0.9    // m — short plants still need a finger-sized target
@@ -846,7 +850,7 @@ function enablePlantClick(entity: Entity) {
           return
         }
       }
-      waterPlant(entity, info.plantName)
+      pourOnto(entity, info.plantName)
     },
   )
   pointerEventsSystem.onPointerHoverEnter({ entity: info.clickTarget }, () => {
@@ -906,9 +910,12 @@ function playMagicFXSound() {
   })
 }
 
+export function isWateringEmoteActive(): boolean { return emoteActive }
+
 function stopWateringEmote() {
   if (!emoteActive) return
   emoteActive = false
+  syncMyHand()   // the can is gone — bring back the seed / keepsake
   triggerSceneEmote({ src: '', loop: false })
 }
 
@@ -945,6 +952,7 @@ function triggerWateringEmote(_plantEntity: Entity) {
   // movePlayerTo retired (Clean The Club precedent) — teleport-stepping players
   // to the plant put them inside geometry; the emote now plays where they stand.
   emoteActive = true
+  syncMyHand()   // one thing in the hand at a time: the can replaces the seed / keepsake
 
   timers.setTimeout(() => {
     if (!emoteActive) return
@@ -1038,9 +1046,28 @@ function scheduleExpiry(entity: Entity, sessionTimestamp: number, delayMs: numbe
   }, delayMs)
 }
 
-function waterPlant(entity: Entity, plantId: string) {
+/** Press on a plant. A tap waters at once; holding pours (see skillCheck.tsx): a just-right
+ *  release adds watered time, too much and the plant is not watered at all. The can comes out
+ *  on the press so the hold has a pose behind it. */
+function pourOnto(entity: Entity, plantId: string): void {
+  if (!HOLD_WATERING_ENABLED) { waterPlant(entity, plantId); return }
+  if (emoteActive || isHolding()) return
+  if (PlantData.get(entity).isWatered && !expiryTell.has(entity)) { waterPlant(entity, plantId); return }   // its own "already watered" toast
+  triggerWateringEmote(entity)
+  beginHold((outcome) => {
+    if (outcome === 'over') {
+      stopWateringEmote()
+      playWiltSound(entity)
+      showToast('Too much water! Let go sooner', TOAST_WATERED_MS, false)
+      return
+    }
+    waterPlant(entity, plantId, outcome === 'sweet', true)
+  })
+}
+
+function waterPlant(entity: Entity, plantId: string, sweet = false, fromHold = false) {
   // Watering during a bloom is allowed (2026-09-22) — the old "Can't water during bloom" gate is gone.
-  if (emoteActive)     return
+  if (emoteActive && !fromHold) return
 
   // Gate: already watered and not yet showing its expiry tell — inform without using water.
   // Inside the tell the tap is a top-up (the server re-arms the full timer).
@@ -1066,7 +1093,12 @@ function waterPlant(entity: Entity, plantId: string) {
   setDropFade(entity, 'out')    // hide drop when watering
 
   playClickSound()
-  triggerWateringEmote(entity)
+  if (!fromHold) triggerWateringEmote(entity)   // a hold already started it on the press
+  if (sweet) {   // just-right pour: the plant answers with a flourish
+    const at = Transform.getOrNull(entity)?.position
+    if (at) timers.setTimeout(() => { playMagicFXSound(); triggerSparkle(at) }, WATER_FX_MS)
+    showToast('Just right! Stays watered longer', TOAST_WATERED_MS, false)
+  }
 
   // t=WATER_FX_MS — sound + ripple + light burst
   timers.setTimeout(playWateringSound, WATER_FX_MS)
@@ -1113,7 +1145,7 @@ function waterPlant(entity: Entity, plantId: string) {
     }, WATER_ANIM_MS)
   }
 
-  room.send('waterPlant', { plantId })
+  room.send('waterPlant', { plantId, sweet })
   pendingWaters.set(plantId, { ts: now, prevWateredAt, wasTopUp: wasAlreadyWatered })
 
   updateProgressText()
@@ -1417,6 +1449,7 @@ export function setupWateringSystem(): void {
   }
 
   applyPlantLayout()
+  applyPropLayout()
   for (const name of PLANT_NAMES) setupPlant(name)
   resizeClickboxes()
 

@@ -62,3 +62,10 @@ export const PLANT_LAYOUT: Readonly<Record<string, PlantPlacement>> = {
   'Plant_31': { x: 10.443, y: 0.812, z: 42.07, rotY: 195, scale: 0.7 },
   'Plant_32': { x: 10.912, y: 0.805, z: 38.413, rotY: 225, scale: 0.6 },
 }
+
+/** Loose composite props (lampposts and their light overlays, sit spots, Discord buttons) moved with
+ *  the Test panel's Prop editor (propLayoutTool.ts). Keyed by composite entity NAME; every member of a
+ *  prop is listed, so a lamp's post and its three light overlays stay together. Empty = a no-op. */
+export interface PropPlacement { x: number; y: number; z: number; rotY?: number }
+export const PROP_LAYOUT: Readonly<Record<string, PropPlacement>> = {
+}

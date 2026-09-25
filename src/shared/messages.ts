@@ -51,6 +51,7 @@ export const room = registerMessages({
     plantedAt: Schemas.Int64, opensAt: Schemas.Int64, serverNow: Schemas.Int64,
     opened: Schemas.Boolean, flower: Schemas.String,
     waters: Schemas.Number, lastWaterer: Schemas.String,
+    tends: Schemas.Number,   // how many times the OWNER has tended this seedling (one per growth stage)
   }),
 
   // ── v2 Phase 4: harvest / water / gift ───────────────────
@@ -58,6 +59,8 @@ export const room = registerMessages({
   harvestBox:       Schemas.Map({ boxId: Schemas.String }),
   /** Visitor taps someone else's GROWING box: shaves BOX_WATER_SHAVE_MS (capped, once per visitor). */
   waterBox:         Schemas.Map({ boxId: Schemas.String }),
+  /** Owner taps their own GROWING box when it shows a water drop: shaves TEND_SHAVE_FRACTION, once per growth stage. */
+  tendBox:          Schemas.Map({ boxId: Schemas.String }),
   /** Tap a nearby player: give them one flower from your collection (by index). */
   giftFlower:       Schemas.Map({ toAddress: Schemas.String, flowerIndex: Schemas.Number }),
   /** Server → player: their keepsake collection + box cap (after harvest/gift, and on join). */
@@ -129,7 +132,7 @@ export const room = registerMessages({
 
   // ── Client → Server ───────────────────────────────────────
   /** Player requests to water a plant. Server validates and updates PlantSync. */
-  waterPlant:       Schemas.Map({ plantId: Schemas.String }),
+  waterPlant:       Schemas.Map({ plantId: Schemas.String, sweet: Schemas.Boolean }),   // sweet = released in the hold meter's sweet zone
   /** Sent on join so the server can map address → display name for the leaderboard. */
   registerPlayer:   Schemas.Map({ displayName: Schemas.String }),
   /** Sent on room.onReady so the server re-sends full state even after a client reload. */

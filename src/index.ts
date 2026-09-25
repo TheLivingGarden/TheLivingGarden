@@ -5,6 +5,7 @@ import { setupOnboarding } from './onboarding'
 import { setupBloomFinale } from './bloomFinale'
 import { setupDiscoveryCard } from './discoveryCard'
 import { setupPodium } from './podium'
+import { setupPouchRack } from './pouchRack'
 
 // Importing shared schemas + messages here ensures registerMessages()
 // and defineComponent() run on BOTH server and client before any
@@ -28,6 +29,7 @@ export async function main() {
   setupBloomFinale()
   setupDiscoveryCard()   // same post-room.clear() window
   setupPodium()
+  setupPouchRack()   // after setupWateringSystem: the gift API it uses is registered by then
 
   // Discord buttons are BACK (KJ 2026-09-20) — they carry their own link from the
   // composite, and the info panel's last page links to the same server.

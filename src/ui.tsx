@@ -25,6 +25,7 @@ import { startFpsMeter, getFps, getTestPotCount } from './potStressTest'
 import { SeedMenuUi, toggleSeedMenu, isSeedMenuOpen } from './seedMenu'
 import { BloomFinaleUi } from './bloomFinale'
 import { DiscoveryCardUi, MilestoneCardUi } from './discoveryCard'
+import { HoldMeterUi } from './skillCheck'
 import { InfoPanelUi, toggleInfo, isInfoOpen } from './infoPanel'
 import { AvenueCardUi } from './avenueCard'
 import { TOTAL_PLANTS, BLOOM_THRESHOLD, WATERED_EXPIRY_MS, BLOOM_RESET_DELAY_MS, decayFactor, SHOW_DEV_OVERLAY } from './shared/config'
@@ -80,6 +81,16 @@ export function showToast(text: string, durationMs: number, _large = false, colo
   toastVisible = true
   const gen    = ++toastGen
   timers.setTimeout(() => { if (toastGen === gen) toastVisible = false }, durationMs)
+}
+
+// A big centre-screen line for the one thing the player must not miss (e.g. seeds falling).
+// Alpha fade only — size tweens jitter on the phone.
+let momentTitle = '', momentSub = '', momentStart = 0, momentLife = 0
+/** The centre line owns the screen while it is up: the top pill (idle guide / tutorial hint)
+ *  and the banner sub-line would otherwise say the same thing a second time. */
+const momentActive = () => momentLife > 0 && Date.now() - momentStart < momentLife
+export function showMoment(title: string, sub: string, ms: number): void {
+  momentTitle = title; momentSub = sub; momentStart = Date.now(); momentLife = ms
 }
 
 export function showDailyLimit(text: string): void {
@@ -334,7 +345,7 @@ function uiComponent() {
   const title = isBloom ? (bannerBloomLabel || 'The Garden is in Full Bloom!')
               : isCount ? `Hold 80% for ${bannerCountdown} to wake the bloom`
               : 'Garden health'
-  const sub   = isBloom ? 'Seeds are falling - walk through them to gather'
+  const sub   = isBloom ? 'The flower is opening - seeds pour out when it does'
               : isCount ? `${pctLabel} - ${gardeners} gardener${gardeners === 1 ? '' : 's'} here, plants dry in ${dryMinutes()} min`
               : need > 0 ? `${pctLabel} - ${need} more plant${need === 1 ? '' : 's'} to wake the bloom`
               : `${pctLabel} - hold it to wake the bloom`
@@ -447,15 +458,29 @@ function uiComponent() {
       </UiEntity>
 
       {/* ═════ PERSISTENT ═════ */}
-      <UiEntity uiTransform={{ display: persistVisible ? 'flex' : 'none', positionType: 'absolute', position: { top: persistY, left: 0 }, width: '100%', flexDirection: 'row', justifyContent: 'center' }}>
+      <UiEntity uiTransform={{ display: persistVisible && !momentActive() ? 'flex' : 'none', positionType: 'absolute', position: { top: persistY, left: 0 }, width: '100%', flexDirection: 'row', justifyContent: 'center' }}>
         <UiEntity uiTransform={{ height: px(PILL_H), flexDirection: 'row', alignItems: 'center', padding: { left: px(PILL_PAD_X), right: px(PILL_PAD_X) }, borderRadius: px(PILL_H / 2) }} uiBackground={{ color: DARK }}>
           <Label value={persistText} fontSize={fs(PILL_FONT - 2)} color={{ ...DIM, a: 1 }} textAlign="middle-center" uiTransform={{ height: '100%' }} />
         </UiEntity>
       </UiEntity>
 
+      {(() => {
+        const age = Date.now() - momentStart
+        if (momentLife === 0 || age >= momentLife) return null
+        const a = Math.min(1, age / 300, (momentLife - age) / 500)
+        return (
+          <UiEntity uiTransform={{ positionType: 'absolute', position: { top: '24%', left: 0 }, width: '100%', flexDirection: 'row', justifyContent: 'center' }}>
+            <UiEntity uiTransform={{ flexDirection: 'column', alignItems: 'center', padding: { left: px(36), right: px(36), top: px(18), bottom: px(20) }, borderRadius: px(26) }} uiBackground={{ color: { r: 0.07, g: 0.063, b: 0.055, a: 0.82 * a } }}>
+              <Label value={momentTitle} fontSize={fs(mobile ? 30 : 34)} color={{ ...GOLD, a }} textAlign="middle-center" textWrap="nowrap" uiTransform={{ height: fs(mobile ? 42 : 46) }} />
+              <Label value={momentSub} fontSize={fs(mobile ? 19 : 21)} color={{ ...CREAM, a }} textAlign="middle-center" textWrap="nowrap" uiTransform={{ height: fs(30), margin: { top: px(4) } }} />
+            </UiEntity>
+          </UiEntity>
+        )
+      })()}
       <BloomFinaleUi px={px} fs={fs} />
       <AvenueCardUi px={px} fs={fs} mobile={mobile} maxH={Math.round(currentVirtualH * (1 - ins.top - ins.bottom)) - topPx - bottomPx} />
       <DiscoveryCardUi px={px} fs={fs} mobile={mobile} />
+      <HoldMeterUi px={px} fs={fs} mobile={mobile} />
       <MilestoneCardUi px={px} fs={fs} mobile={mobile} />
       <InfoPanelUi px={px} fs={fs} mobile={mobile} topPx={topPx} aboveChipPx={bottomPx + px(CHIP_H) + px(GAP)} maxW={Math.round(currentVirtualW * (1 - hIns * 2))} maxH={Math.round(currentVirtualH * (1 - ins.top - ins.bottom)) - topPx - bottomPx} />
       <SeedMenuUi px={px} fs={fs} mobile={mobile} topPx={topPx} aboveChipPx={bottomPx + px(CHIP_H) + px(GAP)} maxW={Math.round(currentVirtualW * (1 - hIns * 2))} maxH={Math.round(currentVirtualH * (1 - ins.top - ins.bottom)) - topPx - bottomPx} />
