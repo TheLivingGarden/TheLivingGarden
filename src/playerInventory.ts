@@ -81,6 +81,16 @@ export function setDiscovered(entries: string[]): void {
 
 export function getFlowers(): Keepsake[] { return flowers }
 export function setFlowers(list: Keepsake[]): void { flowers = list }
+
+/** A keepsake's wire identity — what gift/hold/display send instead of a collection
+ *  index, so a stale index (the server's copy shifted between click and arrival, e.g.
+ *  a double-tap or a second queued action) can no longer act on the wrong flower; the
+ *  server matches this against its own copy rather than trusting a position (2026-09-28). */
+export interface FlowerIdentity { flower: string; rarityTier: number; at: number }
+export function keepsakeIdentity(flowerIndex: number): FlowerIdentity | null {
+  const f = flowers[flowerIndex]
+  return f ? { flower: f.flower, rarityTier: f.rarityTier, at: f.at } : null
+}
 export function getBoxCap(): number { return boxCap }
 export function setBoxCap(n: number): void { boxCap = n; boxCapKnown = true }
 export function isBoxCapKnown(): boolean { return boxCapKnown }

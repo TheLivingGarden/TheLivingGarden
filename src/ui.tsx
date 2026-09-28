@@ -51,6 +51,7 @@ let bannerCountdown = ''   // e.g. "42s" — kept current by the watering system
 let bannerBloomLabel = ''  // variant / scale-aware bloom headline
 let bannerHealth    = 0    // 0–1
 let playerCount     = 0
+let luckPercent     = 0    // 2026-09-28: how much rarer the next Bloom's seeds roll right now
 
 let bloomRemainingLabel = ''   // ring text during a bloom
 let bloomRemainingFrac  = 1    // ring sweep during a bloom (1 → 0)
@@ -105,6 +106,7 @@ export function registerCoachActions(actions: CoachActions): void { coachActions
 /** While the tutorial runs the "This bloom" summary stays hidden (KJ 2026-09-27: distracting). */
 let tutorialActive = false
 export function setTutorialActive(on: boolean): void { tutorialActive = on }
+export function isTutorialActive(): boolean { return tutorialActive }
 /** The card gives way to the bloom line and the "This bloom" summary (they share its spot), and to
  *  any card or menu the player opened — the Avenue card sat on top of it (KJ 2026-09-27). */
 const coachUp = (): boolean => coach !== null && !momentActive() && !isBloomFinaleShowing()
@@ -158,6 +160,11 @@ export function updatePlayerCount(n: number): void {
   if (n !== playerCount && playerCount !== 0) openBanner()
   playerCount = n
 }
+
+/** How much rarer the next Bloom's seeds roll right now (gardeners + Gallery), as a
+ *  whole-number percent over solo-with-an-empty-Gallery. No banner-reopen on change (2026-09-28):
+ *  unlike the gardener count, a Gallery-driven change isn't urgent enough to interrupt. */
+export function updateLuckPercent(n: number): void { luckPercent = n }
 
 /** During a bloom the ring shows time left (wateringSystem's reset ticker pushes it). */
 export function updateBloomRemaining(label: string, remainingMs: number, totalMs = BLOOM_RESET_DELAY_MS): void {
@@ -324,8 +331,9 @@ function uiComponent() {
   shownHealth += (bannerHealth - shownHealth) * Math.min(1, dt * 5)
   if (Math.abs(bannerHealth - shownHealth) < 0.002) shownHealth = bannerHealth
 
-  // banner fade (alpha only)
-  const open = bannerIsOpen(now)
+  // banner fade (alpha only) — hidden while the tutorial card is up (2026-09-28: the two
+  // competed for the top of the screen); reuses the same fade so it doesn't just pop.
+  const open = bannerIsOpen(now) && !tutorialActive
   if (open !== bannerWasOpen) { bannerWasOpen = open; bannerFlipAt = now }
   const t = Math.min(1, (now - bannerFlipAt) / FADE_MS)
   const a = open ? t : 1 - t
@@ -341,7 +349,8 @@ function uiComponent() {
   const seedRare   = seedCount - (pouch[0] ?? 0)   // anything above Common
   const isBloom    = bannerState === 'bloom'
   const isCount    = bannerState === 'countdown'
-  const bannerH    = px(isBloom ? 96 : 122)
+  // 122 + ~24 (2026-09-28: the luck row added a 4th line, hidden only during a bloom).
+  const bannerH    = px(isBloom ? 96 : 146)
   const ringSize   = px(RING_SIZE)
   // Seed chip sits BOTTOM CENTRE (KJ 2026-09-20), like an inventory bar. Anchored on the
   // MEASURED bottom inset rather than a fixed offset, so it rides above whatever the
@@ -457,6 +466,17 @@ function uiComponent() {
           </UiEntity>
 
           <Label value={sub} fontSize={fs(SUB_FONT)} color={{ ...DIM, a }} textAlign={isBloom ? 'middle-center' : 'middle-left'} uiTransform={{ width: '100%', height: fs(SUB_FONT + 8) }} />
+
+          {/* Luck (2026-09-28: "display bloom luck on screen... under the garden health
+              meter"): how much rarer the NEXT bloom's seeds roll right now, from gardeners
+              present and the Gallery's current boost — see currentLuckPercent server-side.
+              Hidden during a bloom, same as the bar above — the roll for THIS bloom is
+              already locked in by then. KJ asked for a shamrock icon; there's no such
+              asset yet, so this is a plain dot until one exists. */}
+          <UiEntity uiTransform={{ display: isBloom ? 'none' : 'flex', width: '100%', height: fs(SUB_FONT + 6), margin: { top: px(2) }, flexDirection: 'row', alignItems: 'center' }}>
+            <UiEntity uiTransform={{ width: fs(12), height: fs(12), borderRadius: fs(6), margin: { right: px(6) } }} uiBackground={{ color: { ...BAR_GREEN, a } }} />
+            <Label value={`Luck boost +${luckPercent}%`} fontSize={fs(SUB_FONT)} color={{ ...BAR_GREEN, a }} textAlign="middle-left" uiTransform={{ height: '100%' }} />
+          </UiEntity>
         </UiEntity>
       </UiEntity>
 

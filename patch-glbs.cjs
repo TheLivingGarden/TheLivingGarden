@@ -1,21 +1,36 @@
 #!/usr/bin/env node
 // =============================================================
-// patch-glbs.cjs — Run automatically via prestart / predeploy
+// patch-glbs.cjs — manual rescue tool only (2026-09-28: pulled out of
+// prestart/predeploy — see below)
 // =============================================================
 // Converts VEC4 COLOR_0 vertex-color accessors → VEC3 in all scene GLBs.
 //
-// WHY: Babylon.js sets hasVertexAlpha=true when a mesh's COLOR_0 attribute
-// is RGBA (VEC4). This forces the mesh into the transparent sorted render
-// pass, which calls effect.setMatrix() on every frame. The NullEngine
-// (Hammurabi headless server) never compiles shaders so effect is always
-// undefined → immediate crash → room.onReady() never fires on clients.
+// WHY IT EXISTED: Babylon.js sets hasVertexAlpha=true when a mesh's COLOR_0
+// attribute is RGBA (VEC4). This forces the mesh into the transparent sorted
+// render pass, which calls effect.setMatrix() on every frame. On an OLD
+// PINNED hammurabi-server, the NullEngine never compiled shaders so effect
+// was undefined → crash → room.onReady() never fired on clients.
+//
+// WHY IT NO LONGER RUNS AUTOMATICALLY: check-glb.cjs's header (2026-09-18,
+// measured against the current stock hammurabi-server 1.7.2) found this class
+// of render-pass problem now only skips a frame — the server's render loop is
+// wrapped in try/catch, and skipping a frame on a HEADLESS server that renders
+// to no one is a non-issue. The crash this script exists to prevent was
+// already fixed upstream. Meanwhile it ran on every `npm start`, over ALL
+// scene GLBs (not just the ones the server loads — see check-glb.cjs's
+// serverGlbs() scoping), rewriting tracked source art in place with no
+// backup, into VEC3 data that isn't itself 4-byte aligned (no byteStride
+// set) — spec-invalid glTF. check-glb.cjs still runs at predeploy and will
+// keep flagging this class of issue, now correctly as a warning, not a
+// blocker.
 //
 // Blender always exports vertex colors as VEC4 (RGBA) when the mesh has
 // an alpha channel in its colour attribute. Until the Blender file is fixed
 // to use RGB-only vertex colours, this patch strips the alpha byte after
 // every export.
 //
-// Run manually: node patch-glbs.cjs
+// Run manually if a check-glb.cjs warning turns out to matter again:
+//   npm run patch-glbs
 // =============================================================
 
 const fs   = require('fs')

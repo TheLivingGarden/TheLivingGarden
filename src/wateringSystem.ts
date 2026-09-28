@@ -55,11 +55,11 @@ import { setupFairyLights, setFairyLightsBloom }             from './fairyLightS
 import { syncMyHand } from './giftSystem'
 import { beginHold, isHolding } from './skillCheck'
 import { applyPropLayout } from './propLayoutTool'
-import { showToast, showDailyLimit, hideDailyLimit, showPersistent, hidePersistent, showBannerIdle, showBannerCountdown, updateBannerCountdown, showBannerBloom, updateBannerHealth, updatePlayerCount, updateBloomRemaining, formatBloomCountdown, getMsUntilBloom, setNextBloomLocalTime } from './notifications'
+import { showToast, showDailyLimit, hideDailyLimit, showPersistent, hidePersistent, showBannerIdle, showBannerCountdown, updateBannerCountdown, showBannerBloom, updateBannerHealth, updatePlayerCount, updateBloomRemaining, formatBloomCountdown, setNextBloomLocalTime, updateLuckPercent } from './notifications'
 import { clockSync } from './shared/clockSync'
 import { triggerSceneEmote }  from '~system/RestrictedActions'
 import { room }                             from './shared/messages'
-import { TOTAL_PLANTS, BLOOM_THRESHOLD, BLOOM_CENTER, DAILY_WATER_LIMIT, PLANT_NAMES, FAST_PLANT_NAMES, FAST_PLANT_EXPIRY_MS, BLOOM_RESET_DELAY_MS, DROP_RANGE, DROP_RANGE_OUT, BLOOM_TRIGGER_COOLDOWN_MS, EXPIRY_TELL_MS, WATER_DROP_MODEL_SRC } from './shared/config'
+import { TOTAL_PLANTS, BLOOM_THRESHOLD, BLOOM_CENTER, DAILY_WATER_LIMIT, PLANT_NAMES, FAST_PLANT_NAMES, FAST_PLANT_EXPIRY_MS, BLOOM_RESET_DELAY_MS, DROP_RANGE, DROP_RANGE_OUT, BLOOM_TRIGGER_COOLDOWN_MS, EXPIRY_TELL_MS, WATER_DROP_MODEL_SRC, BLOOM_MODEL_OFFSET_X } from './shared/config'
 import { setupPlayerTrailSystem, startPlayerTrail, stopPlayerTrail } from './playerTrailSystem'
 import { setupSeedSystem } from './seedSystem'
 import { setupBoxSystem } from './boxSystem'
@@ -550,6 +550,13 @@ let _centerTextBloom:        Entity | null = null
 let _centerTextProgress:     Entity | null = null
 let _centerTextInstructions: Entity | null = null
 
+/** Nudge a composite-baked entity's position by BLOOM_MODEL_OFFSET_X (see its comment). */
+function offsetBloomText(e: Entity | null): void {
+  if (!e) return
+  const tf = Transform.getMutableOrNull(e)
+  if (tf) tf.position = { x: tf.position.x + BLOOM_MODEL_OFFSET_X, y: tf.position.y, z: tf.position.z }
+}
+
 function resolveSceneAssets() {
   if (_sceneAssetsResolved) return
   _sceneAssetsResolved     = true
@@ -559,6 +566,9 @@ function resolveSceneAssets() {
   if (!_centerTextInstructions) console.log('[WateringSystem] CenterTextInstructions.glb entity not found')
   if (!_centerTextProgress)     console.log('[WateringSystem] centerTextProgress entity not found')
   if (!_centerTextBloom)        console.log('[WateringSystem] centerTextBloom entity not found')
+  offsetBloomText(_centerTextBloom)
+  offsetBloomText(_centerTextProgress)
+  offsetBloomText(_centerTextInstructions)
 }
 
 function setVisible(entity: Entity | null, visible: boolean) {
@@ -570,6 +580,14 @@ function setVisible(entity: Entity | null, visible: boolean) {
 let bloomResetTickerGen  = 0
 let bloomResetStartMs: number | null = null
 let bloomDurationMs = BLOOM_RESET_DELAY_MS   // this bloom's length, from bloomTriggered (contributor-scaled)
+
+/** ms left in the bloom itself (2-6 min), not the sustain hold that preceded it — the
+ *  finale FX used to be paced against bloomSustainMs (20-60s), so it fired at 15-45% of
+ *  the actual bloom and the rest played flat. Call only once startBloomResetTicker has
+ *  run for this bloom (bloomResetStartMs set), which onVisualBloom always does first. */
+function bloomRemainingMs(): number {
+  return Math.max(0, bloomDurationMs - (Date.now() - (bloomResetStartMs ?? Date.now())))
+}
 
 /** @param elapsedMs how far into the bloom we join (late joiners) — keeps every client's
  *  countdown and end-of-bloom moment aligned with the server's. */
@@ -709,11 +727,17 @@ let gardenersPresent = 1   // server's count (thresholdUpdate) — drives hold l
 let clientSustainStartMs:  number | null = null   // wall-clock ms when current run started
 let clientSustainElapsedMs: number       = 0      // ms accumulated across paused segments
 
+/** ms left on the sustain hold before the bloom actually fires — 20-60s, not the old
+ *  6am/6pm bloomTime window (getMsUntilBloom, which can be hours away and is why the
+ *  pre-bloom FX effectively never played: they were scheduled against the wrong clock). */
+function sustainRemainingMs(): number {
+  const elapsed = clientSustainElapsedMs
+                + (clientSustainStartMs !== null ? Date.now() - clientSustainStartMs : 0)
+  return Math.max(0, bloomSustainMs(gardenersPresent) - elapsed)
+}
+
 function formatSustainCountdown(): string {
-  const elapsed     = clientSustainElapsedMs
-                    + (clientSustainStartMs !== null ? Date.now() - clientSustainStartMs : 0)
-  const remainingMs = Math.max(0, bloomSustainMs(gardenersPresent) - elapsed)
-  return `${Math.ceil(remainingMs / 1_000)}s`
+  return `${Math.ceil(sustainRemainingMs() / 1_000)}s`
 }
 
 function resetClientSustain(): void {
@@ -772,7 +796,7 @@ function updateProgressText() {
       if (!preBloomEffectsActive && !runtimeTestMode) {
         preBloomEffectsActive = true
         playBloomAudioAccent()   // one-shot Swell accent at 80% threshold
-        startPreBloomEffects(getMsUntilBloom())
+        startPreBloomEffects(sustainRemainingMs())
       }
     } else {
       // Pause the sustain clock — preserve elapsed so countdown resumes from same point
@@ -1438,7 +1462,7 @@ export function setupWateringSystem(): void {
       // All VFX, audio, petals, and lights driven by intensity system —
       // budget from bloom scale (solo = quiet bloom), flavour from the variant,
       // pacing from the real hold time so the finale actually plays before reset.
-      startBloomPhases(bloomFxLevel(currentBloomScale), currentBloomVariant, bloomSustainMs(gardenersPresent))
+      startBloomPhases(bloomFxLevel(currentBloomScale), currentBloomVariant, bloomRemainingMs())
       bloomActive = true
     },
   })
@@ -1624,6 +1648,9 @@ export function setupWateringSystem(): void {
       gardenersPresent = data.gardeners
       updatePlayerCount(gardenersPresent)
     }
+    // Same "ahead of the early return" placement as gardeners (2026-09-28 luck HUD): a
+    // Gallery change can arrive with the threshold unchanged.
+    if (typeof data.luckPercent === 'number') updateLuckPercent(data.luckPercent)
     if (data.threshold === bloomThreshold) return
     bloomThreshold = data.threshold
     setBloomRatio(bloomThreshold / TOTAL_PLANTS)
@@ -1684,7 +1711,7 @@ export function setupWateringSystem(): void {
     bloomContributors.clear()
     resetAllPlants()         // stops bloom, resets visuals + audio via endBloom()
     updateSceneAssets()      // endBloom() cleared isBloomActive() — switch center text immediately
-    startBloomCooldown()     // gradual 5-min wind-down of lights + audio
+    startBloomCooldown(computeWateredCount)     // gradual 5-min wind-down of lights + audio
     timers.setTimeout(() => { bloomActive = false }, BLOOM_TRIGGER_COOLDOWN_MS)  // = the server's trigger hold, so no countdown shows while none can start
     startPlayerTrail()       // 10-min sparkle trail on all players after bloom
     clearBloomLabels()

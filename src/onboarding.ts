@@ -48,6 +48,7 @@ import {
   ARROW_MODEL_SRC, ARROW_SCALE, ARROW_FORWARD_YAW, ARROW_STANDOFF, ARROW_GROUND_LIFT,
   ARROW_BOB_AMPLITUDE, ARROW_CHEVRON_MAX, ARROW_CHEVRON_SPACING, ARROW_WAVE_SPEED, ARROW_WAVE_LENGTH,
   BEACON_HEIGHT, BEACON_RADIUS, BEACON_COLOR, BEACON_ALPHA, BEACON_INTENSITY,
+  BEACON_TAPER, BEACON_PULSE_PERIOD_S, BEACON_PULSE_DEPTH,
   TOON_HIGHLIGHT_SRC, TOON_HIGHLIGHT_SCALE,
   ONBOARDING_REPICK_S, ONBOARDING_MAX_RANGE,
   PLANTER_RESERVE_RETRY_S, AVENUE_ARROW_STANDOFF, BLOOM_CENTER, BLOOM_THRESHOLD, BLOOM_OPEN_MS,
@@ -149,7 +150,9 @@ function ensureBeacons(n: number): Entity[] {
   while (beacons.length < n) {
     const e = engine.addEntity()
     Transform.create(e)
-    MeshRenderer.setCylinder(e, BEACON_RADIUS, BEACON_RADIUS)
+    // 2026-09-28 ("prettier"): tapered, not a rigid uniform tube — flares at the base like
+    // a real light column instead of reading as a solid coloured pipe stuck in the ground.
+    MeshRenderer.setCylinder(e, BEACON_RADIUS, BEACON_RADIUS * BEACON_TAPER)
     Material.setPbrMaterial(e, {
       albedoColor:       Color4.create(BEACON_COLOR.r, BEACON_COLOR.g, BEACON_COLOR.b, BEACON_ALPHA),
       emissiveColor:     BEACON_COLOR,
@@ -179,6 +182,25 @@ function beaconsOn(targets: ReadonlyArray<Vector3>): void {
 
 function showBeacons(visible: boolean): void {
   for (const e of beacons) VisibilityComponent.getMutable(e).visible = visible
+}
+
+/** Gentle breathing pulse on whichever beacons are currently visible — "free motion"
+ *  instead of a flat static column. At most a handful ever exist, so a per-frame material
+ *  rebuild here is cheap (unlike the 09-18 bloom-VFX flood, which was about scale). */
+function beaconPulseSystem(): void {
+  if (beacons.length === 0) return
+  const t = Date.now() / 1_000
+  const k = 1 - BEACON_PULSE_DEPTH * (0.5 + 0.5 * Math.sin((t / BEACON_PULSE_PERIOD_S) * Math.PI * 2))
+  for (const e of beacons) {
+    if (!VisibilityComponent.getOrNull(e)?.visible) continue
+    Material.setPbrMaterial(e, {
+      albedoColor:       Color4.create(BEACON_COLOR.r, BEACON_COLOR.g, BEACON_COLOR.b, BEACON_ALPHA * k),
+      emissiveColor:     BEACON_COLOR,
+      emissiveIntensity: BEACON_INTENSITY * k,
+      transparencyMode:  MaterialTransparencyMode.MTM_ALPHA_BLEND,
+      castShadows:       false,
+    })
+  }
 }
 
 function showChevrons(visible: boolean): void {
@@ -611,5 +633,6 @@ export function setupOnboarding(): void {
     if (heldBoxId) console.log(`[Tutorial] planter ${heldBoxId} held for this gardener`)
   })
   engine.addSystem(tutorialSystem)
+  engine.addSystem(beaconPulseSystem)
   console.log(`[Tutorial] ready · onboardingState listeners=${room.listenerCount('onboardingState')}`)
 }

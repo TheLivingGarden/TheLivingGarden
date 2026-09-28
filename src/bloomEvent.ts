@@ -339,7 +339,10 @@ export function startBloomPhases(fxLevel: 0|1|2 = 2, variantId = 'classic', hold
 //   180–300 s → silence      (all effects off)
 // ---------------------------------------------------------------
 
-export function startBloomCooldown(): void {
+/** @param getWateredCount live count of currently-watered plants — read at the moment the
+ *  post-bloom circle correction fires (60s in), not captured up front, since watering
+ *  during the wind-down is allowed and plants watered during the bloom survive it. */
+export function startBloomCooldown(getWateredCount: () => number): void {
   stopLoops()           // cancel any running bloom loops
   bloomGen++
   const gen = bloomGen
@@ -368,5 +371,5 @@ step(45, () => {
   bloomIntensity = 0
 })
 
-step(60, () => updateGroundLights(0))
+step(60, () => updateGroundLights(getWateredCount()))
 }

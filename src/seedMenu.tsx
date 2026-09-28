@@ -177,7 +177,10 @@ export function SeedMenuUi(props: { px: (n: number) => number; fs: (n: number) =
   const tile = (key: string, i: number, tier: number, count: number, active: boolean, onClick: () => void) => (
     <UiEntity
       key={key}
-      uiTransform={{ width: tileW, height: px(112), margin: { right: (i % TILE_COLS) === TILE_COLS - 1 ? 0 : px(8), bottom: px(8) }, flexDirection: 'column', alignItems: 'center', justifyContent: 'center', borderRadius: px(14), borderWidth: px(3), borderColor: active ? OUTLINE : NO_LINE }}
+      // 2026-09-28 ("much more vertical than it needs to be"): a dot + 3 short lines is
+      // ~80px of real content — 112px (flowerTile's height, which also fits a thumbnail)
+      // was carrying ~30px of dead centred space per tile, doubled up across 2 rows.
+      uiTransform={{ width: tileW, height: px(90), margin: { right: (i % TILE_COLS) === TILE_COLS - 1 ? 0 : px(8), bottom: px(8) }, flexDirection: 'column', alignItems: 'center', justifyContent: 'center', borderRadius: px(14), borderWidth: px(3), borderColor: active ? OUTLINE : NO_LINE }}
       uiBackground={{ color: tileBg(tier) }}
       onMouseDown={onClick}
     >

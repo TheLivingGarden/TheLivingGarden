@@ -4,6 +4,16 @@ const mockSceneGet = jest.fn()
 const mockSceneSet = jest.fn()
 const mockPlayerGet = jest.fn()
 const mockPlayerSet = jest.fn()
+const mockFetch = jest.fn()
+const STORAGE_URL = 'https://storage.test'
+
+jest.mock('@dcl/sdk/server/storage-url', () => ({
+  getStorageServerUrl: () => Promise.resolve(STORAGE_URL)
+}))
+
+jest.mock('@dcl/sdk/server/utils', () => ({
+  wrapSignedFetch: (...args: unknown[]) => mockFetch(...args)
+}))
 
 jest.mock('@dcl/sdk/server', () => ({
   Storage: {
@@ -13,6 +23,19 @@ jest.mock('@dcl/sdk/server', () => ({
       get: (...args: unknown[]) => mockPlayerGet(...args),
       set: (...args: unknown[]) => mockPlayerSet(...args)
     }
+  }
+}))
+
+// @dcl/sdk/ecs's own JS is ESM-only and un-transformed under ts-jest, so importing it
+// directly (for `timers`) breaks the test runner. Real setTimeout/clearTimeout underneath
+// keeps the retry-backoff tests below working exactly as before — they rely on real elapsed
+// time, not jest's fake timers.
+jest.mock('@dcl/sdk/ecs', () => ({
+  timers: {
+    setTimeout: (cb: () => void, ms: number) => setTimeout(cb, ms),
+    clearTimeout: (id: ReturnType<typeof setTimeout>) => clearTimeout(id),
+    setInterval: (cb: () => void, ms: number) => setInterval(cb, ms),
+    clearInterval: (id: ReturnType<typeof setInterval>) => clearInterval(id)
   }
 }))
 
@@ -126,9 +149,10 @@ describe('when reading a scene key', () => {
   describe('and the key holds nothing', () => {
     beforeEach(() => {
       mockSceneGet.mockResolvedValueOnce(null)
+      mockFetch.mockResolvedValueOnce(['404 Not Found', null, 404])
     })
 
-    it('should resolve a null value rather than report a failure', async () => {
+    it('should resolve a null value once the service confirms the key is absent', async () => {
       await expect(persistence.loadScene('boxes')).resolves.toEqual({
         ok: true,
         value: null,
@@ -136,10 +160,61 @@ describe('when reading a scene key', () => {
       })
     })
 
-    it('should cost a single call', async () => {
+    it('should confirm the absence against the scene key', async () => {
       await persistence.loadScene('boxes')
 
-      expect(mockSceneGet).toHaveBeenCalledTimes(1)
+      expect(mockFetch).toHaveBeenCalledWith({ url: `${STORAGE_URL}/values/boxes` })
+    })
+  })
+
+  describe('and the SDK resolves null because the storage service failed the read', () => {
+    beforeEach(() => {
+      mockSceneGet.mockResolvedValueOnce(null)
+      mockFetch.mockResolvedValueOnce(['503 Service Unavailable', null, 503])
+    })
+
+    it('should report the read as failed rather than as an empty key', async () => {
+      await expect(persistence.loadScene('boxes')).resolves.toEqual({ ok: false })
+    })
+  })
+
+  describe('and the SDK resolves null but the service still holds a value', () => {
+    let storedValue: Array<{ boxId: string }>
+
+    beforeEach(() => {
+      storedValue = [{ boxId: 'Box_1' }]
+      mockSceneGet.mockResolvedValueOnce(null)
+      mockFetch.mockResolvedValueOnce([null, { value: { v: 2, d: storedValue } }, 200])
+    })
+
+    it('should resolve the value the confirming read found', async () => {
+      await expect(persistence.loadScene('boxes')).resolves.toEqual({
+        ok: true,
+        value: storedValue,
+        version: 2
+      })
+    })
+  })
+
+  describe('and the confirming read answers without a value', () => {
+    beforeEach(() => {
+      mockSceneGet.mockResolvedValueOnce(null)
+      mockFetch.mockResolvedValueOnce([null, {}, 200])
+    })
+
+    it('should report the read as failed, since neither a value nor an absence was confirmed', async () => {
+      await expect(persistence.loadScene('boxes')).resolves.toEqual({ ok: false })
+    })
+  })
+
+  describe('and the confirming read is rejected', () => {
+    beforeEach(() => {
+      mockSceneGet.mockResolvedValueOnce(null)
+      mockFetch.mockRejectedValueOnce(new Error('fetch: too many concurrent requests'))
+    })
+
+    it('should report the read as failed', async () => {
+      await expect(persistence.loadScene('boxes')).resolves.toEqual({ ok: false })
     })
   })
 
@@ -206,6 +281,38 @@ describe('when reading a player key', () => {
       await persistence.loadPlayer(address, 'seeds')
 
       expect(mockPlayerGet).toHaveBeenCalledWith(address, 'seeds')
+    })
+  })
+
+  describe('and the key holds nothing', () => {
+    beforeEach(() => {
+      mockPlayerGet.mockResolvedValueOnce(null)
+      mockFetch.mockResolvedValueOnce(['404 Not Found', null, 404])
+    })
+
+    it('should resolve a null value', async () => {
+      await expect(persistence.loadPlayer(address, 'seeds')).resolves.toEqual({
+        ok: true,
+        value: null,
+        version: persistence.LEGACY_VERSION
+      })
+    })
+
+    it('should confirm the absence against that player and key', async () => {
+      await persistence.loadPlayer(address, 'seeds')
+
+      expect(mockFetch).toHaveBeenCalledWith({ url: `${STORAGE_URL}/players/${address}/values/seeds` })
+    })
+  })
+
+  describe('and the SDK resolves null because the storage service failed the read', () => {
+    beforeEach(() => {
+      mockPlayerGet.mockResolvedValueOnce(null)
+      mockFetch.mockResolvedValueOnce(['500 Internal Server Error', null, 500])
+    })
+
+    it('should report the read as failed rather than as an empty pouch', async () => {
+      await expect(persistence.loadPlayer(address, 'seeds')).resolves.toEqual({ ok: false })
     })
   })
 })

@@ -216,6 +216,29 @@ export function attachSeedlingVfx(key: string, seedling: Entity, tier: number): 
   budgetAccumMs = BUDGET_MS
 }
 
+/** A keepsake shown in a gardener's hand (2026-09-28: "held plant is missing its rarity
+ *  vfx"). Tier pulse/tint only, same as attachSeedlingVfx and for the same reason: the
+ *  particle emitter and light are positioned once in world space at `soil` and never
+ *  move — fine for a planted flower, but a held item walks away from that point with the
+ *  player. staticTint (see applyPulse) already degrades gracefully outside the pulse
+ *  budget to a flat tint rather than a light/emitter left floating behind. */
+export function attachHeldFlowerVfx(key: string, entity: Entity, speciesId: string, tier: number): void {
+  const soil = Transform.getOrNull(entity)?.position ?? { x: 0, y: 0, z: 0 }
+  detachPlantVfx(key)
+  const def = TIER_VFX[tier]
+  if (!def) return   // Common/Uncommon: no tier vfx at all, same as a planted flower
+  active.set(key, {
+    key, plant: entity, emitter: null, light: null, def,
+    mats: PLANT_MATERIALS[speciesId] ?? [],
+    phase: Math.random() * 10,
+    sentKey: '',
+    staticTint: true,
+    soil: { x: soil.x, z: soil.z },
+    inPulse: false, inEmit: false, inLight: false,
+  })
+  budgetAccumMs = BUDGET_MS
+}
+
 /** Remove particles + light; the caller owns the plant entity (its override goes with it). */
 export function detachPlantVfx(key: string): void {
   const a = active.get(key)

@@ -1,8 +1,12 @@
 // =============================================================
 // The Living Garden — Server persistence
 //
-// A thin layer over @dcl/sdk/server's Storage. All I/O goes through the SDK;
-// this module never talks to the storage service itself.
+// A thin layer over @dcl/sdk/server's Storage. Writes go entirely through the SDK.
+// Reads mostly do too — except that the SDK's get() resolves `null` both when a key
+// truly holds nothing AND when the storage service failed the read (any non-404
+// status, a timeout, a rejected fetch-cap request), which is exactly the ambiguity
+// this module exists to remove (see `confirm` below): the module falls back to its
+// own direct read of the storage service only to tell those two cases apart.
 //
 // The SDK serializes and coalesces writes per key, shares concurrent reads of
 // the same key, caches confirmed values and absences, memoizes the realm lookup
@@ -11,7 +15,10 @@
 // a false result is a lost save unless someone acts on it.
 // =============================================================
 
+import { timers } from '@dcl/sdk/ecs'
 import { Storage } from '@dcl/sdk/server'
+import { getStorageServerUrl } from '@dcl/sdk/server/storage-url'
+import { wrapSignedFetch } from '@dcl/sdk/server/utils'
 
 /** Outcome of a read: a value, null when the key holds nothing, or a failure.
  *  `version` is the shape version the value was written with; 0 for a value
@@ -97,23 +104,53 @@ function queuedWrite<T>(write: () => Promise<T>): Promise<T> {
 // Reads
 // ---------------------------------------------------------------
 
-/** Reads through a slot, reporting a rejected read as a failure. */
-async function load<T>(read: () => Promise<unknown>): Promise<LoadResult<T>> {
+/** Body shape of a storage GET, matching the PUT body set() sends (see the SDK's
+ *  own player.js / scene.js, which parse the same envelope back out of `value`). */
+interface GetBody { value?: unknown }
+
+/** Confirms what the SDK's own get() left ambiguous by reading `path` directly.
+ *  A 404 is a real "absent" outcome. Anything else — a 5xx, a timeout, a rejected
+ *  fetch-cap request, or even a 200 with no `value` — is reported as a failure
+ *  rather than guessed at, so the caller never treats a bad read as an empty key. */
+async function confirm<T>(path: string): Promise<LoadResult<T>> {
   try {
-    return { ok: true, ...unwrap<T>(await withSlot(read)) }
+    const url = `${await getStorageServerUrl()}${path}`
+    const [error, data, status] = await wrapSignedFetch<GetBody>({ url })
+    if (error) {
+      if (status === 404) return { ok: true, value: null, version: LEGACY_VERSION }
+      return { ok: false }
+    }
+    if (!data || data.value === undefined) return { ok: false }   // ambiguous — see the SDK's own get()
+    return { ok: true, ...unwrap<T>(data.value) }
+  } catch {
+    return { ok: false }   // signedFetch itself rejected
+  }
+}
+
+/** Reads through a slot. A thrown read (a rejected realm lookup) is a failure
+ *  outright; a `null` result is confirmed directly before it is trusted as empty. */
+async function load<T>(read: () => Promise<unknown>, path: string): Promise<LoadResult<T>> {
+  let raw: unknown
+  try {
+    raw = await withSlot(read)
   } catch {
     return { ok: false }   // get() rejects when the realm lookup fails
   }
+  if (raw !== null) return { ok: true, ...unwrap<T>(raw) }
+  return withSlot(() => confirm<T>(path))
 }
 
 /** Reads a scene-scoped key, shared by everyone in the world. */
 export function loadScene<T>(key: string): Promise<LoadResult<T>> {
-  return load<T>(() => Storage.get<unknown>(key))
+  return load<T>(() => Storage.get<unknown>(key), `/values/${encodeURIComponent(key)}`)
 }
 
 /** Reads a key held against one player's address. */
 export function loadPlayer<T>(address: string, key: string): Promise<LoadResult<T>> {
-  return load<T>(() => Storage.player.get<unknown>(address, key))
+  return load<T>(
+    () => Storage.player.get<unknown>(address, key),
+    `/players/${encodeURIComponent(address)}/values/${encodeURIComponent(key)}`
+  )
 }
 
 // ---------------------------------------------------------------
@@ -143,7 +180,7 @@ function createWriter(label: string, version: number, write: (value: unknown) =>
   let hasPending = false
   let pending: unknown = null
   let failures   = 0
-  let retryTimer: ReturnType<typeof setTimeout> | null = null
+  let retryTimer: ReturnType<typeof timers.setTimeout> | null = null
   let idleWaiters: Array<() => void> = []
 
   /** Releases idle() waiters once nothing is left to write. */
@@ -177,7 +214,7 @@ function createWriter(label: string, version: number, write: (value: unknown) =>
       failures++
       const delay = Math.min(RETRY_MAX_MS, RETRY_BASE_MS * 2 ** Math.min(failures - 1, 5))
       console.error(`[Persistence] ${label}: save failed (attempt ${failures}) — retrying in ${delay / 1_000}s`)
-      retryTimer = setTimeout(() => { retryTimer = null; void flush() }, delay)
+      retryTimer = timers.setTimeout(() => { retryTimer = null; void flush() }, delay)
       break
     }
     writing = false
@@ -188,7 +225,7 @@ function createWriter(label: string, version: number, write: (value: unknown) =>
     save(snapshot) {
       pending    = { v: version, d: snapshot } satisfies Envelope
       hasPending = true
-      if (retryTimer !== null) { clearTimeout(retryTimer); retryTimer = null }
+      if (retryTimer !== null) { timers.clearTimeout(retryTimer); retryTimer = null }
       void flush()
     },
     enable() {

@@ -115,6 +115,7 @@ interface Group {
   id:          string
   sets:        GroupSet[]
   baseLevel:   number      // -1=Off, 0=Low, 1=Mid, 2=High
+  preBloomLevel: number    // baseLevel to restore once the bloom ends — see setGroundLightsBloom
   minLevel:    number      // floor for flicker — once set to 0, Off is never shown again
   current:     number
   flickerMode: FlickerMode
@@ -234,6 +235,7 @@ export function setupGroundLights(): void {
       id:          def.id,
       sets:        resolvedSets,
       baseLevel:   def.startLevel,
+      preBloomLevel: def.startLevel,
       minLevel:    -1,   // no floor yet — Off is allowed
       current:     def.startLevel,
       flickerMode: 'static',
@@ -356,13 +358,19 @@ export function setGroundLightsBloom(active: boolean): void {
   for (const g of groups) {
     g.flickerMode = active ? 'bloom' : 'static'
     g.gen++   // cancel any in-flight timer chain for this group
- if (active) {
-  g.baseLevel = 2
-  g.minLevel = 1 // 👈 prevent dropping below MID
-  applyLevel(g, 2)
-} else {
-  g.minLevel = -1 // reset when bloom ends
-}
+    if (active) {
+      g.preBloomLevel = g.baseLevel   // remember what to come back to once the bloom ends
+      g.baseLevel = 2
+      g.minLevel = 1 // 👈 prevent dropping below MID
+      applyLevel(g, 2)
+    } else {
+      g.minLevel = -1 // reset when bloom ends
+      // Without this, every group (ground included) stayed frozen at bloom's High
+      // forever — updateGroundLights only ever lifts ground OUT of Off, it never
+      // brings a Mid/High ground back down (2026-09-28).
+      g.baseLevel = g.preBloomLevel
+      applyLevel(g, g.baseLevel)
+    }
     scheduleNext(g, rnd(active ? BLOOM_MIN_MS : NORMAL_MIN_MS, active ? BLOOM_MAX_MS : NORMAL_MAX_MS))
   }
 }

@@ -90,9 +90,21 @@ export const SEED_FLIGHT_MAX_MS = 5_000
 export const SEED_LAUNCH_STAGGER_MS = 1_200 // TUNING — seeds leave the Bloom one by one over this window
 export const SEED_ARC_H         = 4.0       // TUNING — m the arc rises above the straight line
 export const SEED_FLIGHT_SCALE  = 3.0       // TUNING — seeds are this much bigger at launch, easing to normal on landing
+/** 2026-09-28 (KJ: "move bloom model and surrounding text forward, towards the spawn
+ *  position", then "bloom model and text to go backwards (-x) by .5m") — the composite
+ *  bakes the Bloom model's and its centerText GLBs' transforms, so this nudges them at
+ *  setup instead of round-tripping through Blender/Creator Hub, the same reason
+ *  PLANT_LAYOUT exists. The default spawn sits at higher X than the Bloom and looks back
+ *  at it (see scene.json), so +X is toward the spawn. Net of both requests: +2 then -0.5.
+ *  Applied to the 'Bloom', 'centerTextBloom', 'centerTextProgress' and
+ *  'CenterTextInstructions.glb' entities directly (bloomSystem.ts / wateringSystem.ts),
+ *  and folded into the two reference points below so every VFX/audio anchor keeps
+ *  following the model. */
+export const BLOOM_MODEL_OFFSET_X = 1.5
+
 /** Where seeds pour out of the Bloom: the crown of the flower, measured from Models/Bloom/Bloom.glb
  *  (node at 5.81, -0.66, 23.91; ~6.5 m wide, top at y≈5.6). Each seed starts within SEED_ORIGIN_SPREAD_M of it. */
-export const BLOOM_SEED_ORIGIN = { x: 5.8, y: 5.3, z: 23.9 } as const
+export const BLOOM_SEED_ORIGIN = { x: 5.8 + BLOOM_MODEL_OFFSET_X, y: 5.3, z: 23.9 } as const
 export const SEED_ORIGIN_SPREAD_M = 1.2
 export const SEED_LIFETIME_MS   = 120_000   // ungathered seeds fade after 2 min (the trickle's last wave lands 1 min before the end)
 export const SEED_GATHER_RADIUS = 2.0       // m — walking this close starts the drift toward you
@@ -150,6 +162,13 @@ export const BLOOM_TRIGGER_COOLDOWN_MS = 65_000   // TUNING
  *  water inside that window is accepted as a top-up — full timer again, counts as a water.
  *  The in-pillar answer to "add a skill check": a decision, not a reflex. */
 export const EXPIRY_TELL_MS = 20_000   // TUNING
+/** Server anti-cheat (2026-09-28): the minimum gap between two accepted waters from the
+ *  same address, and how close (metres, scene-local) they must be standing to the plant.
+ *  waterPlant had neither before — a scripted client could farm the 1000-water tribute
+ *  milestone alone. Loose on purpose: never meant to catch a human's real tap rate or
+ *  aim, just a scripted loop or a water sent from across the garden. */
+export const WATER_COOLDOWN_MS = 1_500   // TUNING
+export const WATER_REACH_M     = 4       // TUNING
 /** The floating drop over a plant (or a friend's seedling) that needs water — bob is baked in. */
 export const WATER_DROP_MODEL_SRC = 'assets/scene/Models/waterDrop/waterDrop_bob.glb'
 
@@ -176,7 +195,7 @@ export const SEED_BURST_FRACTION = 0.6   // TUNING — share of a bloom's seeds 
 
 // ── Scene-wide spatial / asset constants ─────────────────────
 /** World-space centre of the Bloom model — used for sound, sparkles, shockwaves. */
-export const BLOOM_CENTER = { x: 6.75, y: 2, z: 24 } as const
+export const BLOOM_CENTER = { x: 6.75 + BLOOM_MODEL_OFFSET_X, y: 2, z: 24 } as const
 /** Shared sparkle texture used by all particle / FX systems. */
 export const SPARKLE_SRC  = 'assets/scene/Images/sparkle.png'
 /** Garden walkable area bounds — used for ambient FX spawning. */
@@ -507,6 +526,12 @@ export const BEACON_RADIUS    = 0.22
 export const BEACON_COLOR     = { r: 1, g: 0.85, b: 0.35 }
 export const BEACON_ALPHA     = 0.3
 export const BEACON_INTENSITY = 1.6
+/** 2026-09-28 ("prettier"): taper (top radius as a fraction of the base) and a gentle
+ *  breathing pulse, instead of a flat static tube — same "free motion" FX taste as every
+ *  other glow in the garden. */
+export const BEACON_TAPER        = 0.35   // TUNING — top radius = BEACON_RADIUS × this
+export const BEACON_PULSE_PERIOD_S = 1.8   // TUNING
+export const BEACON_PULSE_DEPTH    = 0.35  // TUNING — 0 = no pulse, 1 = fades to nothing
 
 // ── Guided tutorial (KJ 2026-09-27) ──────────────────────────────────────────
 // One linear walk round the garden, each step a centre-screen card (the top pill went
@@ -530,7 +555,7 @@ export const TUTORIAL_DONE_MS    = 6_000   // the closing "you're set" moment
 /** The step cards, in order. `kind` says what finishes the step (onboarding.ts). */
 export const TUTORIAL_TEXT = {
   water:   { title: 'Water the garden', body: 'Face a plant with a water drop, press and hold to pour, and let go in the green.' },
-  bloom:   { title: 'Wake the Bloom', body: 'Keep the garden above 80% and the giant flower in the centre bursts open.' },
+  bloom:   { title: 'Wake the Bloom', body: 'Keep the garden above 80% and the giant flower in the centre bursts open. More gardeners, and rarer flowers on show in the Gallery, both raise your Luck boost — check it under the health meter.' },
   seeds:   { title: 'Catch the seeds', body: 'A seed has landed - follow the arrows and walk into it to catch it.' },
   arch:    { title: 'To the nursery', body: 'Follow the arrows through the arch - that is where seeds are grown.' },
   shed:    { title: 'The potting shed', body: 'Your seeds live on this rack - the rarer ones glow.' },

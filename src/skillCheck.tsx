@@ -119,9 +119,13 @@ export function HoldMeterUi(props: { px: (n: number) => number; fs: (n: number) 
   if (h.done === 0 && now - h.startAt < HOLD_SHOW_AFTER_MS) return null   // a press only shows the meter once it is a hold
   const { px, fs } = props
   const w = props.mobile ? 440 : 380
+  // 2026-09-28 ("prettier"): rounded to match every other bar in ui.tsx (the health ring's
+  // fill has its own borderRadius, not just the track) — plain rectangles inside a pill
+  // track read as a bug, not a style choice.
+  const BAR_R = 13
   const seg = (from: number, to: number, color: { r: number; g: number; b: number }, a = 1) => (
     <UiEntity
-      uiTransform={{ positionType: 'absolute', position: { left: `${from * 100}%`, top: 0 }, width: `${Math.max(0, to - from) * 100}%`, height: '100%' }}
+      uiTransform={{ positionType: 'absolute', position: { left: `${from * 100}%`, top: 0 }, width: `${Math.max(0, to - from) * 100}%`, height: '100%', borderRadius: px(BAR_R) }}
       uiBackground={{ color: { ...color, a } }}
     />
   )
@@ -144,7 +148,7 @@ export function HoldMeterUi(props: { px: (n: number) => number; fs: (n: number) 
       >
         <Label value={line} fontSize={fs(pouring ? 16 : 20)} color={{ ...lineColor, a: 1 }} textAlign="middle-center" textWrap="nowrap" uiTransform={{ width: '100%', height: fs(28), flexShrink: 0 }} />
         {/* the bar: water level, this pour's green window, and the red line after it */}
-        <UiEntity uiTransform={{ display: h.outcome === 'tap' && !pouring ? 'none' : 'flex', width: '100%', height: px(26), margin: { top: px(8) }, borderRadius: px(13), flexShrink: 0 }} uiBackground={{ color: { r: 1, g: 1, b: 1, a: 0.14 } }}>
+        <UiEntity uiTransform={{ display: h.outcome === 'tap' && !pouring ? 'none' : 'flex', width: '100%', height: px(26), margin: { top: px(8) }, borderRadius: px(BAR_R), flexShrink: 0 }} uiBackground={{ color: { r: 1, g: 1, b: 1, a: 0.14 } }}>
           {seg(0, h.level, over ? RED : WATER, h.aimed || !pouring ? 0.9 : 0.45)}
           {seg(h.lo, h.hi, GOOD, 0.65)}
           {seg(h.over, 1, RED, 0.5)}

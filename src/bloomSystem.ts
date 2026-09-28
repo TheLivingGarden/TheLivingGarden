@@ -12,7 +12,7 @@ import {
 } from '@dcl/sdk/ecs'
 import { startPetalSettle } from './petalSystem'
 import { showToast } from './notifications'
-import { BLOOM_CENTER, BLOOM_WINDOWS } from './shared/config'
+import { BLOOM_CENTER, BLOOM_WINDOWS, BLOOM_MODEL_OFFSET_X } from './shared/config'
 
 // ---------------------------------------------------------------
 // Configuration
@@ -180,6 +180,10 @@ export function setupBloomSystem(opts: {
 
   if (bloomEnt) {
     bloomModelEntity = bloomEnt
+
+    // 2026-09-28: nudge the composite-baked position toward the spawn (BLOOM_MODEL_OFFSET_X)
+    const bloomTf = Transform.getMutableOrNull(bloomEnt)
+    if (bloomTf) bloomTf.position = { x: bloomTf.position.x + BLOOM_MODEL_OFFSET_X, y: bloomTf.position.y, z: bloomTf.position.z }
 
     Animator.createOrReplace(bloomEnt, {
       states: [

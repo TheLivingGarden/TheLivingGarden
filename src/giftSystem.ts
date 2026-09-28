@@ -6,11 +6,11 @@
 // (GDD §6 "large target"). The server moves the flower; we only ask.
 //
 // Server communication:
-//   send    →  giftFlower       { toAddress, flowerIndex }
+//   send    →  giftFlower       { toAddress, flower, rarityTier, at }
 //   receive ←  collectionUpdate { flowersJson, boxCap }   (mine, after harvest/gift/join)
 //   receive ←  giftReceived     { from, flower, rarityTier }
 //   receive ←  notice           { text }                  (server feedback toasts)
-//   send    →  holdFlower       { flowerIndex }           (-1 = put away)
+//   send    →  holdFlower       { flower, rarityTier, at, clear }   (clear:true = put away)
 //   receive ←  heldFlower       { address, flower, rarityTier }   (anyone's hand, incl. mine)
 //
 // Held flower: one keepsake shown in a gardener's right hand, for everyone. Interlocks
@@ -40,10 +40,11 @@ import { room } from './shared/messages'
 import { showToast } from './notifications'
 import { getPlayer } from '@dcl/sdk/players'
 import { CollectionAssembler } from './shared/collection'
-import { getFlowers, setFlowers, setBoxCap, setAvenueSlotsFree, registerGiftApi, Keepsake, setHeld, heldFlowerIndex, setDiscovered } from './playerInventory'
+import { getFlowers, setFlowers, setBoxCap, setAvenueSlotsFree, registerGiftApi, Keepsake, setHeld, heldFlowerIndex, setDiscovered, keepsakeIdentity } from './playerInventory'
 import { getSelectedGiftIndex, openSeedMenu } from './seedMenu'
 import { rarityTierById, plantSpeciesById, withArticle, seedModelSrc, SEED_HAND_SCALE } from './shared/config'
 import { isWateringEmoteActive } from './wateringSystem'
+import { attachHeldFlowerVfx, detachPlantVfx } from './plantVfx'
 import { playSfx } from './sounds'
 
 // ---------------------------------------------------------------
@@ -91,13 +92,14 @@ function tryGift(toAddress: string): void {
   // picker (My flowers → tap a kind → Gift), so tapping a player sends THAT selection
   // instead of silently guessing the newest keepsake.
   const flowerIndex = getSelectedGiftIndex() ?? heldFlowerIndex()
-  if (flowerIndex === null) {
+  const id = flowerIndex === null ? null : keepsakeIdentity(flowerIndex)
+  if (!id) {
     showToast('Hold a flower, or pick one in your seed pouch, to gift it', TOAST_MS, false)
     openSeedMenu()
     return
   }
-  console.log(`[Gift] offering ${flowers[flowerIndex]?.flower ?? '?'} to ${toAddress}`)
-  room.send('giftFlower', { toAddress, flowerIndex })
+  console.log(`[Gift] offering ${id.flower} to ${toAddress}`)
+  room.send('giftFlower', { toAddress, ...id })
   playSfx('gift')
 }
 
@@ -137,9 +139,11 @@ function removeAnchor(root: Entity): void {
   engine.removeEntity(root)
 }
 
+function handVfxKey(address: string): string { return `hand:${address.toLowerCase()}` }
+
 function removeHand(address: string): void {
   const old = hands.get(address)
-  if (old !== undefined) { removeAnchor(old); hands.delete(address) }
+  if (old !== undefined) { detachPlantVfx(handVfxKey(address)); removeAnchor(old); hands.delete(address) }
 }
 
 function buildHand(address: string, flower: string, rarityTier: number, seedTier: number, mine: boolean): void {
@@ -161,6 +165,9 @@ function buildHand(address: string, flower: string, rarityTier: number, seedTier
       scale: { x: k, y: k, z: k },
     })
     GltfContainer.create(model, { src: species.modelSrc, visibleMeshesCollisionMask: ColliderLayer.CL_NONE, invisibleMeshesCollisionMask: ColliderLayer.CL_NONE })
+    // (2026-09-28: "held plant is missing its rarity vfx") — same tier tint/pulse a planted
+    // or Avenue-displayed flower gets, minus particles/light (see attachHeldFlowerVfx).
+    attachHeldFlowerVfx(handVfxKey(address), model, species.id, rarityTier)
   } else {
     // Seed: one shared 152-tri mesh per tier, centred near its own origin, so it needs
     // no per-species offsets — just the scale that brings it down to a hand.
@@ -293,8 +300,20 @@ export function setupGiftSystem(): void {
   // track) and the one call that sends a flower.
   registerGiftApi({
     gardenersHere: () => [...tags.keys()].map(address => ({ address, name: getPlayer({ userId: address })?.name || `${address.slice(0, 6)}...` })),
-    give: (toAddress, flowerIndex) => { console.log(`[Gift] menu gift #${flowerIndex} to ${toAddress}`); room.send('giftFlower', { toAddress, flowerIndex }); playSfx('gift') },
-    hold: (flowerIndex) => { console.log(`[Gift] hold #${flowerIndex}`); room.send('holdFlower', { flowerIndex }) },
+    give: (toAddress, flowerIndex) => {
+      const id = keepsakeIdentity(flowerIndex)
+      if (!id) return
+      console.log(`[Gift] menu gift ${id.flower} to ${toAddress}`)
+      room.send('giftFlower', { toAddress, ...id })
+      playSfx('gift')
+    },
+    hold: (flowerIndex) => {
+      if (flowerIndex < 0) { console.log('[Gift] hold cleared'); room.send('holdFlower', { flower: '', rarityTier: 0, at: 0, clear: true }); return }
+      const id = keepsakeIdentity(flowerIndex)
+      if (!id) return
+      console.log(`[Gift] hold ${id.flower}`)
+      room.send('holdFlower', { ...id, clear: false })
+    },
     holdSeed: (rarityTier) => { console.log(`[Gift] equip seed tier ${rarityTier}`); room.send('holdSeed', { rarityTier }) },
   })
   engine.addSystem(tagScanSystem)

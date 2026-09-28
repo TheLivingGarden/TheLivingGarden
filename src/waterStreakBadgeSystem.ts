@@ -1,0 +1,265 @@
+// =============================================================
+// Bloom Garden v2 — Water streak nametag badge (CLIENT ONLY)
+//
+// Ported from Clean The Club's rankBadgeSystem.ts (2026-09-28, KJ: "an avatar name tag
+// extension with the streak number of waters a player has? we can use the same feature we
+// did in CTC"). The SDK can't edit the explorer's own nametag, only hide it and let a scene
+// draw its own — so this hides real nametags scene-wide and plates the name + current water
+// streak for EVERY player present, not just the local one, the same way CTC put a career
+// title under a cleaner's name.
+//
+// Streak = consecutive ACCEPTED waterPlant calls this connection (server.ts waterStreak),
+// reset to 0 by any waterRejected. Server sends one delta (streakUpdate) per change, plus a
+// per-gardener resend on join/full-sync — not a full roster, since this fires on every water.
+// =============================================================
+
+import {
+  engine, Entity, Transform, MeshRenderer, Material, MaterialTransparencyMode,
+  TextShape, AvatarAttach, AvatarAnchorPointType, Billboard, BillboardMode, PlayerIdentityData,
+  AvatarModifierArea, AvatarModifierType,
+} from '@dcl/sdk/ecs'
+import { Color3, Color4, Vector3 } from '@dcl/sdk/math'
+import { room } from './shared/messages'
+
+// Sized to sit where the real nametag did. Authored at REF_DIST_M and scaled by
+// camera distance so the plate keeps a near-constant screen size, then faded at
+// range — both behaviours copied from the explorer's own tag (and from CTC).
+const PLATE_Y      = 0.10
+const NAME_FONT    = 0.95
+const STREAK_FONT  = 0.8
+const PILL_H       = 0.30
+// The pill texture is a white stadium drawn in the middle 25% band of a square
+// PNG (the rest transparent), so the quad is scaled 4× the visible height and
+// the shape supplies the rounded corners. White on purpose: albedoColor tints
+// it, so one texture serves every colour. (Same texture file as CTC's plate.)
+const PILL_TEX      = 'assets/scene/UI/plate_pill.png'
+const PILL_BAND     = 0.25
+const PILL_PER_CHAR = 0.052
+const PILL_PAD      = 0.16
+const REF_DIST_M    = 6
+const SCALE_MIN     = 0.7
+const SCALE_MAX     = 2.6
+const FADE_START_M  = 14
+const FADE_END_M    = 20
+
+// A garden accent rather than CTC's multi-tier career ladder — one streak number, one colour.
+const STREAK_COLOR = Color4.create(0.55, 0.90, 0.45, 1)   // leaf green
+
+type StreakInfo = { name: string; streak: number }
+const streaks = new Map<string, StreakInfo>()   // lowercased address → info
+
+type Plate = {
+  root:    Entity   // AvatarAttach'd to the player
+  carrier: Entity   // billboarded holder — animated (float + streak-up pop)
+  pill:    Entity
+  nameT:   Entity
+  streakT: Entity
+  avatar:  Entity   // the PlayerIdentityData entity, for distance/fade
+  key:     string   // last rendered content, so we only rebuild on change
+  fade:    number
+  scale:   number   // last distance-derived scale, reused by the animator
+  streak:  number   // to detect a streak going UP (pop) vs resetting (no pop)
+  popMs:   number   // >=0 while a streak-up pop is playing
+  bob:     number   // per-plate phase so plates don't float in lockstep
+}
+
+const BOB_AMPLITUDE_M = 0.012
+const BOB_SPEED       = 1.6
+const POP_MS          = 700
+const POP_SCALE       = 0.45   // extra scale at the peak of a streak-up pop
+const plates = new Map<string, Plate>()   // lowercased address → plate
+
+function buildPlate(address: string, avatar: Entity): Plate {
+  const root = engine.addEntity()
+  // avatarId targets a specific player; without it AvatarAttach binds to the local player.
+  AvatarAttach.create(root, {
+    avatarId:      address,
+    anchorPointId: AvatarAnchorPointType.AAPT_NAME_TAG,
+  })
+
+  const carrier = engine.addEntity()
+  Transform.create(carrier, { parent: root, position: { x: 0, y: PLATE_Y, z: 0 } })
+  // Y-AXIS ONLY (BM_Y), not BM_ALL — the default tilts with camera pitch, so the plate would
+  // hang at an angle whenever the mobile camera looks down. Real nametags stay upright.
+  Billboard.create(carrier, { billboardMode: BillboardMode.BM_Y })
+
+  const pill = engine.addEntity()
+  Transform.create(pill, { parent: carrier })
+  MeshRenderer.setPlane(pill)
+
+  const nameT = engine.addEntity()
+  Transform.create(nameT, { parent: carrier, position: { x: 0, y: 0.062, z: -0.012 } })
+  TextShape.create(nameT, {
+    text: '', fontSize: NAME_FONT, textColor: Color4.White(),
+    outlineColor: Color4.Black(), outlineWidth: 0.12,
+  })
+
+  const streakT = engine.addEntity()
+  Transform.create(streakT, { parent: carrier, position: { x: 0, y: -0.075, z: -0.012 } })
+  TextShape.create(streakT, {
+    text: '', fontSize: STREAK_FONT, textColor: Color4.White(),
+    outlineColor: Color4.Black(), outlineWidth: 0.12,
+  })
+
+  return {
+    root, carrier, pill, nameT, streakT, avatar,
+    key: '', fade: -1, scale: 1, streak: -1, popMs: -1,
+    bob: Math.random() * Math.PI * 2,
+  }
+}
+
+function destroyPlate(p: Plate): void {
+  for (const e of [p.pill, p.nameT, p.streakT, p.carrier, p.root]) engine.removeEntity(e)
+}
+
+/** Pill paint — rounded shape from the texture's alpha over a flat dark base. No emissive:
+ *  a coloured glow washed the text out on CTC's version too. `alphaTexture` is set
+ *  explicitly — without it the quad's transparent region still shades and reads as a
+ *  rectangle. */
+function paintPill(p: Plate, fade: number): void {
+  const tex = Material.Texture.Common({ src: PILL_TEX })
+  Material.setPbrMaterial(p.pill, {
+    texture:           tex,
+    alphaTexture:      tex,
+    albedoColor:       Color4.create(0, 0, 0, 0.85 * fade),
+    emissiveColor:     Color3.Black(),
+    emissiveIntensity: 0,
+    transparencyMode:  MaterialTransparencyMode.MTM_ALPHA_BLEND,
+    specularIntensity: 0,
+    metallic:  0,
+    roughness: 1,
+  })
+}
+
+/** Applies name/streak text + pill width. Only called when the content changes. */
+function renderPlate(p: Plate, info: StreakInfo): void {
+  p.fade = -1   // force a repaint so the pill's size/alpha catch up
+  const nt = TextShape.getMutable(p.nameT)
+  nt.text = info.name
+  const label = info.streak > 0 ? `${info.streak} STREAK` : ''
+  const st = TextShape.getMutable(p.streakT)
+  st.text = label
+  st.textColor = STREAK_COLOR
+
+  // Y is divided by the band fraction because the stadium only occupies the middle
+  // quarter of the texture; the rest is transparent padding. No streak → a shorter,
+  // name-only pill, same as CTC's title-less case.
+  const chars = Math.max(info.name.length, Math.round(label.length * 1.15))
+  Transform.getMutable(p.pill).scale = {
+    x: PILL_PER_CHAR * chars + PILL_PAD,
+    y: (label ? PILL_H : PILL_H * 0.6) / PILL_BAND,
+    z: 1,
+  }
+}
+
+/** Distance-compensated scale + range fade, per plate (each has its own owner). */
+function applyDistance(p: Plate): void {
+  const cam = Transform.getOrNull(engine.CameraEntity)?.position
+  const pos = Transform.getOrNull(p.avatar)?.position
+  if (!cam || !pos) return
+  const dx = cam.x - pos.x, dy = cam.y - (pos.y + 2), dz = cam.z - pos.z
+  const dist = Math.sqrt(dx * dx + dy * dy + dz * dz)
+
+  // Stored, not applied: the per-frame animator combines it with the float and any
+  // streak-up pop so the two can't fight over the transform.
+  p.scale = Math.min(SCALE_MAX, Math.max(SCALE_MIN, dist / REF_DIST_M))
+
+  const fade = dist <= FADE_START_M
+    ? 1
+    : Math.max(0, 1 - (dist - FADE_START_M) / (FADE_END_M - FADE_START_M))
+  if (Math.abs(fade - p.fade) <= 0.03) return
+  p.fade = fade
+
+  paintPill(p, fade)
+  const nt = TextShape.getMutable(p.nameT)
+  nt.textColor    = Color4.create(1, 1, 1, fade)
+  nt.outlineColor = Color4.create(0, 0, 0, fade)
+  const c = STREAK_COLOR
+  TextShape.getMutable(p.streakT).textColor = Color4.create(c.r, c.g, c.b, fade)
+}
+
+/** Hides the explorer's own nametags across the whole scene, so our plates replace them
+ *  rather than stacking under them. Sized to the full parcel footprint (scene.json: x
+ *  [-5,5], z [-5,7], 16 m/parcel) with margin — generous on purpose, since a gap would
+ *  leave a corner of the garden with double or missing nametags, and the docs warn the
+ *  real tag reappears if a player's head leaves the area even briefly. */
+function initNametagHideArea(): void {
+  const area = engine.addEntity()
+  Transform.create(area, { position: Vector3.create(8, 20, 24) })
+  AvatarModifierArea.create(area, {
+    area:       Vector3.create(200, 60, 230),
+    modifiers:  [AvatarModifierType.AMT_HIDE_NAMETAGS],
+    excludeIds: [],
+  })
+}
+
+/** Per-frame plate animation: a gentle float, plus a springy pop when a streak goes up.
+ *  Kept separate from the 0.4 s reconcile loop so motion stays smooth. */
+function animatePlates(dt: number): void {
+  for (const [, p] of plates) {
+    p.bob += dt * BOB_SPEED
+    let scale = p.scale
+
+    if (p.popMs >= 0) {
+      p.popMs += dt * 1000
+      const t = Math.min(1, p.popMs / POP_MS)
+      scale += POP_SCALE * Math.sin(t * Math.PI) * (1 - t * 0.35)
+      if (t >= 1) p.popMs = -1
+    }
+
+    const ct = Transform.getMutableOrNull(p.carrier)
+    if (!ct) continue
+    ct.scale    = { x: scale, y: scale, z: scale }
+    ct.position = { x: 0, y: PLATE_Y + Math.sin(p.bob) * BOB_AMPLITUDE_M, z: 0 }
+  }
+}
+
+export function setupWaterStreakBadges(): void {
+  initNametagHideArea()
+  engine.addSystem(animatePlates)
+
+  room.onMessage('streakUpdate', (data) => {
+    streaks.set(data.address.toLowerCase(), { name: data.name, streak: data.streak })
+  })
+
+  let acc = 0
+  engine.addSystem((dt: number) => {
+    acc += dt
+    if (acc < 0.4) return   // streak changes are per-water, not per-frame
+    acc = 0
+
+    // Reconcile plates against who is actually in the scene.
+    const present = new Set<string>()
+    for (const [avatar, data] of engine.getEntitiesWith(PlayerIdentityData)) {
+      const key = data.address.toLowerCase()
+      present.add(key)
+
+      let plate = plates.get(key)
+      if (!plate) {
+        plate = buildPlate(data.address, avatar)
+        plates.set(key, plate)
+      }
+
+      // No streak entry yet (broadcast in flight, or they haven't watered this
+      // connection) → show the name alone rather than leaving a player anonymous
+      // behind a hidden nametag. PlayerIdentityData carries no display name, so the
+      // stand-in is a short address, replaced the moment a streakUpdate lands.
+      const info = streaks.get(key) ?? { name: `${data.address.slice(0, 6)}…`, streak: 0 }
+      const contentKey = `${info.name}|${info.streak}`
+      if (contentKey !== plate.key) {
+        // A streak that went UP is worth celebrating on the plate; a reset to 0 isn't.
+        if (plate.streak >= 0 && info.streak > plate.streak) plate.popMs = 0
+        plate.streak = info.streak
+        plate.key    = contentKey
+        renderPlate(plate, info)
+      }
+      applyDistance(plate)
+    }
+
+    for (const [key, plate] of plates) {
+      if (present.has(key)) continue
+      destroyPlate(plate)
+      plates.delete(key)
+    }
+  })
+}

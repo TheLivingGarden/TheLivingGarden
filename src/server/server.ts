@@ -12,14 +12,18 @@ import {
   engine,
   Entity,
   PlayerIdentityData,
+  Transform,
   executeTask,
+  timers,
 } from '@dcl/sdk/ecs'
+import { Vector3 } from '@dcl/sdk/math'
 import { loadScene, loadPlayer, createSceneWriter, createPlayerWriter, KeyWriter } from './persistence'
 import { chooseHandSeed } from './hand'
 import { makeBeds, checkPlant } from '../shared/beds'
 import { slimKeepsake, chunkCollection, MAX_SAFE_MESSAGE_BYTES } from '../shared/collection'
 import { PlantSync }          from '../shared/schemas'
 import { room }               from '../shared/messages'
+import { PLANT_LAYOUT }       from '../shared/layout'
 import {
   PLANT_NAMES,
   BLOOM_THRESHOLD,
@@ -50,6 +54,7 @@ import {
   ADMIN_ADDRESSES,
   seedSpawnCount,
   seedRareChance,
+  SEED_RARE_AT_SOLO,
   rollSeedTier,
   rollTierAtLeast,
   GUARANTEED_MAX_TIER,
@@ -80,6 +85,7 @@ import {
   FLOWER_COLLECTION_CAP,
   BOX_WATER_MAX,
   BLOOM_TRIGGER_COOLDOWN_MS, EXPIRY_TELL_MS,
+  WATER_COOLDOWN_MS, WATER_REACH_M,
   plantSpeciesById,
   rarityTierById,
   galleryBoost,
@@ -97,6 +103,19 @@ const plantEntities   = new Map<string, Entity>()   // plantId → entity
 const knownPlayers    = new Set<Entity>()            // entities seen this session
 const playerAddresses = new Map<Entity, string>()    // entity → address (for disconnect cleanup)
 const syncRateLimits  = new Map<string, number>()    // address → last requestFullSync ms
+const lastWaterAt     = new Map<string, number>()    // lowercase address → last ACCEPTED waterPlant ms
+const lastTendAt      = new Map<string, number>()    // lowercase address → last ACCEPTED tendBox ms
+
+/** A plant's true position: setupWateringSystem() (client-only, index.ts never runs it on
+ *  the server) is what applies shared/layout.ts PLANT_LAYOUT, so the server's own plant
+ *  entities still sit at the composite's baked positions — checking Transform.position
+ *  directly here would reach-reject a legitimate water on every plant KJ has since moved
+ *  with the in-world layout tool. Check the override table first, same as the client. */
+function plantPosition(plantId: string, entity: Entity): Vector3 | null {
+  const p = PLANT_LAYOUT[plantId]
+  if (p) return Vector3.create(p.x, p.y, p.z)
+  return Transform.getOrNull(entity)?.position ?? null
+}
 const SYNC_RATE_MS    = 5_000                        // min ms between full syncs per player
 let   bloomActive      = false
 let   bloomStartedAt:  number | null = null   // ms timestamp when current bloom began
@@ -163,7 +182,7 @@ const RELOAD_INTERVAL_MS = 30_000
 
 /** Keeps retrying a failed startup load until it succeeds, then merges it in. */
 function scheduleReload(label: string, load: () => Promise<boolean>): void {
-  setTimeout(() => executeTask(async () => {
+  timers.setTimeout(() => executeTask(async () => {
     if (await load()) {
       console.log(`[Server] ${label}: late load succeeded — merged into live state, saves resumed`)
       checkBloomThreshold()
@@ -182,7 +201,14 @@ interface LeaderboardEntry {
    *  lifetime top-N, whose lifetime total the server therefore does not hold. */
   tier?: number
 }
-const leaderboard = new Map<string, LeaderboardEntry>()  // address → entry
+// Keyed LOWERCASE, like playerRecords/heldFlowers/heldSeeds — join hands over
+// `identity.address`, messages `context.from` (mixed case; see the note at recordKey
+// below). Both boards were keyed raw until 2026-09-28, which could split one gardener
+// into two entries (a duplicate ALL TIME row, a weekly rank of 0) depending on which
+// casing a given call happened to carry. Go through boardGet/boardSet, never the Map
+// directly — the wire address (room.send `to`, Storage.player.*) is untouched: only
+// the lookup key is normalised, exactly like recordKey.
+const leaderboard = new Map<string, LeaderboardEntry>()  // lowercase address → entry
 
 // ---------------------------------------------------------------
 // Storage helpers
@@ -273,20 +299,31 @@ function savePlantStates(): void {
 // board still works for players who are offline. The old `lifetime` blob is read once
 // at boot as a floor and never written again — a gardener's record is seeded from it
 // the first time they load.
-const lifetime = new Map<string, LeaderboardEntry>()   // address → entry, never reset
+const lifetime = new Map<string, LeaderboardEntry>()   // lowercase address → entry, never reset
 const LIFETIME_TOP_N = 50
 let lifetimeTopJson = ''                                // last top-N written, to skip no-op saves
 let weeklyResetAt = 0                                   // epoch ms when the weekly board next clears
 
 interface BoardRecord extends LeaderboardEntry { address: string }
 
+/** Read a board entry. Both `leaderboard` and `lifetime` are keyed lowercase — go
+ *  through this and `boardSet` rather than the Map directly (see the note above
+ *  `leaderboard`'s declaration). */
+function boardGet(board: Map<string, LeaderboardEntry>, address: string): LeaderboardEntry | undefined {
+  return board.get(address.toLowerCase())
+}
+
+function boardSet(board: Map<string, LeaderboardEntry>, address: string, entry: LeaderboardEntry): void {
+  board.set(address.toLowerCase(), entry)
+}
+
 /** Merge stored totals into a live board: totals earned this session are added on top. */
 function mergeBoard(board: Map<string, LeaderboardEntry>, records: unknown): void {
   if (!Array.isArray(records)) return
   for (const r of records as BoardRecord[]) {
-    const live = board.get(r.address)
+    const live = boardGet(board, r.address)
     if (live) { live.total += r.total; live.tier = r.tier ?? live.tier }
-    else board.set(r.address, { displayName: r.displayName, total: r.total, tier: r.tier })
+    else boardSet(board, r.address, { displayName: r.displayName, total: r.total, tier: r.tier })
   }
 }
 
@@ -323,7 +360,7 @@ async function loadLeaderboard(): Promise<boolean> {
   } else {
     // Fresh world: this week's totals are the best floor we have — never start
     // veterans from zero. Records are written as each of them next waters.
-    for (const [address, e] of leaderboard) lifetime.set(address, { ...e })
+    for (const [address, e] of leaderboard) boardSet(lifetime, address, { ...e })
     console.log(`[Server] Lifetime seeded from weekly (${lifetime.size} players)`)
   }
 
@@ -375,7 +412,7 @@ async function loadTributes(): Promise<boolean> {
   const res = await loadScene<TributeRecord[]>('tributes')
   if (!res.ok) { console.error('[Server] tributes: load failed — saves held until a reload succeeds'); return false }
   for (const r of Array.isArray(res.value) ? res.value : []) {
-    const already = tributes.some(t => (r.address && t.address === r.address) || (t.founding && r.founding && t.displayName === r.displayName))
+    const already = tributes.some(t => (r.address && t.address.toLowerCase() === r.address.toLowerCase()) || (t.founding && r.founding && t.displayName === r.displayName))
     if (!already) tributes.push(r)
   }
   tributesWriter.enable()
@@ -401,9 +438,9 @@ async function loadTributes(): Promise<boolean> {
     }
     // Once the wallet is known, their lifetime total must match the honour (golden flair)
     if (address) {
-      const e = lifetime.get(address)
+      const e = boardGet(lifetime, address)
       if (!e || e.total < TRIBUTE_MILESTONE) {
-        lifetime.set(address, { displayName: f.displayName, total: Math.max(e?.total ?? 0, TRIBUTE_MILESTONE) })
+        boardSet(lifetime, address, { displayName: f.displayName, total: Math.max(e?.total ?? 0, TRIBUTE_MILESTONE) })
         void saveLifetimeFor(address)   // honorees are rarely connected, so load-then-write
       }
     }
@@ -414,8 +451,9 @@ async function loadTributes(): Promise<boolean> {
 }
 
 /** Call after a lifetime total changes. Grows the plant the moment the milestone is crossed. */
-async function grantTributeIfEarned(address: string): Promise<void> {
-  const entry = lifetime.get(address)
+async function grantTributeIfEarned(rawAddress: string): Promise<void> {
+  const address = rawAddress.toLowerCase()   // tributes.address and founding honorees are both lowercase (see loadTributes)
+  const entry = boardGet(lifetime, address)
   if (!entry || entry.total < TRIBUTE_MILESTONE) return
   if (tributes.some(t => t.address === address)) return
   // No free plot → the honour is still permanent: plot −1 = Tribute Register only.
@@ -452,12 +490,12 @@ function seedLifetime(records: unknown): void {
   for (const r of records as BoardRecord[]) {
     if (!r || typeof r.address !== 'string') continue
     const total = Number(r.total) || 0
-    const live  = lifetime.get(r.address)
+    const live  = boardGet(lifetime, r.address)
     if (live) {
       if (total > live.total) live.total = total
       if (r.displayName) live.displayName = r.displayName
     } else {
-      lifetime.set(r.address, { displayName: String(r.displayName ?? ''), total })
+      boardSet(lifetime, r.address, { displayName: String(r.displayName ?? ''), total })
     }
   }
 }
@@ -478,7 +516,7 @@ function refreshLifetimeTop(): void {
 /** One gardener's lifetime record. The object it returns IS their entry in `lifetime`,
  *  so bumping the board bumps the record and one save persists both. */
 async function loadLifetimeRecord(address: string): Promise<LeaderboardEntry> {
-  const seeded = lifetime.get(address)
+  const seeded = boardGet(lifetime, address)
   const rec = await loadPlayerRecord<LeaderboardEntry>(address, 'lifetime', stored => {
     if (stored && typeof stored === 'object' && !Array.isArray(stored)) {
       const r = stored as Partial<LeaderboardEntry>
@@ -487,7 +525,7 @@ async function loadLifetimeRecord(address: string): Promise<LeaderboardEntry> {
     }
     return { displayName: seeded?.displayName ?? '', total: seeded?.total ?? 0 }
   })
-  lifetime.set(address, rec)
+  boardSet(lifetime, address, rec)
   return rec
 }
 
@@ -500,7 +538,27 @@ async function saveLifetimeFor(address: string): Promise<void> {
 }
 
 function tierOf(address: string): number {
-  return flairTier(lifetime.get(address)?.total ?? 0)
+  return flairTier(boardGet(lifetime, address)?.total ?? 0)
+}
+
+/** A gardener's shown name: the weekly board's copy, falling back to `lifetime`'s (which
+ *  never resets) before the 0x1234… stub — `leaderboard` is empty right after the weekly
+ *  reset even for a veteran gardener whose name `lifetime` still has (2026-09-28). */
+function displayNameOf(address: string): string {
+  return boardGet(leaderboard, address)?.displayName ?? boardGet(lifetime, address)?.displayName ?? address.slice(0, 8) + '…'
+}
+
+const MAX_DISPLAY_NAME_LEN = 24
+
+/** registerPlayer's name is client-supplied and unauthenticated — clamp its length and
+ *  strip control/newline characters before it goes onto a board, a plaque, or a global
+ *  notice. A long enough raw name pushed `leaderboardUpdate` past the ~13KB transport
+ *  limit and silently dropped the board for everyone (2026-09-28). */
+function sanitizeDisplayName(raw: string): string {
+  return String(raw ?? '')
+    .replace(/[\u0000-\u001F\u007F]/g, '')   // control chars, incl. newlines/tabs
+    .trim()
+    .slice(0, MAX_DISPLAY_NAME_LEN)
 }
 
 /** "N lifetime waters — your name now carries X". Shared by the real crossing (waterPlant)
@@ -522,19 +580,22 @@ const almanacRankOf = (address: string): number => almanacRanks.get(address.toLo
 /** Count one water on both boards (creating entries with a placeholder name). */
 function bumpWaterTotals(address: string): void {
   for (const board of [leaderboard, lifetime]) {
-    const entry = board.get(address)
+    const entry = boardGet(board, address)
     if (entry) entry.total += 1
-    else board.set(address, { displayName: leaderboard.get(address)?.displayName ?? address.slice(0, 8) + '…', total: 1 })
+    else boardSet(board, address, { displayName: displayNameOf(address), total: 1 })
   }
   // Stamp the weekly entry so the board keeps its flair once the gardener is gone.
-  const weekly = leaderboard.get(address)
-  if (weekly) weekly.tier = flairTier(lifetime.get(address)?.total ?? 0)
+  const weekly = boardGet(leaderboard, address)
+  if (weekly) weekly.tier = flairTier(boardGet(lifetime, address)?.total ?? 0)
 }
 
 /** Top-10 sorted entries of a board as JSON, ready to send over the wire. */
 function boardJson(board: Map<string, LeaderboardEntry>): string {
   return JSON.stringify(
     [...board.entries()]
+      // registerPlayer seeds a 0-total row so a chosen name is ready before the first
+      // water; a gardener who hasn't watered yet must not show up as ranked (2026-09-28).
+      .filter(([, e]) => e.total > 0)
       .sort((a, b) => b[1].total - a[1].total)
       .slice(0, 10)
       // address travels too (v2): the podium renders each top gardener's AvatarShape,
@@ -548,8 +609,8 @@ function boardJson(board: Map<string, LeaderboardEntry>): string {
 /** Where one gardener stands on a board — ranked against EVERY entry, not the top-10 slice,
  *  so someone outside the list still gets a real number. rank 0 = not on the board. */
 function standingIn(board: Map<string, LeaderboardEntry>, address: string): { rank: number; count: number } {
-  const mine = board.get(address)
-  if (!mine) return { rank: 0, count: 0 }
+  const mine = boardGet(board, address)
+  if (!mine || mine.total <= 0) return { rank: 0, count: 0 }   // rank 0 = not on the board yet
   let ahead = 0
   for (const other of board.values()) if (other.total > mine.total) ahead++
   return { rank: ahead + 1, count: mine.total }
@@ -595,24 +656,44 @@ function currentBloomThreshold(): number {
 }
 
 let lastBroadcastGardeners = -1
+let lastBroadcastLuck      = -1
 
-/** Send threshold + gardener count — targeted to one player, or broadcast when the count changed. */
+/** Live Gallery rarity boost right now — same formula snapshotGallery freezes at bloom
+ *  start, computed on demand instead, since the luck HUD (2026-09-28) needs to track
+ *  Gallery changes between blooms too, not just what a bloom was granted at trigger time. */
+function currentGalleryBoost(): number {
+  return galleryBoost([...avenue.values()].filter(r => r.owner && r.keepsake).map(r => r.keepsake!.rarityTier))
+}
+
+/** How much rarer the next Bloom's seeds roll right now vs solo with an empty Gallery, as a
+ *  whole-number percent (2026-09-28: "display bloom luck on screen... Luck boost X%").
+ *  Gardeners + Gallery only — the bloom variant's own multiplier (moonlit etc.) isn't
+ *  decided until the Bloom actually fires, so it can't be part of a live number. */
+function currentLuckPercent(gardeners: number): number {
+  const chance = seedRareChance(gardeners, 1 + currentGalleryBoost())
+  return Math.round((chance / SEED_RARE_AT_SOLO - 1) * 100)
+}
+
+/** Send threshold + gardener count + luck — targeted to one player, or broadcast when
+ *  either changed (gardeners join/leave, or the Gallery's contents change). */
 function sendThreshold(to?: string[]): void {
-  const threshold = currentBloomThreshold()
-  const gardeners = Math.max(1, knownPlayers.size)
+  const threshold   = currentBloomThreshold()
+  const gardeners   = Math.max(1, knownPlayers.size)
+  const luckPercent = currentLuckPercent(gardeners)
   if (to) {
-    room.send('thresholdUpdate', { threshold, gardeners }, { to })
+    room.send('thresholdUpdate', { threshold, gardeners, luckPercent }, { to })
     return
   }
-  if (gardeners === lastBroadcastGardeners) return
+  if (gardeners === lastBroadcastGardeners && luckPercent === lastBroadcastLuck) return
   lastBroadcastGardeners = gardeners
-  room.send('thresholdUpdate', { threshold, gardeners })
-  console.log(`[Server] ${gardeners} gardener(s) present — new waterings last ${Math.round(plantDecayMs('Plant_1', gardeners) / 1000)}s`)
+  lastBroadcastLuck      = luckPercent
+  room.send('thresholdUpdate', { threshold, gardeners, luckPercent })
+  console.log(`[Server] ${gardeners} gardener(s) present — new waterings last ${Math.round(plantDecayMs('Plant_1', gardeners) / 1000)}s (luck +${luckPercent}%)`)
 }
 
 // ── Sustained-health bloom trigger ───────────────────────────
 
-let bloomSustainTimer:     ReturnType<typeof setTimeout> | null = null
+let bloomSustainTimer:     ReturnType<typeof timers.setTimeout> | null = null
 let bloomSustainStartedAt: number | null = null   // wall-clock ms when current run began
 let bloomSustainElapsedMs: number        = 0      // ms accumulated before current run
 let bloomCooldownUntil:    number        = 0      // no bloom may START before this (set by resetGarden)
@@ -625,7 +706,7 @@ let bloomArmed:             boolean       = true
  *  Preserves elapsed time so the timer resumes from where it left off. */
 function pauseBloomSustain(): void {
   if (bloomSustainTimer !== null) {
-    clearTimeout(bloomSustainTimer)
+    timers.clearTimeout(bloomSustainTimer)
     bloomSustainTimer = null
     if (bloomSustainStartedAt !== null) {
       bloomSustainElapsedMs += Date.now() - bloomSustainStartedAt
@@ -638,7 +719,7 @@ function pauseBloomSustain(): void {
 /** Full reset — called when bloom fires or garden resets. */
 function cancelBloomSustain(): void {
   if (bloomSustainTimer !== null) {
-    clearTimeout(bloomSustainTimer)
+    timers.clearTimeout(bloomSustainTimer)
     bloomSustainTimer = null
   }
   bloomSustainStartedAt = null
@@ -659,7 +740,7 @@ function checkBloomThreshold(): void {
       const remaining = Math.max(0, bloomSustainMs(knownPlayers.size) - bloomSustainElapsedMs)
       bloomSustainStartedAt = Date.now()
       console.log(`[Server] Health ${count}/${threshold} ≥ threshold — bloom fires in ${Math.ceil(remaining / 1_000)}s (${Math.round(bloomSustainElapsedMs / 1_000)}s already elapsed)`)
-      bloomSustainTimer = setTimeout(() => {
+      bloomSustainTimer = timers.setTimeout(() => {
         executeTask(async () => {
           bloomSustainTimer     = null
           bloomSustainStartedAt = null
@@ -700,7 +781,7 @@ function triggerBloom(forcedVariant = ''): void {
   room.send('bloomTriggered', { scale: bloomScale, variant: bloomVariant, elapsedMs: 0, durationMs: bloomDuration, galleryFlowers: bloomGallery.flowers, galleryBoost: bloomGallery.boost })
   scheduleSeedWaves()
   scheduleGoldenSeed()
-  setTimeout(() => executeTask(resetGarden), bloomDuration)
+  timers.setTimeout(() => executeTask(resetGarden), bloomDuration)
 }
 
 // ---------------------------------------------------------------
@@ -729,7 +810,7 @@ function sendSeed(seed: SeedRecord, to?: string[]): void {
  *  something to do the whole time, at any length. Waves are ≤ SEED_WAVE_GAP_MS apart, the
  *  first at the start and the last SEED_LAST_WAVE_BEFORE_END_MS before the end; the
  *  earliest waves take the leftovers. Total yield/rarity unchanged (bloom size). */
-const seedWaveTimers: Array<ReturnType<typeof setTimeout>> = []
+const seedWaveTimers: Array<ReturnType<typeof timers.setTimeout>> = []
 
 function scheduleSeedWaves(): void {
   cancelSeedWaves()
@@ -739,14 +820,14 @@ function scheduleSeedWaves(): void {
   const burstN  = Math.min(total, Math.max(1, Math.ceil(total * SEED_BURST_FRACTION)))
   const restN   = total - burstN
   const guarantee = bloomSeedContributors >= GUARANTEED_RARE_AT_CONTRIBUTORS
-  seedWaveTimers.push(setTimeout(() => executeTask(async () => { if (bloomActive) spawnBloomSeeds(burstN, guarantee) }), openAt))
+  seedWaveTimers.push(timers.setTimeout(() => executeTask(async () => { if (bloomActive) spawnBloomSeeds(burstN, guarantee) }), openAt))
   let waves = 0
   if (restN > 0) {
     waves = Math.max(1, Math.min(restN, Math.floor((window - openAt) / SEED_WAVE_GAP_MS)))
     for (let w = 0; w < waves; w++) {
       const n  = Math.floor(restN / waves) + (w < restN % waves ? 1 : 0)
       const at = openAt + Math.round(((window - openAt) * (w + 1)) / waves)
-      seedWaveTimers.push(setTimeout(() => executeTask(async () => { if (bloomActive) spawnBloomSeeds(n) }), at))
+      seedWaveTimers.push(timers.setTimeout(() => executeTask(async () => { if (bloomActive) spawnBloomSeeds(n) }), at))
     }
   }
   console.log(`[Server] Seed shower: ${burstN} seeds when the flower opens (+${Math.round(openAt / 1000)}s), then ${restN} in ${waves} trickle wave(s) — ${total} total`)
@@ -755,12 +836,12 @@ function scheduleSeedWaves(): void {
 // ── Golden seed chase ─────────────────────────────────────────
 interface GoldenSeed { id: string; pathSeed: number; spawnedAt: number; endsAt: number; gatheredBy: Set<string> }
 let golden: GoldenSeed | null = null
-let goldenTimer: ReturnType<typeof setTimeout> | null = null
+let goldenTimer: ReturnType<typeof timers.setTimeout> | null = null
 
 function scheduleGoldenSeed(): void {
   cancelGoldenSeed()
   const startedAt = bloomStartedAt ?? Date.now()
-  goldenTimer = setTimeout(() => executeTask(async () => {
+  goldenTimer = timers.setTimeout(() => executeTask(async () => {
     goldenTimer = null
     if (!bloomActive) return
     golden = { id: `golden_${Date.now()}`, pathSeed: Math.random() * 1000, spawnedAt: Date.now(), endsAt: startedAt + bloomDuration, gatheredBy: new Set() }
@@ -770,7 +851,7 @@ function scheduleGoldenSeed(): void {
 }
 
 function cancelGoldenSeed(): void {
-  if (goldenTimer !== null) { clearTimeout(goldenTimer); goldenTimer = null }
+  if (goldenTimer !== null) { timers.clearTimeout(goldenTimer); goldenTimer = null }
   golden = null   // clients despawn it at endsAt on their own
 }
 
@@ -796,8 +877,31 @@ function snapshotGallery(): void {
 }
 
 function cancelSeedWaves(): void {
-  for (const t of seedWaveTimers) clearTimeout(t)
+  for (const t of seedWaveTimers) timers.clearTimeout(t)
   seedWaveTimers.length = 0
+}
+
+/** Evenly-spread landing spots for one wave: a jittered grid, not independent uniform
+ *  draws. A solo wave is only 4 seeds (SEEDS_BY_CONTRIBUTORS) — with that few points,
+ *  Math.random() per axis routinely clustered several into the same few metres by pure
+ *  chance (KJ 2026-09-28: "they always seem in the same 4m"). One roughly-equal cell per
+ *  seed, jittered inside it, so a wave visibly covers the garden regardless of its size.
+ *  Cells are shuffled so which part of an uneven grid goes unused is random too. */
+function stratifiedSeedSpots(count: number): Array<{ x: number; z: number }> {
+  const cols  = Math.ceil(Math.sqrt(count))
+  const rows  = Math.ceil(count / cols)
+  const cellW = (GARDEN_BOUNDS.xMax - GARDEN_BOUNDS.xMin) / cols
+  const cellH = (GARDEN_BOUNDS.zMax - GARDEN_BOUNDS.zMin) / rows
+  const cells: Array<{ c: number; r: number }> = []
+  for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) cells.push({ c, r })
+  for (let i = cells.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1))
+    ;[cells[i], cells[j]] = [cells[j], cells[i]]
+  }
+  return cells.slice(0, count).map(({ c, r }) => ({
+    x: GARDEN_BOUNDS.xMin + (c + Math.random()) * cellW,
+    z: GARDEN_BOUNDS.zMin + (r + Math.random()) * cellH,
+  }))
 }
 
 /** Roll and broadcast one wave of seeds — rarity scales with contributors.
@@ -806,12 +910,13 @@ function spawnBloomSeeds(count: number, guaranteeRare = false): void {
   // The variant's boost × the Rare Plant Gallery's (snapshotted when the Bloom triggered).
   const rareSeedMult = bloomVariantById(bloomVariant).rareSeedMult * (1 + bloomGallery.boost)
   const now          = Date.now()
+  const spots        = stratifiedSeedSpots(count)
   const batch: SeedRecord[] = []
   for (let i = 0; i < count; i++) {
     const seed: SeedRecord = {
       id:         `seed_${now}_${seedCounter++}`,
-      x:          GARDEN_BOUNDS.xMin + Math.random() * (GARDEN_BOUNDS.xMax - GARDEN_BOUNDS.xMin),
-      z:          GARDEN_BOUNDS.zMin + Math.random() * (GARDEN_BOUNDS.zMax - GARDEN_BOUNDS.zMin),
+      x:          spots[i].x,
+      z:          spots[i].z,
       rarityTier: guaranteeRare && i === 0 ? rollTierAtLeast(2, GUARANTEED_MAX_TIER) : rollSeedTier(bloomSeedContributors, rareSeedMult),
       spawnedAt:  now,
       gatheredBy: new Set(),
@@ -819,7 +924,7 @@ function spawnBloomSeeds(count: number, guaranteeRare = false): void {
     batch.push(seed)
     activeSeeds.set(seed.id, seed)
     // Ungathered seeds evaporate — clients despawn on their own matching timer
-    setTimeout(() => activeSeeds.delete(seed.id), SEED_LIFETIME_MS)
+    timers.setTimeout(() => activeSeeds.delete(seed.id), SEED_LIFETIME_MS)
     sendSeed(seed)
   }
   console.log(`[Server] Seed wave: ${count} seeds (${batch.filter(s => s.rarityTier > 0).length} above Common, ${bloomSeedContributors} contributor(s)${guaranteeRare ? ', 1 guaranteed Rare+' : ''})`)
@@ -941,7 +1046,7 @@ interface BoxRecord {
 }
 
 const boxes     = new Map<string, BoxRecord>()                       // boxId → record
-const boxTimers = new Map<string, ReturnType<typeof setTimeout>>()  // boxId → open timer
+const boxTimers = new Map<string, ReturnType<typeof timers.setTimeout>>()  // boxId → open timer
 
 function emptyBox(boxId: string): BoxRecord {
   return { boxId, owner: '', ownerName: '', rarityTier: 0, plantedAt: 0, opensAt: 0, opened: false, flower: '', waters: 0, waterers: [], lastWaterer: '', tends: 0 }
@@ -966,8 +1071,9 @@ function bedInfo(boxId: string): { owner: string; ownerName: string; plantedAt: 
 }
 
 function boxesOwnedBy(address: string): number {
+  const lower = address.toLowerCase()
   let n = 0
-  for (const b of boxes.values()) if (b.owner === address) n++
+  for (const b of boxes.values()) if (b.owner.toLowerCase() === lower) n++
   return n
 }
 
@@ -982,6 +1088,15 @@ interface FlowerKeepsake {
   avenue?:   number     // how many times it has stood on the Avenue
 }
 const loadFlowers = (a: string) => loadPlayerRecord<FlowerKeepsake[]>(a, 'flowers', v => (Array.isArray(v) ? v as FlowerKeepsake[] : []))
+
+/** Finds a keepsake by its wire identity rather than a client-sent index — a collection
+ *  index goes stale the instant a concurrent gift/display/hold splices the array, so
+ *  gift/displayFlower/holdFlower all match on this instead (2026-09-28). `at` arrives as
+ *  Int64; Number(...) is the same widening every other Int64 field on the wire uses. */
+function findKeepsake(list: FlowerKeepsake[], id: { flower: string; rarityTier: number; at: number }): number {
+  const at = Number(id.at)
+  return list.findIndex(f => f.flower === id.flower && f.rarityTier === id.rarityTier && Number(f.at) === at)
+}
 
 // ── Onboarding (v2): the two firsts the in-world tutorial waits on. Persisted per
 // wallet so the lesson never replays for a gardener who has done it — and a gardener
@@ -999,13 +1114,13 @@ async function loadOnboarding(address: string): Promise<OnboardingRecord> {
   // an all-false record rather than deleting the key) still replays the whole tutorial.
   const flowers = await loadFlowers(address)
   const o = await loadPlayerJson<OnboardingRecord>(address, 'onboarding', () => ({
-    watered:   (lifetime.get(address)?.total ?? 0) > 0,
+    watered:   (boardGet(lifetime, address)?.total ?? 0) > 0,
     planted:     boxesOwnedBy(address) > 0 || flowers.length > 0,
     harvested:   flowers.length > 0,
     gifted:      false,
     // Unlike `gifted`, this one CAN be backfilled accurately: the Avenue tracks its own
     // owners, so a gardener who already has a flower on show is never nagged about it.
-    avenueUsed:  [...avenue.values()].some(r => r.owner === address),
+    avenueUsed:  [...avenue.values()].some(r => r.owner.toLowerCase() === address.toLowerCase()),
     tourStep: 0,
     tourDone: false,
   }))
@@ -1248,6 +1363,32 @@ function refreshHandSeed(address: string): void {
 function sendAllHeld(to: string[]): void { for (const a of heldFlowers.keys()) sendHeld(a, to) }
 function clearHeld(address: string): void { if (heldFlowers.delete(address)) sendHeld(address) }
 
+// ── v2: water streak — consecutive PERFECT (sweet) pours this connection, for the nametag
+// badge (2026-09-28, "avatar name tag extension with the streak number of waters"). A
+// waterRejected breaks it, and so does an accepted-but-not-sweet pour — same rule as
+// skillCheck.tsx's own streak. In memory only, per connection: a rejoin starts fresh at 0.
+const waterStreak = new Map<string, number>()   // lowercase address → streak
+
+function sendStreak(address: string, to?: string[]): void {
+  const key = address.toLowerCase()
+  room.send('streakUpdate', { address: key, name: displayNameOf(address), streak: waterStreak.get(key) ?? 0 }, to ? { to } : undefined)
+}
+function sendAllStreaks(to: string[]): void { for (const a of waterStreak.keys()) sendStreak(a, to) }
+function bumpStreak(address: string): void {
+  const key = address.toLowerCase()
+  waterStreak.set(key, (waterStreak.get(key) ?? 0) + 1)
+  sendStreak(address)
+}
+/** Any waterRejected, or an accepted pour that wasn't sweet, breaks the streak — no-ops if
+ *  it was already 0, so neither one broadcasts a spurious "streak: 0" before a gardener's
+ *  first water this connection. */
+function breakStreak(address: string): void {
+  const key = address.toLowerCase()
+  if ((waterStreak.get(key) ?? 0) === 0) return
+  waterStreak.set(key, 0)
+  sendStreak(address)
+}
+
 /** Every test-panel handler is gated on this (pre-production gate, todo.md). */
 function isAdmin(address: string): boolean { return ADMIN_ADDRESSES.includes(address.toLowerCase()) }
 
@@ -1256,8 +1397,17 @@ function sendNotice(address: string, text: string): void {
 }
 
 function isConnected(address: string): boolean {
-  for (const a of playerAddresses.values()) if (a === address) return true
+  const lower = address.toLowerCase()
+  for (const a of playerAddresses.values()) if (a.toLowerCase() === lower) return true
   return false
+}
+
+/** The connected entity for an address, or null. Server-verified position reads
+ *  (waterPlant's reach check) go through this — never a client-reported position. */
+function entityForAddress(address: string): Entity | null {
+  const lower = address.toLowerCase()
+  for (const [entity, a] of playerAddresses) if (a.toLowerCase() === lower) return entity
+  return null
 }
 
 function saveBoxes(): void {
@@ -1282,9 +1432,9 @@ function openBox(boxId: string): void {
 function scheduleOpen(b: BoxRecord): void {
   if (!b.owner || b.opened) return
   const existing = boxTimers.get(b.boxId)
-  if (existing) clearTimeout(existing)
+  if (existing) timers.clearTimeout(existing)
   const delay = Math.max(0, b.opensAt - Date.now())
-  boxTimers.set(b.boxId, setTimeout(() => executeTask(async () => openBox(b.boxId)), delay))
+  boxTimers.set(b.boxId, timers.setTimeout(() => executeTask(async () => openBox(b.boxId)), delay))
 }
 
 /** Load (or late-load) the planters. False when the read failed. A planter claimed
@@ -1354,7 +1504,7 @@ async function tidyPlanter(b: BoxRecord): Promise<void> {
   const owner = b.owner, tier = b.rarityTier, opened = b.opened, flower = b.flower
   if (!owner) return
   const timer = boxTimers.get(b.boxId)
-  if (timer) { clearTimeout(timer); boxTimers.delete(b.boxId) }
+  if (timer) { timers.clearTimeout(timer); boxTimers.delete(b.boxId) }
   if (boxes.get(b.boxId) === b) {                             // not for a planter the layout dropped
     boxes.set(b.boxId, emptyBox(b.boxId))                     // free it before any await
     sendBox(boxes.get(b.boxId)!)
@@ -1434,7 +1584,7 @@ function emptySlot(slotId: string): AvenueRecord { return { slotId, owner: '', o
 function provenanceOf(b: BoxRecord): Pick<FlowerKeepsake, 'grownBy' | 'plantedAt' | 'openedAt' | 'helpers'> {
   return {
     grownBy: b.ownerName, plantedAt: b.plantedAt, openedAt: b.opensAt,
-    helpers: b.waterers.map(a => leaderboard.get(a)?.displayName ?? a.slice(0, 8) + '…'),
+    helpers: b.waterers.map(a => displayNameOf(a)),
   }
 }
 
@@ -1477,8 +1627,9 @@ async function loadAvenue(): Promise<boolean> {
 }
 
 function avenueSlotsOwnedBy(address: string): number {
+  const lower = address.toLowerCase()
   let n = 0
-  for (const r of avenue.values()) if (r.owner === address) n++
+  for (const r of avenue.values()) if (r.owner.toLowerCase() === lower) n++
   return n
 }
 
@@ -1486,7 +1637,7 @@ function avenueSlotsOwnedBy(address: string): number {
 async function returnAvenueFlower(r: AvenueRecord, why: 'recall' | 'tidy'): Promise<void> {
   const owner = r.owner, k = r.keepsake
   if (!owner || !k) return
-  if (avenue.get(r.slotId) === r) { avenue.set(r.slotId, emptySlot(r.slotId)); sendAvenue(avenue.get(r.slotId)!); void saveAvenue() }
+  if (avenue.get(r.slotId) === r) { avenue.set(r.slotId, emptySlot(r.slotId)); sendAvenue(avenue.get(r.slotId)!); void saveAvenue(); sendThreshold() }
   const flowers = await loadFlowers(owner)                    // past FLOWER_COLLECTION_CAP on purpose: never lost
   flowers.push({ ...k, avenue: (k.avenue ?? 0) + 1 })
   void savePlayerJson(owner, 'flowers')
@@ -1592,7 +1743,7 @@ async function resetGarden(): Promise<void> {
   // the hold ends (nothing else calls checkBloomThreshold until the next water).
   bloomCooldownUntil = now + BLOOM_TRIGGER_COOLDOWN_MS
   bloomArmed = getWateredCount() < currentBloomThreshold()   // armed only if the garden actually dropped
-  setTimeout(() => executeTask(async () => { if (!bloomActive) checkBloomThreshold() }), BLOOM_TRIGGER_COOLDOWN_MS)
+  timers.setTimeout(() => executeTask(async () => { if (!bloomActive) checkBloomThreshold() }), BLOOM_TRIGGER_COOLDOWN_MS)
   console.log(`[Server] Garden reset complete — ${kept} watered plants kept, next bloom possible in ${BLOOM_TRIGGER_COOLDOWN_MS / 1000}s`)
 
   savePlantStates()
@@ -1608,7 +1759,7 @@ function scheduleExpiry(
   sessionTimestamp: number,
   delayMs:          number,
 ): void {
-  setTimeout(() => {
+  timers.setTimeout(() => {
     executeTask(async () => {
       const ps = PlantSync.getOrNull(entity)
       if (!ps || !ps.isWatered || Number(ps.wateredAt) !== sessionTimestamp) return
@@ -1664,7 +1815,7 @@ function scheduleBloomCheck(): void {
   const windowAt = new Date(Date.now() + delay).toISOString()
   console.log(`[Server] Next bloom window: ${windowAt} (in ${Math.round(delay / 60_000)} min)`)
 
-  setTimeout(() => {
+  timers.setTimeout(() => {
     executeTask(async () => {
       const count = getWateredCount()
       console.log(`[Server] Bloom window reached — health ${count}/${currentBloomThreshold()}`)
@@ -1694,6 +1845,9 @@ function playerJoinSystem(): void {
         heldSeeds.delete(address.toLowerCase())
         shownSeedTier.delete(address.toLowerCase())
         clearHeld(address.toLowerCase())
+        lastWaterAt.delete(address.toLowerCase())
+        lastTendAt.delete(address.toLowerCase())
+        waterStreak.delete(address.toLowerCase())
         console.log(`[Server] Player disconnected: ${address}`)
       }
     }
@@ -1730,6 +1884,7 @@ function playerJoinSystem(): void {
       sendTributes([address])
       sendAllAvenue([address])
       sendAllHeld([address])
+      sendAllStreaks([address])
       markSeen(address)
       await deliverKeptSafe(address)
       console.log(`[Server] Player joined: ${address} (${getWateredCount()}/${currentBloomThreshold()} watered, bloom=${bloomActive})`)
@@ -1792,7 +1947,7 @@ export async function server(): Promise<void> {
   const outcomes = await Promise.all(loads.map(([, load]) => load()))
   loads.forEach(([label, load], i) => { if (!outcomes[i]) scheduleReload(label, load) })
   await ensureFreePlanters()
-  setInterval(() => executeTask(ensureFreePlanters), 60 * 60 * 1000)   // owners age past the min-away while nobody joins
+  timers.setInterval(() => executeTask(ensureFreePlanters), 60 * 60 * 1000)   // owners age past the min-away while nobody joins
   const restoredCount = getWateredCount()
   console.log(`[Server] ${restoredCount} plants currently watered`)
 
@@ -1819,6 +1974,28 @@ export async function server(): Promise<void> {
       const ps = PlantSync.getOrNull(entity)
       if (!ps) return
 
+      const now = Date.now()
+
+      // ── Anti-cheat (2026-09-28): waterPlant had no cooldown or distance check before —
+      // a scripted client could farm the 1000-water tribute milestone alone. Both are
+      // deliberately loose (WATER_COOLDOWN_MS/WATER_REACH_M in shared/config.ts): this is
+      // catching a scripted loop or a water sent from across the garden, never a human's
+      // real tap rate or aim. ────────────────────────────────────
+      const addrKey = playerAddress.toLowerCase()
+      if (now - (lastWaterAt.get(addrKey) ?? 0) < WATER_COOLDOWN_MS) {
+        breakStreak(playerAddress)
+        room.send('waterRejected', { plantId, reason: 'too_soon' }, { to: [playerAddress] })
+        return
+      }
+      const plantPos  = plantPosition(plantId, entity)
+      const playerEnt = entityForAddress(playerAddress)
+      const playerPos = playerEnt ? Transform.getOrNull(playerEnt)?.position : null
+      if (!plantPos || !playerPos || Vector3.distance(plantPos, playerPos) > WATER_REACH_M) {
+        breakStreak(playerAddress)
+        room.send('waterRejected', { plantId, reason: 'too_far' }, { to: [playerAddress] })
+        return
+      }
+
       // Watering DURING a bloom is allowed (2026-09-22): the garden keeps drying under the
       // spectacle and tending it is what fills the bloom's minutes.
       // Reject if already watered and not yet inside its expiry tell — prevents concurrent
@@ -1827,12 +2004,19 @@ export async function server(): Promise<void> {
       // Inside the tell window the water is a TOP-UP: full timer again, counts on the boards;
       // the old expiry timer bails on its own because wateredAt moves.
       if (ps.isWatered && expiresInMs(plantId) > EXPIRY_TELL_MS) {
+        breakStreak(playerAddress)
         room.send('waterRejected', { plantId, reason: 'already_watered' }, { to: [playerAddress] })
         return
       }
 
       // ── All valid — water the plant ──────────────────────────
-      const now      = Date.now()
+      lastWaterAt.set(addrKey, now)
+      // 2026-09-28 fix: a light (accepted but non-perfect) pour was bumping the streak —
+      // KJ: "my streak number keeps going up even when i dont water something perfectly -
+      // thats when it should reset". Only `sweet` (the skill check's perfect window) bumps
+      // it now; anything else accepted breaks it, same rule skillCheck.tsx's own streak
+      // uses ("any pour that is not perfect breaks the streak").
+      if (data.sweet === true) bumpStreak(playerAddress); else breakStreak(playerAddress)
       const watered  = PlantSync.getMutable(entity)
       watered.isWatered = true
       watered.wateredAt = now
@@ -1848,7 +2032,7 @@ export async function server(): Promise<void> {
       bumpWaterTotals(playerAddress)
       const tier = tierOf(playerAddress)
 
-      const displayName = leaderboard.get(playerAddress)?.displayName ?? playerAddress.slice(0, 8) + '…'
+      const displayName = displayNameOf(playerAddress)
       wateredByMap.set(plantId, displayName)
       wateredTierMap.set(plantId, tier)
       wateredAlmanacMap.set(plantId, almanacRankOf(playerAddress))
@@ -1863,7 +2047,7 @@ export async function server(): Promise<void> {
       room.send('plantStateUpdate', { plantId, isWatered: true, wateredAt: now, wateredBy: displayName, expiresInMs: expiresAt - now, tier, almanac: almanacRankOf(playerAddress) })
       void markOnboarding(playerAddress, 'watered')
       if (tier > tierBefore) {
-        sendNotice(playerAddress, flairTierMessage(tier, lifetime.get(playerAddress)?.total ?? 0))
+        sendNotice(playerAddress, flairTierMessage(tier, boardGet(lifetime, playerAddress)?.total ?? 0))
         console.log(`[Server] ${displayName} reached flair tier ${tier}`)
       }
       await grantTributeIfEarned(playerAddress)
@@ -1886,7 +2070,7 @@ export async function server(): Promise<void> {
     if (seed.gatheredBy.has(playerAddress)) return
     seed.gatheredBy.add(playerAddress)
 
-    const displayName = leaderboard.get(playerAddress)?.displayName ?? playerAddress.slice(0, 8) + '…'
+    const displayName = displayNameOf(playerAddress)
     const pouch = await loadPouch(playerAddress)
     pouch[seed.rarityTier] = (pouch[seed.rarityTier] ?? 0) + 1     // synchronous on the shared live object
     countGatheredSeed(playerAddress, seed.rarityTier)
@@ -1903,7 +2087,7 @@ export async function server(): Promise<void> {
     if (golden.gatheredBy.has(playerAddress)) return
     golden.gatheredBy.add(playerAddress)                       // before any await — no double award
     const tier  = rollRainbowTier()
-    const name  = leaderboard.get(playerAddress)?.displayName ?? playerAddress.slice(0, 8) + '…'
+    const name  = displayNameOf(playerAddress)
     const pouch = await loadPouch(playerAddress)
     pouch[tier] = (pouch[tier] ?? 0) + 1
     countGatheredSeed(playerAddress, tier)   // the rainbow seed counts on the finale card too
@@ -1919,7 +2103,7 @@ export async function server(): Promise<void> {
     if (!isAdmin(address)) { sendNotice(address, 'Test tools: admin wallet only'); return }
     const seed: SeedRecord = { id: `admin_${Date.now()}`, x: data.x, z: data.z, rarityTier: data.rarityTier, spawnedAt: Date.now(), gatheredBy: new Set() }
     activeSeeds.set(seed.id, seed)
-    setTimeout(() => activeSeeds.delete(seed.id), SEED_LIFETIME_MS)
+    timers.setTimeout(() => activeSeeds.delete(seed.id), SEED_LIFETIME_MS)
     sendSeed(seed)
     console.log(`[Server] adminSpawnSeed from ${address.slice(0, 8)} → ${seed.id} at (${data.x.toFixed(1)}, ${data.z.toFixed(1)})`)
   })
@@ -1961,7 +2145,7 @@ export async function server(): Promise<void> {
     if (!unlimited) pouch[tier] -= 1
     const now = Date.now()
     b.owner     = playerAddress
-    b.ownerName = leaderboard.get(playerAddress)?.displayName ?? playerAddress.slice(0, 8) + '…'
+    b.ownerName = displayNameOf(playerAddress)
     b.rarityTier = tier
     b.plantedAt = now
     b.opensAt   = now + growMsForTier(tier)
@@ -2026,11 +2210,11 @@ export async function server(): Promise<void> {
     const b = boxes.get(data.boxId)
     console.log(`[Server] waterBox ${data.boxId} from ${playerAddress.slice(0, 8)}… → ${!b ? 'unknown box' : !b.owner ? 'empty' : b.opened ? 'opened' : `growing, waters ${b.waters}/${BOX_WATER_MAX}`}`)
     if (!b || !b.owner) return
-    if (b.owner === playerAddress) { sendNotice(playerAddress, 'Only visitors can water your seed'); return }
+    if (b.owner.toLowerCase() === playerAddress.toLowerCase()) { sendNotice(playerAddress, 'Only visitors can water your seed'); return }
     if (b.opened) { sendNotice(playerAddress, `${b.ownerName}'s ${b.flower} has already opened`); return }
     if (b.waterers.includes(playerAddress)) { sendNotice(playerAddress, `You already watered ${b.ownerName}'s seed`); return }
     if (b.waters >= BOX_WATER_MAX) { sendNotice(playerAddress, `${b.ownerName}'s seed has had all the water it can take`); return }
-    const name = leaderboard.get(playerAddress)?.displayName ?? playerAddress.slice(0, 8) + '…'
+    const name = displayNameOf(playerAddress)
     b.waters += 1
     b.waterers.push(playerAddress)
     b.lastWaterer = name
@@ -2051,7 +2235,27 @@ export async function server(): Promise<void> {
     if (b.owner !== playerAddress) return
     if (b.opened) return
     const now = Date.now()
-    if (tendsAvailable(b.opensAt, now, b.rarityTier, b.tends) <= 0) { sendNotice(playerAddress, 'It has had all the water it wants for now - tend it again when it grows'); return }
+    // Anti-cheat (2026-09-28, KJ: "i shouldnt be able to spam tend my seed"): the client
+    // now gates tending behind the same press-and-hold skill check as watering, but that
+    // alone doesn't stop a scripted client sending tendBox directly — same gap the water
+    // cooldown closed. A genuine hold takes over a second regardless of outcome, so this
+    // never catches a real pour, only a bypass. WATER_COOLDOWN_MS is shared with waterPlant.
+    const addrKey = playerAddress.toLowerCase()
+    if (now - (lastTendAt.get(addrKey) ?? 0) < WATER_COOLDOWN_MS) { sendBox(b, [playerAddress]); return }
+    if (tendsAvailable(b.opensAt, now, b.rarityTier, b.tends) <= 0) {
+      // Re-sync (2026-09-28: "the drop should always show when tending is actually
+      // available"): onTap increments v.tends and hides the drop optimistically before
+      // this reply lands. A rejection here — the client thought a tend was ready, the
+      // server disagrees — left that optimistic bump uncorrected forever, since only an
+      // accepted tend sent a boxState back. The drop then stayed hidden past the point a
+      // real tend became available again, with no boxState due until some unrelated
+      // change happened to resync it. A targeted boxState corrects v.tends/opensLocalAt
+      // from server truth the same way every other box update already does.
+      sendBox(b, [playerAddress])
+      sendNotice(playerAddress, 'It has had all the water it wants for now - tend it again when it grows')
+      return
+    }
+    lastTendAt.set(addrKey, now)
     const shave = Math.round(growMsForTier(b.rarityTier) * TEND_SHAVE_FRACTION)
     b.tends += 1
     b.opensAt = Math.max(now, b.opensAt - shave)
@@ -2063,17 +2267,17 @@ export async function server(): Promise<void> {
   })
 
   // ── Message: giftFlower (Phase 4 — keepsakes) ───────────────
-  onRoomMessage<{ toAddress: string; flowerIndex: number }>('giftFlower', async (data, playerAddress) => {
+  onRoomMessage<{ toAddress: string; flower: string; rarityTier: number; at: number }>('giftFlower', async (data, playerAddress) => {
     const to = (data.toAddress || '').toLowerCase()
-    if (!to || to === playerAddress) return
+    if (!to || to === playerAddress.toLowerCase()) return
     if (!isConnected(to)) { sendNotice(playerAddress, 'That player is not here'); return }
     const mine   = await loadFlowers(playerAddress)
     const theirs = await loadFlowers(to)
-    const idx = Math.floor(data.flowerIndex)
-    if (idx < 0 || idx >= mine.length) { sendNotice(playerAddress, 'You have no flower to give'); return }
+    const idx = findKeepsake(mine, data)
+    if (idx < 0) { sendNotice(playerAddress, 'You no longer have that flower'); return }
     if (theirs.length >= FLOWER_COLLECTION_CAP) { sendNotice(playerAddress, `Their collection already holds ${FLOWER_COLLECTION_CAP} flowers`); return }
-    const fromName = leaderboard.get(playerAddress)?.displayName ?? playerAddress.slice(0, 8) + '…'
-    const toName   = leaderboard.get(to)?.displayName ?? to.slice(0, 8) + '…'
+    const fromName = displayNameOf(playerAddress)
+    const toName   = displayNameOf(to)
     const [gift] = mine.splice(idx, 1)
     // Hand to hand (KJ 2026-09-18): gifting the kind you're holding empties your hand, and
     // the receiver now holds the gift — everyone sees it change hands.
@@ -2095,14 +2299,14 @@ export async function server(): Promise<void> {
   })
 
   // ── The Avenue: display / recall / inspect ───────────────────
-  onRoomMessage<{ slotId: string; flowerIndex: number }>('displayFlower', async (data, playerAddress) => {
+  onRoomMessage<{ slotId: string; flower: string; rarityTier: number; at: number }>('displayFlower', async (data, playerAddress) => {
     if (avenue.size === 0) { sendNotice(playerAddress, 'The Rare Plant Gallery is not open yet'); return }
     const cap = avenueSlotCap()   // every slot when AVENUE_SLOT_CAP is 0 — then only a full wall stops you
     if (avenueSlotsOwnedBy(playerAddress) >= cap) { sendNotice(playerAddress, cap === 1 ? 'You already have a flower in the Gallery — take it back first' : `You already have ${cap} flowers in the Gallery`); return }
     const flowers = await loadFlowers(playerAddress)
-    const idx = Math.floor(data.flowerIndex)
+    let idx = findKeepsake(flowers, data)
+    if (idx < 0) { sendNotice(playerAddress, 'You no longer have that flower'); return }
     const f = flowers[idx]
-    if (!f) { sendNotice(playerAddress, 'You no longer have that flower'); return }
     if (f.rarityTier < AVENUE_MIN_TIER) { sendNotice(playerAddress, `The Rare Plant Gallery is for ${rarityTierById(AVENUE_MIN_TIER).name} flowers and up`); return }
     let slot = data.slotId ? avenue.get(data.slotId) : undefined
     if (slot && slot.owner) { sendNotice(playerAddress, `${slot.ownerName}'s flower is on show there`); return }
@@ -2113,15 +2317,17 @@ export async function server(): Promise<void> {
       await returnAvenueFlower(victim, 'tidy')
       slot = avenue.get(victim.slotId)!
     }
-    if (slot.owner || flowers[idx] !== f) return                  // re-check after the awaits
+    idx = findKeepsake(flowers, data)                              // re-check after the awaits
+    if (slot.owner || idx < 0) return
     flowers.splice(idx, 1)
-    const name = leaderboard.get(playerAddress)?.displayName ?? playerAddress.slice(0, 8) + '…'
+    const name = displayNameOf(playerAddress)
     avenue.set(slot.slotId, { slotId: slot.slotId, owner: playerAddress, ownerName: name, keepsake: f, since: Date.now(), looks: 0 })
     const held = heldFlowers.get(playerAddress.toLowerCase())
     if (held && held.flower === f.flower && held.rarityTier === f.rarityTier) clearHeld(playerAddress.toLowerCase())
     console.log(`[Server] ${name} put ${f.flower} (tier ${f.rarityTier}) on the Avenue at ${slot.slotId}`)
     sendAvenue(avenue.get(slot.slotId)!)
     void saveAvenue()
+    sendThreshold()   // Gallery rarity boost may have just changed (2026-09-28 luck HUD)
     void savePlayerJson(playerAddress, 'flowers')
     void sendCollection(playerAddress)
     void markOnboarding(playerAddress, 'avenueUsed')   // (Notification pass 2026-09-27: it is standing there with your name on it — no echo)
@@ -2151,7 +2357,7 @@ export async function server(): Promise<void> {
     if (avenue.size === 0) { sendNotice(address, 'The Rare Plant Gallery is not open yet'); return }
     const empties = [...avenue.values()].filter(r => !r.owner)
     const n = Math.max(1, Math.min(empties.length, Math.floor(data?.count) || 8))
-    const name = leaderboard.get(address)?.displayName ?? address.slice(0, 8) + '…'
+    const name = displayNameOf(address)
     for (let i = 0; i < n; i++) {
       const slot = empties[i]
       const tier = rollTierAtLeast(AVENUE_MIN_TIER, GUARANTEED_MAX_TIER)
@@ -2163,25 +2369,28 @@ export async function server(): Promise<void> {
       sendAvenue(avenue.get(slot.slotId)!)
     }
     void saveAvenue()
+    sendThreshold()
     console.log(`[Server] [Test] filled ${n} Avenue slot(s) for ${address}`)
   })
 
   // ── Message: adminClearAvenue (test panel) — empty every slot the admin filled ──
   onRoomMessage<Record<string, never>>('adminClearAvenue', async (_data, address) => {
     if (!isAdmin(address)) { sendNotice(address, 'Test tools: admin wallet only'); return }
-    const mine = [...avenue.values()].filter(r => r.owner === address)
+    const mine = [...avenue.values()].filter(r => r.owner.toLowerCase() === address.toLowerCase())
     if (mine.length === 0) { sendNotice(address, 'You have no Gallery stands to clear'); return }
     for (const r of mine) { avenue.set(r.slotId, emptySlot(r.slotId)); sendAvenue(avenue.get(r.slotId)!) }
     void saveAvenue()
+    sendThreshold()
     console.log(`[Server] [Test] cleared ${mine.length} Avenue slot(s) for ${address}`)
   })
 
   // ── Message: holdFlower — show one of your keepsakes in your hand (-1 = put away) ──
-  onRoomMessage<{ flowerIndex: number }>('holdFlower', async (data, playerAddress) => {
-    const a   = playerAddress.toLowerCase()
-    const idx = Math.floor(data.flowerIndex)
-    if (idx < 0) { clearHeld(a); return }
-    const f = (await loadFlowers(playerAddress))[idx]
+  onRoomMessage<{ flower: string; rarityTier: number; at: number; clear: boolean }>('holdFlower', async (data, playerAddress) => {
+    const a = playerAddress.toLowerCase()
+    if (data.clear) { clearHeld(a); return }
+    const flowers = await loadFlowers(playerAddress)
+    const idx = findKeepsake(flowers, data)
+    const f = idx < 0 ? undefined : flowers[idx]
     if (!f) { sendNotice(playerAddress, 'You no longer have that flower'); return }
     heldSeeds.delete(a)          // a keepsake replaces an equipped seed — one thing per hand
     heldFlowers.set(a, { flower: f.flower, rarityTier: f.rarityTier })
@@ -2317,7 +2526,7 @@ export async function server(): Promise<void> {
     saveLeaderboard()
     await saveLifetimeFor(address)
     broadcastLeaderboard()
-    const total = lifetime.get(address)?.total ?? 0
+    const total = boardGet(lifetime, address)?.total ?? 0
     console.log(`[Server] [Test] granted ${amount} waters to ${address} → lifetime ${total}, tier ${tierBefore}→${tier}`)
     sendNotice(address, tier > tierBefore
       ? flairTierMessage(tier, total)
@@ -2384,6 +2593,7 @@ export async function server(): Promise<void> {
     sendTributes([address])
     sendAllAvenue([address])
     sendAllHeld([address])
+    sendAllStreaks([address])
     console.log(`[Server] Full sync sent to ${address} (${getWateredCount()}/${currentBloomThreshold()} watered)`)
   })
 
@@ -2415,16 +2625,18 @@ export async function server(): Promise<void> {
 
   // ── Message: registerPlayer ──────────────────────────────────
   onRoomMessage<{ displayName: string }>('registerPlayer', async (data, address) => {
+    const displayName = sanitizeDisplayName(data.displayName)
+    if (!displayName) return   // blank/whitespace-only after sanitizing — nothing to register
     await loadLifetimeRecord(address)
     for (const board of [leaderboard, lifetime]) {
-      const entry = board.get(address)
-      if (entry) entry.displayName = data.displayName
-      else board.set(address, { displayName: data.displayName, total: 0 })
+      const entry = boardGet(board, address)
+      if (entry) entry.displayName = displayName
+      else boardSet(board, address, { displayName, total: 0 })
     }
     saveLeaderboard()
     await saveLifetimeFor(address)
     broadcastLeaderboard([address])
-    console.log(`[Server] Registered player: ${data.displayName} (${address})`)
+    console.log(`[Server] Registered player: ${displayName} (${address})`)
   })
 
   // Player join detection — runs every frame, lightweight
@@ -2436,7 +2648,7 @@ export async function server(): Promise<void> {
   // Clock-sync heartbeat — lets clients keep their clockSync offset calibrated
   const SERVER_TIME_INTERVAL_MS = 30_000
   room.send('notifyServerTime', { sentAt: Date.now() })
-  setInterval(() => room.send('notifyServerTime', { sentAt: Date.now() }), SERVER_TIME_INTERVAL_MS)
+  timers.setInterval(() => room.send('notifyServerTime', { sentAt: Date.now() }), SERVER_TIME_INTERVAL_MS)
 
   console.log('[Server] Ready')
 }

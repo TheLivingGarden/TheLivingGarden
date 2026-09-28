@@ -60,6 +60,7 @@ import { createSign, moveSign, setupSignSystem, Sign } from './signs'
 import { BALLOON_TEXT_TRACK } from './balloonTextTrack'
 import { playSfx } from './sounds'
 import { playWateringBeat } from './wateringSystem'
+import { beginHold, isHolding } from './skillCheck'
 
 // ---------------------------------------------------------------
 // Config (greybox visuals)
@@ -309,7 +310,7 @@ function hoverFor(v: BoxView): string {
  *  materials on a GLB it is already destroying (same error as the old balloon removal),
  *  so drop the override first, hide it, and remove the entity once that has settled. */
 const PLANT_RETIRE_MS = 1_000
-function retirePlant(e: Entity): void {
+export function retirePlant(e: Entity): void {
   if (!GltfNodeModifiers.has(e)) { engine.removeEntity(e); return }
   GltfNodeModifiers.deleteFrom(e)
   Transform.getMutable(e).scale = { x: 0, y: 0, z: 0 }
@@ -583,18 +584,29 @@ function tryPlant(v: BoxView): void {
 
 // Phase 4 — one tap, dispatched by whose box it is and its state.
 // Server re-validates everything; these local checks only save a round trip.
+/** Tend, gated by the same press-and-hold pour meter as a garden plant (2026-09-28, KJ:
+ *  "i shouldnt be able to spam tend my seed"). A quick tap or too much water does nothing —
+ *  skillCheck.tsx's meter is a single module-level hold, so this also can't run at the same
+ *  time as watering a garden plant. */
+function tendOnto(v: BoxView): void {
+  if (isHolding()) return
+  const pos = layout.get(v.boxId)
+  const at = pos ? { x: pos.x, y: BOX_MODEL_RIM_Y, z: pos.z } : { x: 0, y: 0, z: 0 }
+  beginHold((outcome) => {
+    if (outcome === 'tap' || outcome === 'over') return   // meter itself says why; no send
+    console.log(`[Boxes] tending ${v.boxId}`)
+    playWateringBeat()
+    room.send('tendBox', { boxId: v.boxId })
+    v.tends += 1          // optimistic; the next boxState carries the server's count
+    removeSeedlingDrop(v)
+  }, at)
+}
+
 function onTap(v: BoxView): void {
   if (!v.owner) { tryPlant(v); return }
   if (isMine(v)) {
     if (v.opened) { console.log(`[Boxes] harvesting ${v.boxId}`); room.send('harvestBox', { boxId: v.boxId }); return }
-    if (tendReady(v, Date.now())) {
-      console.log(`[Boxes] tending ${v.boxId}`)
-      playWateringBeat()
-      room.send('tendBox', { boxId: v.boxId })
-      v.tends += 1          // optimistic; the next boxState carries the server's count
-      removeSeedlingDrop(v)
-      return
-    }
+    if (tendReady(v, Date.now())) { tendOnto(v); return }
     showToast(`Still growing — ready in ${countdown(v, Date.now())}. Tend it again when it grows`, TOAST_MS, false)
     return
   }

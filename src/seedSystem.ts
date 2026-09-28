@@ -61,7 +61,7 @@ import {
   rarityTierById,
   withArticle,
 } from './shared/config'
-import { showToast, showMoment } from './notifications'
+import { showToast, showMoment, isTutorialActive } from './notifications'
 import { triggerSparkle } from './sparkleSystem'
 import { setupGoldenSeed } from './goldenSeed'
 import { playSfx } from './sounds'
@@ -470,7 +470,9 @@ export function setupSeedSystem(): void {
     // line says what to do (Week-2 notes: "the Bloom-to-seed transition must be unmistakable").
     if (seeds.size === 0 && !seeds.has(data.id)) {
       triggerSparkle({ x: BLOOM_SEED_ORIGIN.x, y: BLOOM_SEED_ORIGIN.y, z: BLOOM_SEED_ORIGIN.z })
-      showMoment('The Bloom is dropping seeds!', 'Chase them down and walk into them', 4_500)
+      // (2026-09-28: distracting mid-tutorial) — the sparkle still plays, just not the
+      // centre-screen line competing with the tutorial card for attention.
+      if (!isTutorialActive()) showMoment('The Bloom is dropping seeds!', 'Chase them down and walk into them', 4_500)
     }
     spawnSeed(data)
   })

@@ -3,9 +3,8 @@
   "version": "1.0.0",
   "description": "SDK7 Template scene",
   "scripts": {
-    "prestart": "node patch-glbs.cjs",
     "start": "NODE_OPTIONS=\"$NODE_OPTIONS --import \\\"$PWD/server-watchdog.mjs\\\"\" sdk-commands start",
-    "predeploy": "node patch-glbs.cjs && node check-glb.cjs",
+    "predeploy": "node check-glb.cjs",
     "deploy": "sdk-commands deploy",
     "build": "sdk-commands build",
     "upgrade-sdk": "npm install --save-dev @dcl/sdk@latest",
@@ -13,6 +12,7 @@
     "server-logs": "sdk-commands sdk-server-logs",
     "postinstall": "node patch-node-modules.cjs",
     "check-glb": "node check-glb.cjs",
+    "patch-glbs": "node patch-glbs.cjs",
     "test": "jest"
   },
   "devDependencies": {

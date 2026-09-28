@@ -61,8 +61,11 @@ export const room = registerMessages({
   waterBox:         Schemas.Map({ boxId: Schemas.String }),
   /** Owner taps their own GROWING box when it shows a water drop: shaves TEND_SHAVE_FRACTION, once per growth stage. */
   tendBox:          Schemas.Map({ boxId: Schemas.String }),
-  /** Tap a nearby player: give them one flower from your collection (by index). */
-  giftFlower:       Schemas.Map({ toAddress: Schemas.String, flowerIndex: Schemas.Number }),
+  /** Tap a nearby player: give them one flower from your collection, identified by
+   *  {flower, rarityTier, at} rather than a collection index — a stale index (the
+   *  server's copy shifted between click and arrival) could otherwise gift the wrong
+   *  flower. `at` is Int64: Schemas.Number corrupts a 13-digit ms timestamp. */
+  giftFlower:       Schemas.Map({ toAddress: Schemas.String, flower: Schemas.String, rarityTier: Schemas.Number, at: Schemas.Int64 }),
   /** Server → player: their keepsake collection + box cap (after harvest/gift, and on join). */
   /** avenueSlotsFree: how many MORE flowers this gardener could put on the Avenue right
    *  now (slots their flair has earned, minus slots they're already using) — lets the
@@ -70,8 +73,9 @@ export const room = registerMessages({
   // One CHUNK of the collection (shared/collection.ts): `start` = index of its first flower, `total` = flowers in all. Every chunk
   // repeats the planter cap, so the cap can never depend on the collection's size.
   collectionUpdate: Schemas.Map({ flowersJson: Schemas.String, boxCap: Schemas.Number, avenueSlotsFree: Schemas.Number, start: Schemas.Number, total: Schemas.Number }),
-  /** Hold one keepsake in your hand (by collection index), or -1 to put it away. */
-  holdFlower:       Schemas.Map({ flowerIndex: Schemas.Number }),
+  /** Hold one keepsake in your hand, identified like giftFlower (not by index) — or
+   *  clear:true to put it away (flower/rarityTier/at are unused then). */
+  holdFlower:       Schemas.Map({ flower: Schemas.String, rarityTier: Schemas.Number, at: Schemas.Int64, clear: Schemas.Boolean }),
   /** Equip a seed of this rarity tier into your hand, REPLACING whatever was there —
    *  a held keepsake included. -1 goes back to the default (the rarest seed you hold,
    *  shown only when your hands are otherwise free). */
@@ -80,6 +84,12 @@ export const room = registerMessages({
    *  seedTier (v2): the rarest seed in their pouch, shown in the SAME hand when they hold no
    *  keepsake — a keepsake always wins, so the two can never collide. -1 = no seed to show. */
   heldFlower:       Schemas.Map({ address: Schemas.String, flower: Schemas.String, rarityTier: Schemas.Number, seedTier: Schemas.Number }),
+  /** Server → everyone: one gardener's current water streak (2026-09-28, nametag badge) —
+   *  consecutive PERFECT (sweet) pours this connection, reset to 0 by a waterRejected or by
+   *  an accepted pour that wasn't sweet. Sent per gardener on change, and per connected
+   *  gardener on join (like heldFlower), not as one full roster: this fires on every water,
+   *  so a delta keeps the wire light. */
+  streakUpdate:     Schemas.Map({ address: Schemas.String, name: Schemas.String, streak: Schemas.Number }),
   /** Server → receiver of a gift. */
   giftReceived:     Schemas.Map({ from: Schemas.String, flower: Schemas.String, rarityTier: Schemas.Number }),
   /** Server → player: short feedback toast (rejections and confirmations). Broadcast when untargeted. */
@@ -98,9 +108,10 @@ export const room = registerMessages({
     grownBy: Schemas.String, openedAt: Schemas.Int64, helpersJson: Schemas.String, giftedBy: Schemas.String,
     looks: Schemas.Number,
   }),
-  /** Put one of my keepsakes (by collection index) on the Avenue. slotId '' = the server
-   *  picks the first free slot — and when none is free, tidies the longest-away owner's. */
-  displayFlower:    Schemas.Map({ slotId: Schemas.String, flowerIndex: Schemas.Number }),
+  /** Put one of my keepsakes on the Avenue, identified like giftFlower (not by index).
+   *  slotId '' = the server picks the first free slot — and when none is free, tidies
+   *  the longest-away owner's. */
+  displayFlower:    Schemas.Map({ slotId: Schemas.String, flower: Schemas.String, rarityTier: Schemas.Number, at: Schemas.Int64 }),
   /** Take my flower back off the Avenue into My flowers. */
   recallFlower:     Schemas.Map({ slotId: Schemas.String }),
   /** I opened this slot's inspect card — counts one look per gardener per slot per session. */
@@ -169,8 +180,12 @@ export const room = registerMessages({
    *  bloom's length (bloomDurationMs — 2 min solo … 6 min at 6+ contributors). */
   bloomTriggered:   Schemas.Map({ scale: Schemas.Number, variant: Schemas.String, elapsedMs: Schemas.Number, durationMs: Schemas.Number, galleryFlowers: Schemas.Number, galleryBoost: Schemas.Number }),
   /** v2 — bloom threshold (flat 80% since the decay-rate rework) + gardeners present.
-   *  Sent to a joining player, on full sync, and broadcast when the gardener count changes. */
-  thresholdUpdate:  Schemas.Map({ threshold: Schemas.Number, gardeners: Schemas.Number }),
+   *  Sent to a joining player, on full sync, and broadcast when the gardener count changes.
+   *  luckPercent (2026-09-28, "display bloom luck... under the garden health meter"): how
+   *  much rarer the NEXT bloom's seeds roll right now vs solo with an empty Gallery — from
+   *  gardeners present and the Gallery's current rarity boost. Does not include the bloom
+   *  variant's own multiplier (moonlit etc.), which isn't decided until the bloom fires. */
+  thresholdUpdate:  Schemas.Map({ threshold: Schemas.Number, gardeners: Schemas.Number, luckPercent: Schemas.Number }),
   /** Server → each gardener present when a bloom ENDS: what the garden just did, and
    *  what they did in it. Sent per player (the you* fields differ) right before the
    *  cycle counters are cleared. The during-bloom contributor names are untouched —

@@ -49,6 +49,7 @@ export const INFO_SECTIONS: ReadonlyArray<InfoSection> = [
       'Everyone sees the same seeds and everyone can collect each one, so nobody is racing you.',
       `The best seeds come from the busiest blooms: more gardeners means more seeds and better odds, and from ${GUARANTEED_RARE_AT_CONTRIBUTORS} contributors you are guaranteed at least one Rare or better.`,
       'Watch for the rainbow seed — it appears once per bloom, drifts along its own path, and carries the best odds in the game.',
+      'The "Luck boost" under the garden health meter is this in one number — how much rarer the next bloom rolls right now, from gardeners present and the Rare Plant Gallery.',
     ],
   },
   {

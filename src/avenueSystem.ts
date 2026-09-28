@@ -8,7 +8,7 @@
 // hallOfFame.ts; this file only adds the tap box, the flower and a pooled plaque per slot.
 //
 // Server communication (server is authoritative; the client only requests):
-//   send    →  displayFlower { slotId, flowerIndex }   slotId '' = first free slot
+//   send    →  displayFlower { slotId, flower, rarityTier, at }   slotId '' = first free slot
 //   send    →  recallFlower  { slotId }                my own slot
 //   send    →  inspectAvenue { slotId }                counts a look (card in Phase 3)
 //   receive ←  avenueState   { slotId, owner, ownerName, flower, rarityTier, since,
@@ -31,7 +31,8 @@ import {
 } from './shared/config'
 import { showToast } from './notifications'
 import { attachPlantVfx, detachPlantVfx } from './plantVfx'
-import { getHeld, heldFlowerIndex, registerAvenueApi, getArmedAvenueFlower, armAvenuePlacement } from './playerInventory'
+import { retirePlant } from './boxSystem'
+import { getHeld, heldFlowerIndex, registerAvenueApi, getArmedAvenueFlower, armAvenuePlacement, keepsakeIdentity } from './playerInventory'
 import { openSeedMenuForAvenue } from './seedMenu'
 import { createSign, moveSign, Sign } from './signs'
 import { showAvenueCard, closeAvenueCard, isAvenueCardOpen } from './avenueCard'
@@ -171,7 +172,10 @@ function setPlantVisual(v: SlotView): void {
   if (key === v.plantKey) return
   v.plantKey = key
   detachPlantVfx(`av:${v.slotId}`)
-  if (v.plant !== null) { questionShown.delete(v.plant); engine.removeEntity(v.plant); v.plant = null }
+  // retirePlant (not a bare removeEntity): every Avenue flower is Rare+ and carries the
+  // pulse GltfNodeModifiers override, and removing an entity with that still on makes the
+  // Unity explorer's ResetMaterialSystem throw on every recall/tidy/replace (2026-09-28).
+  if (v.plant !== null) { questionShown.delete(v.plant); retirePlant(v.plant); v.plant = null }
   if (!v.owner) { setWildBloom(v); return }
   const species = plantSpeciesById(v.flower)
   if (!species) return
@@ -263,7 +267,8 @@ function onTap(v: SlotView): void {
     const armed = getArmedAvenueFlower()
     if (armed !== null) {
       armAvenuePlacement(null)
-      room.send('displayFlower', { slotId: v.slotId, flowerIndex: armed })
+      const id = keepsakeIdentity(armed)
+      if (id) room.send('displayFlower', { slotId: v.slotId, ...id })
       return
     }
     // 2. Shortcut: holding an ELIGIBLE flower puts it straight in. Holding an ineligible
@@ -272,7 +277,8 @@ function onTap(v: SlotView): void {
     const held = getHeld()
     const idx  = held ? heldFlowerIndex() : null
     if (held && idx !== null && held.rarityTier >= AVENUE_MIN_TIER) {
-      room.send('displayFlower', { slotId: v.slotId, flowerIndex: idx })
+      const id = keepsakeIdentity(idx)
+      if (id) room.send('displayFlower', { slotId: v.slotId, ...id })
       return
     }
     if (held && idx !== null) showToast(`Your ${speciesName(held.flower)} is a ${rarityTierById(held.rarityTier).name} — the Gallery takes ${rarityTierById(AVENUE_MIN_TIER).name} and up`, TOAST_MS, false)
@@ -336,7 +342,7 @@ export function setupAvenueSystem(): void {
   })
 
   registerAvenueApi({
-    display: (slotId, flowerIndex) => room.send('displayFlower', { slotId, flowerIndex }),
+    display: (slotId, flowerIndex) => { const id = keepsakeIdentity(flowerIndex); if (id) room.send('displayFlower', { slotId, ...id }) },
     recall:  (slotId) => room.send('recallFlower', { slotId }),
   })
   engine.addSystem(plaqueHomeSystem)
