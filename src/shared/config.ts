@@ -389,6 +389,12 @@ export const BOX_POSITIONS: ReadonlyArray<{ id: string; x: number; z: number; ro
   { id: 'box_141', x: -35.25, z: 12.75, rot: 90 },
   { id: 'box_142', x: -35.25, z: 11.25, rot: 90 },
 ]
+// ── Sky ──────────────────────────────────────────────────────
+/** The garden's resting sky: golden hour, all the time (KJ 2026-09-29). Seconds since 00:00
+ *  for SkyboxTime (43200 = noon, 86400 = midnight) — 16:00 puts the sun lowish and warm.
+ *  Nudge earlier for a higher sun, later (17:00 = 61200, 18:00 = 64800, 19:00 = 68400) for dusk. TUNING */
+export const GOLDEN_HOUR_S = 57_600
+
 // ── Onboarding (v2) ──────────────────────────────────────────
 /** KJ's ground arrow (2026-09-20): 20 tris, gold emissive, no texture, lying flat in
  *  the XZ plane — 2 m wide, 1.1 m deep. Used by the onboarding to point at the thing
@@ -402,8 +408,10 @@ export const ARROW_FORWARD_YAW = 180
 /** Metres back from the target, toward the player, where the arrow sits — far enough
  *  out that it lands on open ground rather than inside the plant. */
 export const ARROW_STANDOFF = 1.2
-/** Lift above the target's base so a flat decal doesn't z-fight with the ground. */
-export const ARROW_GROUND_LIFT = 0.05
+/** The trail floats at the PLAYER's hip, not on the ground (KJ 2026-09-29): a decal at the
+ *  target's feet was easy to lose against the grass and the planters. Metres above the
+ *  player's feet, so it follows them up and down the ledges. TUNING */
+export const ARROW_HIP_HEIGHT = 0.95
 /** Gentle bob, driven from the onboarding system's own tick. Deliberately NOT a looping
  *  Tween: the explorer writes every actively-tweened Transform back into the scene every
  *  frame, which is what tanked scene tick fps in the 09-18 perf pass. */
@@ -540,13 +548,14 @@ export const BEACON_PULSE_DEPTH    = 0.35  // TUNING — 0 = no pulse, 1 = fades
 // closed (X), skipped, or the whole tour ended; the bottom Tutorial button replays it.
 // Positions are world metres read off KJ's scene.glb (world = 8 - x, y, z + 24).
 export interface TutorialPoint { x: number; z: number }
-/** Arches KJ named in scene.glb (2026-09-27 export), centre of each opening. */
-export const ARCH_NORTH      = { x: 0.06,   z: 49.89 }   // garden → nursery
-export const ARCH_SHED       = { x: -17.24, z: 50.44 }   // nursery → potting shed
-export const ARCH_SOUTH      = { x: 31.89,  z: 49.21 }   // garden → Walk of Fame side
-export const ARCH_SOUTH_SOUTH = { x: 31.89, z: -1.21 }
-export const ARCH_FAME       = { x: 44.09,  z: 45.28 }   // into the Walk of Fame
-export const ARCH_FAME_SOUTH = { x: 44.09,  z: 2.56 }    // out of it, the far end
+/** Arches KJ named in scene.glb, centre of each opening — RE-READ 2026-09-29 from the
+ *  re-exported scene.glb (shed arch moved ~1 m; the Fame arches moved 6.41 m east with the stands). */
+export const ARCH_NORTH      = { x: 0.10,   z: 49.89 }   // garden → nursery
+export const ARCH_SHED       = { x: -17.42, z: 49.38 }   // nursery → potting shed
+export const ARCH_SOUTH      = { x: 31.90,  z: 49.21 }   // garden → Walk of Fame side
+export const ARCH_SOUTH_SOUTH = { x: 31.90, z: -1.21 }
+export const ARCH_FAME       = { x: 50.50,  z: 45.27 }   // into the Walk of Fame
+export const ARCH_FAME_SOUTH = { x: 50.50,  z: 2.56 }    // out of it, the far end
 /** A location step is done within this many metres (XZ) of its last waypoint. TUNING */
 export const TUTORIAL_ARRIVE_M   = 4
 /** Intermediate route waypoints count as passed within this. TUNING */

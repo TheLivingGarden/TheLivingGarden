@@ -4,7 +4,7 @@
 // The rare variant has to READ as rare. Retinting the bloom FX cool-white is
 // invisible in daylight, so the Moonlit Bloom changes the light itself:
 //   1. night falls   — SkyboxTime on the root entity rolls the sky to midnight;
-//                      removing it at bloom reset lets dawn break again
+//                      at bloom reset the sky rolls back to the garden's golden hour
 //   2. moon wisps    — slow glowing lights rise from the whole garden, only
 //                      readable because the sky is dark
 //   3. the moon glow — a breathing blue-white glow sprite that hangs over BLOOM_CENTER
@@ -20,7 +20,7 @@ import {
   Billboard, BillboardMode, SkyboxTime, TransitionMode, LightSource,
 } from '@dcl/sdk/ecs'
 import { isMobile } from '@dcl/sdk/platform'
-import { GARDEN_BOUNDS, BLOOM_CENTER, SPARKLE_SRC } from './shared/config'
+import { GARDEN_BOUNDS, BLOOM_CENTER, SPARKLE_SRC, GOLDEN_HOUR_S } from './shared/config'
 
 const NIGHT_TIME_S   = 0        // seconds since 00:00 — midnight
 const WISP_COUNT     = 28       // TUNING — pooled, billboard planes
@@ -165,6 +165,11 @@ function wispSystem(dt: number): void {
   }
 }
 
+/** The garden's resting sky — golden hour, held for everyone whatever the world clock says. */
+export function setGoldenHour(): void {
+  SkyboxTime.createOrReplace(engine.RootEntity, { fixedTime: GOLDEN_HOUR_S, transitionMode: TransitionMode.TM_FORWARD })
+}
+
 /** Night falls and the wisps rise. Safe to call again mid-bloom (late joiner re-send). */
 export function startMoonlight(): void {
   SkyboxTime.createOrReplace(engine.RootEntity, { fixedTime: NIGHT_TIME_S, transitionMode: TransitionMode.TM_FORWARD })
@@ -185,11 +190,11 @@ export function startMoonlight(): void {
   console.log('[Moonlight] night falls')
 }
 
-/** Dawn breaks: hand the sky back to the world clock and put the wisps and the glow away. */
+/** Dawn breaks: the sky returns to golden hour and the wisps and the glow are put away. */
 export function stopMoonlight(): void {
   if (!active) return
   active = false
-  SkyboxTime.deleteFrom(engine.RootEntity)
+  setGoldenHour()
   engine.removeSystem(SYSTEM_NAME)
   setBillboards(false)
   for (const w of wisps) {

@@ -59,6 +59,9 @@ const CREAM  = { r: 0.957, g: 0.918, b: 0.824, a: 1 }
 const DIM    = { r: 0.83,  g: 0.82,  b: 0.78,  a: 1 }
 const MOSS   = { r: 0.18,  g: 0.49,  b: 0.34,  a: 1 }
 /** Text that sits ON a rarity colour. Every tier colour is mid-to-bright, so ink reads. */
+/** Every number in the menu is opaque pure white (KJ 2026-09-29: some digits drew grey / with a dark
+ *  ghost, others white — the grey ones were the translucent cream/dim labels). */
+const WHITE  = { r: 1, g: 1, b: 1, a: 1 }
 const INK    = { r: 0.07,  g: 0.065, b: 0.06,  a: 1 }
 /** Rarity is carried by the WHOLE TILE, not by a plate behind the name. Two greys stacked
  *  inside each other read as an unfinished placeholder (KJ screenshots 2026-09-21), and a
@@ -207,9 +210,9 @@ export function SeedMenuUi(props: { px: (n: number) => number; fs: (n: number) =
       {/* Name and count on their own lines on purpose — "Uncommon 25" was wrapping into
           two ragged lines on a narrow tile, which looked like a bug rather than a layout. */}
       <Label value={rarityTierById(tier).name} fontSize={fs(13)} color={CREAM} textAlign="middle-center" textWrap="nowrap" uiTransform={{ width: '100%', height: fs(18) }} />
-      <Label value={`${count}`} fontSize={fs(17)} color={{ ...CREAM, a: 0.75 }} textAlign="middle-center" textWrap="nowrap" uiTransform={{ width: '100%', height: fs(22) }} />
+      <Label value={`${count}`} fontSize={fs(17)} color={WHITE} textAlign="middle-center" textWrap="nowrap" uiTransform={{ width: '100%', height: fs(22) }} />
       {/* The wait is part of what a rare IS, so it belongs at the moment you choose. */}
-      <Label value={`opens in ${shortGrowTime(growMsForTier(tier))}`} fontSize={fs(11)} color={{ ...DIM, a: 0.7 }} textAlign="middle-center" textWrap="nowrap" uiTransform={{ width: '100%', height: fs(16) }} />
+      <Label value={`opens in ${shortGrowTime(growMsForTier(tier))}`} fontSize={fs(11)} color={WHITE} textAlign="middle-center" textWrap="nowrap" uiTransform={{ width: '100%', height: fs(16) }} />
     </UiEntity>
   )
 
@@ -231,7 +234,7 @@ export function SeedMenuUi(props: { px: (n: number) => number; fs: (n: number) =
       {/* flexGrow, not a fixed plate: the name box takes whatever the thumbnail left, so
           there is never dead space under a short name nor spilled text under a long one. */}
       <UiEntity uiTransform={{ width: '100%', flexGrow: 1, alignItems: 'center', justifyContent: 'center', margin: { top: px(4) } }}>
-        <Label value={g.count > 1 ? `${speciesName(g.flower)} x${g.count}` : speciesName(g.flower)} fontSize={fs(11)} color={CREAM} textAlign="middle-center" textWrap="wrap" uiTransform={{ width: '100%' }} />
+        <Label value={g.count > 1 ? `${speciesName(g.flower)} x${g.count}` : speciesName(g.flower)} fontSize={fs(11)} color={WHITE} textAlign="middle-center" textWrap="wrap" uiTransform={{ width: '100%' }} />
       </UiEntity>
       <Label value="in hand" fontSize={fs(10)} color={{ ...MOSS, g: 0.8 }} textAlign="middle-center" textWrap="nowrap" uiTransform={{ display: isHeld(g) ? 'flex' : 'none', width: '100%', height: fs(13) }} />
     </UiEntity>
@@ -366,7 +369,7 @@ export function SeedMenuUi(props: { px: (n: number) => number; fs: (n: number) =
       <UiEntity uiTransform={{ width: px(96), height: px(40), alignItems: 'center', justifyContent: 'center', borderRadius: px(20) }} uiBackground={{ color: cur > 0 ? RAISED : { ...RAISED, a: 0.03 } }} onMouseDown={() => go(-1)}>
         <Label value="Prev" fontSize={fs(15)} color={cur > 0 ? CREAM : { ...DIM, a: 0.4 }} textAlign="middle-center" uiTransform={{ width: '100%', height: '100%' }} />
       </UiEntity>
-      <Label value={`${cur + 1} / ${count}`} fontSize={fs(15)} color={DIM} textAlign="middle-center" uiTransform={{ height: '100%' }} />
+      <Label value={`${cur + 1} / ${count}`} fontSize={fs(15)} color={WHITE} textAlign="middle-center" uiTransform={{ height: '100%' }} />
       <UiEntity uiTransform={{ width: px(96), height: px(40), alignItems: 'center', justifyContent: 'center', borderRadius: px(20) }} uiBackground={{ color: cur < count - 1 ? RAISED : { ...RAISED, a: 0.03 } }} onMouseDown={() => go(1)}>
         <Label value="Next" fontSize={fs(15)} color={cur < count - 1 ? CREAM : { ...DIM, a: 0.4 }} textAlign="middle-center" uiTransform={{ width: '100%', height: '100%' }} />
       </UiEntity>
@@ -419,8 +422,8 @@ export function SeedMenuUi(props: { px: (n: number) => number; fs: (n: number) =
 
           {/* right: counts, Gallery note, rarity filters (each on its own colour, so the row doubles as the legend) */}
           <UiEntity uiTransform={railT}>
-            <Label value={`${getFlowers().length} kept`} fontSize={fs(17)} color={CREAM} textAlign="middle-left" textWrap="nowrap" uiTransform={{ width: '100%', height: fs(26) }} />
-            <Label value={`${speciesFound}/${PLANT_SPECIES.length} species discovered`} fontSize={fs(14)} color={DIM} textAlign="middle-left" textWrap="nowrap" uiTransform={{ width: '100%', height: fs(22), margin: { bottom: px(6) } }} />
+            <Label value={`${getFlowers().length} kept`} fontSize={fs(17)} color={WHITE} textAlign="middle-left" textWrap="nowrap" uiTransform={{ width: '100%', height: fs(26) }} />
+            <Label value={`${speciesFound}/${PLANT_SPECIES.length} species discovered`} fontSize={fs(14)} color={WHITE} textAlign="middle-left" textWrap="nowrap" uiTransform={{ width: '100%', height: fs(22), margin: { bottom: px(6) } }} />
             <Label value={avenueSlot === null ? '' : eligible.length > 0 ? `${eligible.length} of your flowers can go in the Gallery` : `None of your flowers qualify yet — ${rarityTierById(AVENUE_MIN_TIER).name} and up only`} fontSize={fs(14)} color={CREAM} textAlign="middle-left" textWrap="wrap" uiTransform={{ display: avenueSlot !== null ? 'flex' : 'none', width: '100%', height: fs(40), margin: { bottom: px(6) } }} />
             <UiEntity uiTransform={{ display: ownedTiers.length > 1 ? 'flex' : 'none', width: '100%', flexDirection: 'row', flexWrap: 'wrap', margin: { top: px(4) } }}>
               {filterChip('all', 'All', null, CREAM)}
@@ -487,7 +490,7 @@ export function SeedMenuUi(props: { px: (n: number) => number; fs: (n: number) =
 
         <UiEntity uiTransform={railT}>
           <UiEntity uiTransform={{ width: '100%', height: fs(30), flexDirection: 'row', alignItems: 'center' }}>
-            <Label value={`${speciesFound} of ${PLANT_SPECIES.length} species`} fontSize={fs(15)} color={CREAM} textAlign="middle-left" textWrap="nowrap" uiTransform={{ flexGrow: 1, height: '100%' }} />
+            <Label value={`${speciesFound} of ${PLANT_SPECIES.length} species`} fontSize={fs(15)} color={WHITE} textAlign="middle-left" textWrap="nowrap" uiTransform={{ flexGrow: 1, height: '100%' }} />
             {/* The earned title, if any — the trophy half of Fin's "trophy system". */}
             <UiEntity uiTransform={{ display: earnedTitle ? 'flex' : 'none', height: px(24), padding: { left: px(10), right: px(10) }, alignItems: 'center', justifyContent: 'center', borderRadius: px(12) }} uiBackground={{ color: { r: 0.98, g: 0.78, b: 0.46, a: 1 } }}>
               <Label value={earnedTitle} fontSize={fs(12)} color={INK} textAlign="middle-center" textWrap="nowrap" uiTransform={{ height: '100%' }} />
@@ -501,7 +504,7 @@ export function SeedMenuUi(props: { px: (n: number) => number; fs: (n: number) =
               collection did not scratch (Fin 2026-09-21) — so the Almanac states it. */}
           <Label
             value={goal ? `Next: ${goal.title} at ${milestoneTarget(goal)} species — ${milestoneTarget(goal) - speciesFound} to go` : 'Every flower in the garden found.'}
-            fontSize={fs(13)} color={{ ...CREAM, a: 0.8 }} textAlign="top-left" textWrap="wrap"
+            fontSize={fs(13)} color={WHITE} textAlign="top-left" textWrap="wrap"
             uiTransform={{ width: '100%', height: fs(wide ? 40 : 22), margin: { bottom: px(8) } }}
           />
           {/* Legends: the hand-made Mythic and Unique plants. Their own count, kept OUT of the species ladder above. */}
@@ -516,12 +519,12 @@ export function SeedMenuUi(props: { px: (n: number) => number; fs: (n: number) =
           {/* The long tail: every species in every rarity. Species alone runs out; this does not. */}
           <Label
             value={`${stampsFound()} of ${stampTotal()} rarity stamps`}
-            fontSize={fs(13)} color={{ ...CREAM, a: 0.7 }} textAlign="middle-left" textWrap="nowrap"
+            fontSize={fs(13)} color={WHITE} textAlign="middle-left" textWrap="nowrap"
             uiTransform={{ width: '100%', height: fs(20), margin: { bottom: px(2) } }}
           />
           <Label
             value={(() => { const n = nextStampMilestone(stampsFound()); return n ? `Next: ${n.title} at ${stampMilestoneTarget(n)} stamps - ${stampMilestoneTarget(n) - stampsFound()} to go` : 'Every rarity stamp collected.' })()}
-            fontSize={fs(13)} color={{ ...CREAM, a: 0.85 }} textAlign="top-left" textWrap="wrap"
+            fontSize={fs(13)} color={WHITE} textAlign="top-left" textWrap="wrap"
             uiTransform={{ width: '100%', height: fs(wide ? 40 : 22), margin: { bottom: px(8) } }}
           />
           <UiEntity uiTransform={{ display: selSpecies ? 'none' : 'flex', width: '100%', flexDirection: 'row', flexWrap: 'wrap' }}>

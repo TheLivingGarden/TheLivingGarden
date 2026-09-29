@@ -45,7 +45,7 @@ import { playSfx } from './sounds'
 import { triggerSparkle } from './sparkleSystem'
 import { PROP_LAYOUT } from './shared/layout'
 import {
-  ARROW_MODEL_SRC, ARROW_SCALE, ARROW_FORWARD_YAW, ARROW_STANDOFF, ARROW_GROUND_LIFT,
+  ARROW_MODEL_SRC, ARROW_SCALE, ARROW_FORWARD_YAW, ARROW_STANDOFF, ARROW_HIP_HEIGHT,
   ARROW_BOB_AMPLITUDE, ARROW_CHEVRON_MAX, ARROW_CHEVRON_SPACING, ARROW_WAVE_SPEED, ARROW_WAVE_LENGTH,
   BEACON_HEIGHT, BEACON_RADIUS, BEACON_COLOR, BEACON_ALPHA, BEACON_INTENSITY,
   BEACON_TAPER, BEACON_PULSE_PERIOD_S, BEACON_PULSE_DEPTH,
@@ -336,7 +336,7 @@ function drawTrail(player: Vector3, to: Vector3): void {
     const phase = (elapsed * ARROW_WAVE_SPEED - out) / ARROW_WAVE_LENGTH
     const bob   = (Math.sin(phase * Math.PI * 2) + 1) * 0.5 * ARROW_BOB_AMPLITUDE
     const t = Transform.getMutable(row[i])
-    t.position = Vector3.create(to.x + dx * out, to.y + ARROW_GROUND_LIFT + bob, to.z + dz * out)
+    t.position = Vector3.create(to.x + dx * out, player.y + ARROW_HIP_HEIGHT + bob, to.z + dz * out)
     t.rotation = rotation
   }
 }

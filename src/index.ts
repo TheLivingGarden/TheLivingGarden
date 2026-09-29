@@ -11,6 +11,7 @@ import { setupHallOfFame } from './hallOfFame'
 import { setupExamTable } from './examTable'
 import { setupGalleryThreads } from './galleryThreads'
 import { setupWaterStreakBadges } from './waterStreakBadgeSystem'
+import { setGoldenHour } from './moonlight'
 
 // Importing shared schemas + messages here ensures registerMessages()
 // and defineComponent() run on BOTH server and client before any
@@ -26,6 +27,7 @@ export async function main() {
   }
 
   // ── Client only ────────────────────────────────────────────
+  setGoldenHour()   // the resting sky (config GOLDEN_HOUR_S); the Moonlit Bloom rolls to night and back
   setupNotifications()
   setupWateringSystem()
   // AFTER setupWateringSystem: it calls room.clear() partway through, and any
