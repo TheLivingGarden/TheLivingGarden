@@ -377,16 +377,22 @@ function refreshAlmanac(): void {
     if (!sp) { setScale(tile.e, ZERO); tile.speciesId = ''; continue }
     const found = !!seen.get(sp.id)?.has(selTier)
     if (tile.speciesId !== sp.id || tile.found !== found) {
-      // SELF-LIT: the scene is at night and lit materials rendered every tile near-black. Found tiles glow at full
-      // strength, missing ones as a clearly dimmer silhouette, so the two read apart at a glance.
+      // SELF-LIT: the scene is at night and lit materials rendered every tile near-black, so found tiles glow at
+      // full strength. Missing ones are a PURE black silhouette (KJ 2026-09-29: black and transparent only, no
+      // grey detail): an UNLIT black material keeps the thumbnail's alpha cut-out and nothing else — no lighting,
+      // emissive or specular can lift it off black.
       const tex = Material.Texture.Common({ src: `assets/images/plantThumbs/${sp.id}.png` })
-      Material.setPbrMaterial(tile.e, {
-        texture: tex, emissiveTexture: tex,
-        albedoColor: found ? Color4.White() : Color4.create(0.12, 0.12, 0.12, 1),
-        emissiveColor: Color4.White(), emissiveIntensity: found ? 1.0 : 0.18,
-        transparencyMode: MaterialTransparencyMode.MTM_ALPHA_TEST, alphaTest: 0.5,
-        metallic: 0, roughness: 1,
-      })
+      if (found) {
+        Material.setPbrMaterial(tile.e, {
+          texture: tex, emissiveTexture: tex,
+          albedoColor: Color4.White(),
+          emissiveColor: Color4.White(), emissiveIntensity: 1.0,
+          transparencyMode: MaterialTransparencyMode.MTM_ALPHA_TEST, alphaTest: 0.5,
+          metallic: 0, roughness: 1,
+        })
+      } else {
+        Material.setBasicMaterial(tile.e, { texture: tex, diffuseColor: Color4.Black(), alphaTest: 0.5 })
+      }
       tile.speciesId = sp.id; tile.found = found
     }
     setScale(tile.e, { x: TILE, y: TILE, z: 0.04 })

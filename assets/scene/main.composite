@@ -4449,7 +4449,7 @@
         "543": {
           "json": {
             "src": "assets/scene/Models/scene/scene.glb",
-            "visibleMeshesCollisionMask": 0,
+            "visibleMeshesCollisionMask": 3,
             "invisibleMeshesCollisionMask": 3
           }
         },

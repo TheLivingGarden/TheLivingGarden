@@ -540,9 +540,10 @@ function uiComponent() {
           </UiEntity>
         )
         return (
-          // Just under the banner's tallest state (KJ 2026-09-27: at 22% it covered the explorer's
-          // interaction prompt, which sits at the screen centre); the banner never overlaps it.
-          <UiEntity uiTransform={{ positionType: 'absolute', position: { top: topPx + px(122) + px(GAP), left: 0 }, width: '100%', flexDirection: 'row', justifyContent: 'center' }}>
+          // Right at the top edge (KJ 2026-09-29: even under the banner's tallest state it reached the
+          // explorer's interaction prompt / the hold-to-water meter, which live at the screen centre). The
+          // banner is hidden while the tutorial runs (see `open` above), so nothing needs the 122 px under it.
+          <UiEntity uiTransform={{ positionType: 'absolute', position: { top: topPx + px(GAP), left: 0 }, width: '100%', flexDirection: 'row', justifyContent: 'center' }}>
             <UiEntity uiTransform={{ width: cardW, flexDirection: 'column', alignItems: 'center', padding: { left: px(28), right: px(28), top: px(14), bottom: px(18) }, borderRadius: px(26) }} uiBackground={{ color: { r: 0.07, g: 0.063, b: 0.055, a: 0.9 } }}>
               <UiEntity uiTransform={{ width: '100%', height: px(30), flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 }}>
                 {/* Progress dots: done gold, current cream, to come faint */}

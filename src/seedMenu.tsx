@@ -62,6 +62,9 @@ const MOSS   = { r: 0.18,  g: 0.49,  b: 0.34,  a: 1 }
 /** Every number in the menu is opaque pure white (KJ 2026-09-29: some digits drew grey / with a dark
  *  ghost, others white — the grey ones were the translucent cream/dim labels). */
 const WHITE  = { r: 1, g: 1, b: 1, a: 1 }
+/** An undiscovered species is a PURE black silhouette: the thumbnail's own alpha cut-out filled with
+ *  opaque black — nothing but black and transparent (KJ 2026-09-29). Never a translucent dark tint. */
+const SILHOUETTE = { r: 0, g: 0, b: 0, a: 1 }
 const INK    = { r: 0.07,  g: 0.065, b: 0.06,  a: 1 }
 /** Rarity is carried by the WHOLE TILE, not by a plate behind the name. Two greys stacked
  *  inside each other read as an unfinished placeholder (KJ screenshots 2026-09-21), and a
@@ -279,7 +282,7 @@ export function SeedMenuUi(props: { px: (n: number) => number; fs: (n: number) =
       uiBackground={{ color: e.found ? tileBg(e.bestTier) : e.legend ? { ...rarityTierById(e.bestTier).seedColor, a: 0.1 } : { r: 1, g: 1, b: 1, a: 0.03 } }}
       onMouseDown={() => { almanacSel = almanacSel === e.id ? null : e.id }}
     >
-      <UiEntity uiTransform={{ width: px(68), height: px(68) }} uiBackground={{ textureMode: 'stretch', texture: { src: thumbSrc(e.id) }, color: e.found ? { r: 1, g: 1, b: 1, a: 1 } : { r: 0, g: 0, b: 0, a: 0.55 } }} />
+      <UiEntity uiTransform={{ width: px(68), height: px(68) }} uiBackground={{ textureMode: 'stretch', texture: { src: thumbSrc(e.id) }, color: e.found ? { r: 1, g: 1, b: 1, a: 1 } : SILHOUETTE }} />
       <UiEntity uiTransform={{ width: '100%', flexGrow: 1, alignItems: 'center', justifyContent: 'center', margin: { top: px(4) } }}>
         <Label value={e.found ? (e.count > 1 ? `${e.name} x${e.count}` : e.name) : e.legend ? `${rarityTierById(e.bestTier).name} ???` : '???'} fontSize={fs(11)} color={e.found ? CREAM : { ...DIM, a: 0.45 }} textAlign="middle-center" textWrap="wrap" uiTransform={{ width: '100%' }} />
       </UiEntity>
@@ -303,7 +306,7 @@ export function SeedMenuUi(props: { px: (n: number) => number; fs: (n: number) =
   const almanacDetail = (e: AlmanacEntry) => (
     <UiEntity uiTransform={{ width: '100%', flexDirection: 'column' }}>
       <UiEntity uiTransform={{ width: '100%', flexDirection: 'row', alignItems: 'center' }}>
-        <UiEntity uiTransform={{ width: px(72), height: px(72), margin: { right: px(12) } }} uiBackground={{ textureMode: 'stretch', texture: { src: thumbSrc(e.id) }, color: e.found ? { r: 1, g: 1, b: 1, a: 1 } : { r: 0, g: 0, b: 0, a: 0.55 } }} />
+        <UiEntity uiTransform={{ width: px(72), height: px(72), margin: { right: px(12) } }} uiBackground={{ textureMode: 'stretch', texture: { src: thumbSrc(e.id) }, color: e.found ? { r: 1, g: 1, b: 1, a: 1 } : SILHOUETTE }} />
         {/* Explicit heights: a Label with no height collapses to zero and the next child
             draws straight over it — which is what stacked the name on the count. */}
         <UiEntity uiTransform={{ flexGrow: 1, flexDirection: 'column', justifyContent: 'center' }}>

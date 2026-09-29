@@ -3,7 +3,7 @@
 // Runs headlessly alongside the scene. Owns all game state:
 //   • Plant watered/expired state  (PlantSync component, persisted)
 //   • Bloom trigger + reset        (threshold check + timer)
-//   • Boards, tributes, planters, pouches, keepsakes, almanac (persisted)
+//   • Boards, planters, pouches, keepsakes, almanac (persisted)
 // Memory is authoritative. persistence.ts holds every save until its key has been
 // read, orders and retries them, and never reports a failed read as an empty key.
 // =============================================================
@@ -47,9 +47,6 @@ import {
   bloomScaleFor,
   flairTier,
   WEEKLY_RESET_MS,
-  TRIBUTE_MILESTONE,
-  TRIBUTE_PLOTS,
-  FOUNDING_TRIBUTES,
   rollBloomVariant,
   bloomVariantById,
   ADMIN_ADDRESSES,
@@ -105,6 +102,7 @@ const plantEntities   = new Map<string, Entity>()   // plantId → entity
 const knownPlayers    = new Set<Entity>()            // entities seen this session
 const playerAddresses = new Map<Entity, string>()    // entity → address (for disconnect cleanup)
 const syncRateLimits  = new Map<string, number>()    // address → last requestFullSync ms
+const unverifiedReach  = new Set<string>()             // lowercase addresses the server holds no position for (log once)
 const lastWaterAt     = new Map<string, number>()    // lowercase address → last ACCEPTED waterPlant ms
 const lastTendAt      = new Map<string, number>()    // lowercase address → last ACCEPTED tendBox ms
 
@@ -149,8 +147,8 @@ const cycleSeedsBy  = new Map<string, { seeds: number; rares: number }>()       
 // reads back as LEGACY_VERSION.
 const V = {
   plants: 1, leaderboard: 1, lifetimeTop: 1, leaderboardResetAt: 1,
-  tributes: 1, boxes: 1, lastSeen: 1, planterDraft: 1,
-  avenue: 1, plantDraft: 1, tributeDraft: 1,
+  boxes: 1, lastSeen: 1, planterDraft: 1,
+  avenue: 1, plantDraft: 1,
 } as const
 
 /** Shape version per player-scoped key, stamped when its writer is created. */
@@ -163,14 +161,12 @@ const plantsWriter       = createSceneWriter('plants',             V.plants)
 const leaderboardWriter  = createSceneWriter('leaderboard',        V.leaderboard)
 const lifetimeTopWriter  = createSceneWriter('lifetimeTop',        V.lifetimeTop)
 const resetAtWriter      = createSceneWriter('leaderboardResetAt', V.leaderboardResetAt)
-const tributesWriter     = createSceneWriter('tributes',           V.tributes)
 const boxesWriter        = createSceneWriter('boxes',              V.boxes)
 // Beds (shared/beds.ts): groups of four planters that belong to whoever planted in them. Derived from the baked layout, no storage.
 const beds = makeBeds(BOX_POSITIONS, BED_FILL_ORIGIN, BEDS_EXPLICIT)
 const lastSeenWriter     = createSceneWriter('lastSeen',           V.lastSeen)
 const planterDraftWriter = createSceneWriter('planterDraft',       V.planterDraft)   // admin overwrite target, never merged
 const plantDraftWriter   = createSceneWriter('plantDraft',         V.plantDraft)     // admin overwrite target, never merged
-const tributeDraftWriter = createSceneWriter('tributeDraft',       V.tributeDraft)   // admin overwrite target, never merged
 const avenueWriter       = createSceneWriter('avenue',             V.avenue)
 
 /** A draft is stored as the JSON text the editor sent. One written before versioning
@@ -329,13 +325,12 @@ function mergeBoard(board: Map<string, LeaderboardEntry>, records: unknown): voi
   }
 }
 
-// Stored totals are ADDED to live ones, so the boards may be merged only once. A retry
-// that happens because only the tributes read failed must not merge them again.
+// Stored totals are ADDED to live ones, so the boards may be merged only once.
 let boardsMerged = false
 
-/** Load (or late-load) both boards, the reset clock and the tributes. False when a read failed. */
+/** Load (or late-load) both boards and the reset clock. False when a read failed. */
 async function loadLeaderboard(): Promise<boolean> {
-  if (boardsMerged) return loadTributes()   // boards are already in; only tributes were missing
+  if (boardsMerged) return true   // boards are already in
   const [board, legacy, top, resetAt] = await Promise.all([
     loadScene<BoardRecord[]>('leaderboard'),
     loadScene<BoardRecord[]>('lifetime'),      // legacy blob: read as a floor, never written
@@ -378,94 +373,7 @@ async function loadLeaderboard(): Promise<boolean> {
   ensureWeeklyReset()
   saveLeaderboard()
   refreshLifetimeTop()
-  return loadTributes()
-}
-
-// ── Tribute plants (Phase 5b, GDD §4.2) ──────────────────────
-// Earned automatically at TRIBUTE_MILESTONE lifetime waters; founding entries
-// come from config. Permanent: never touched by the weekly reset.
-interface TributeRecord {
-  address:     string   // '' for a founding honoree whose wallet isn't known yet
-  displayName: string
-  earnedAt:    number
-  plot:        number   // index into TRIBUTE_PLOTS
-  founding:    boolean
-  note:        string
-}
-let tributes: TributeRecord[] = []
-
-function nextFreePlot(): number {
-  const used = new Set(tributes.filter(t => t.plot >= 0).map(t => t.plot))
-  for (let i = 0; i < TRIBUTE_PLOTS.length; i++) if (!used.has(i)) return i
-  return -1
-}
-
-function saveTributes(): void {
-  tributesWriter.save(tributes)
-}
-
-function sendTributes(to?: string[]): void {
-  room.send('tributesUpdate', { json: JSON.stringify(tributes) }, to ? { to } : undefined)
-}
-
-/** Load (or late-load) the tributes. False when the read failed. Stored entries are
- *  merged in rather than replacing the list, so a grant made during an outage survives. */
-async function loadTributes(): Promise<boolean> {
-  const res = await loadScene<TributeRecord[]>('tributes')
-  if (!res.ok) { console.error('[Server] tributes: load failed — saves held until a reload succeeds'); return false }
-  for (const r of Array.isArray(res.value) ? res.value : []) {
-    const already = tributes.some(t => (r.address && t.address.toLowerCase() === r.address.toLowerCase()) || (t.founding && r.founding && t.displayName === r.displayName))
-    if (!already) tributes.push(r)
-  }
-  tributesWriter.enable()
-  let changed = false
-  // Retract any founding tribute no longer listed in FOUNDING_TRIBUTES (KJ 2026-09-22:
-  // "remove the tribute plaque and plant to Peter for now") — its plot frees up, and
-  // re-adding the honoree to the config list regrows it exactly as it did the first time.
-  const keptNames = new Set(FOUNDING_TRIBUTES.map(f => f.displayName))
-  const beforeCount = tributes.length
-  tributes = tributes.filter(t => !t.founding || keptNames.has(t.displayName))
-  if (tributes.length !== beforeCount) changed = true
-  for (const f of FOUNDING_TRIBUTES) {
-    const address  = f.address.toLowerCase()
-    const existing = tributes.find(t => t.founding && t.displayName === f.displayName)
-    if (existing) {
-      // Config is the source of truth for the honoree's wallet and note
-      if (existing.address !== address || existing.note !== f.note) { existing.address = address; existing.note = f.note; changed = true }
-    } else {
-      const plot = nextFreePlot()
-      if (plot < 0) { console.error(`[Server] No free tribute plot for founding honoree ${f.displayName}`); continue }
-      tributes.push({ address, displayName: f.displayName, earnedAt: Date.now(), plot, founding: true, note: f.note })
-      changed = true
-    }
-    // Once the wallet is known, their lifetime total must match the honour (golden flair)
-    if (address) {
-      const e = boardGet(lifetime, address)
-      if (!e || e.total < TRIBUTE_MILESTONE) {
-        boardSet(lifetime, address, { displayName: f.displayName, total: Math.max(e?.total ?? 0, TRIBUTE_MILESTONE) })
-        void saveLifetimeFor(address)   // honorees are rarely connected, so load-then-write
-      }
-    }
-  }
-  if (changed) saveTributes()
-  console.log(`[Server] Tributes: ${tributes.length} (${tributes.filter(t => t.founding).length} founding, ${TRIBUTE_PLOTS.length - tributes.filter(t => t.plot >= 0).length} plots free)`)
   return true
-}
-
-/** Call after a lifetime total changes. Grows the plant the moment the milestone is crossed. */
-async function grantTributeIfEarned(rawAddress: string): Promise<void> {
-  const address = rawAddress.toLowerCase()   // tributes.address and founding honorees are both lowercase (see loadTributes)
-  const entry = boardGet(lifetime, address)
-  if (!entry || entry.total < TRIBUTE_MILESTONE) return
-  if (tributes.some(t => t.address === address)) return
-  // No free plot → the honour is still permanent: plot −1 = Tribute Register only.
-  const plot = nextFreePlot()
-  if (plot < 0) console.log(`[Server] ${entry.displayName} earned a tribute; all plots taken → register only (add TRIBUTE_HEDGE_PLOTS)`)
-  tributes.push({ address, displayName: entry.displayName, earnedAt: Date.now(), plot, founding: false, note: '' })
-  saveTributes()
-  sendTributes()
-  room.send('notice', { text: `${entry.displayName}'s tribute plant has grown - ${TRIBUTE_MILESTONE} lifetime waters` })
-  console.log(`[Server] Tribute granted: ${entry.displayName} → plot ${plot}`)
 }
 
 /** Clears the weekly board once its reset moment has passed — runs at startup and
@@ -1907,7 +1815,6 @@ function playerJoinSystem(): void {
       await sendCollection(address)
       await sendDiscovered(address)
       await sendOnboarding(address)
-      sendTributes([address])
       sendAllAvenue([address])
       sendAllHeld([address])
       sendAllStreaks([address])
@@ -1966,13 +1873,12 @@ export async function server(): Promise<void> {
   console.log(`[Server] ${plantEntities.size} plants registered`)
 
   for (const p of BOX_POSITIONS) boxes.set(p.id, emptyBox(p.id))
-  for (const w of [planterDraftWriter, plantDraftWriter, tributeDraftWriter]) w.enable()   // admin overwrite targets; nothing to read first
+  for (const w of [planterDraftWriter, plantDraftWriter]) w.enable()   // admin overwrite targets; nothing to read first
 
   // Restore persisted state. Loads never throw; a key that could not be read starts
   // empty, keeps its saves held and is reloaded in the background until it can be
   // merged — so an outage at boot neither aborts server() nor lets the first save
-  // overwrite good data. Tributes load with the boards: they seed lifetime totals
-  // for founding honorees, so they must follow them.
+  // overwrite good data.
   const loads: Array<[string, () => Promise<boolean>]> = [
     ['plants',      loadPlantStates],
     ['leaderboard', loadLeaderboard],
@@ -2013,21 +1919,34 @@ export async function server(): Promise<void> {
       const now = Date.now()
 
       // ── Anti-cheat (2026-09-28): waterPlant had no cooldown or distance check before —
-      // a scripted client could farm the 1000-water tribute milestone alone. Both are
+      // a scripted client could farm the lifetime-water flair tiers alone. Both are
       // deliberately loose (WATER_COOLDOWN_MS/WATER_REACH_M in shared/config.ts): this is
       // catching a scripted loop or a water sent from across the garden, never a human's
       // real tap rate or aim. ────────────────────────────────────
       const addrKey = playerAddress.toLowerCase()
       if (now - (lastWaterAt.get(addrKey) ?? 0) < WATER_COOLDOWN_MS) {
         breakStreak(playerAddress)
+        console.log(`[Server] waterPlant REJECTED too_soon: ${plantId} by ${playerAddress}`)
         room.send('waterRejected', { plantId, reason: 'too_soon' }, { to: [playerAddress] })
         return
       }
       const plantPos  = plantPosition(plantId, entity)
       const playerEnt = entityForAddress(playerAddress)
       const playerPos = playerEnt ? Transform.getOrNull(playerEnt)?.position : null
-      if (!plantPos || !playerPos || Vector3.distance(plantPos, playerPos) > WATER_REACH_M) {
+      // A player the server holds NO position for cannot be measured, so the reach check is skipped for them
+      // (the cooldown above still applies). Seen 2026-09-29: a phone client in local preview never got a
+      // Transform onto the server entity ("player none"), so every pour read as "too far" and was rolled back.
+      // A client cannot make the server's own reading disappear, so anyone with a position is still checked.
+      if (!playerPos && !unverifiedReach.has(addrKey)) {
+        unverifiedReach.add(addrKey)
+        console.log(`[Server] no server-side position for ${playerAddress} — reach check skipped for them this session`)
+      }
+      if (!plantPos || (playerPos && Vector3.distance(plantPos, playerPos) > WATER_REACH_M)) {
         breakStreak(playerAddress)
+        // Logged with both positions: a mobile client whose Transform never reaches the server reads as
+        // "too far" from every plant (KJ 2026-09-29: mobile local-preview pours were rolled back).
+        const fmt = (v: { x: number; y: number; z: number } | null | undefined) => v ? `(${v.x.toFixed(1)}, ${v.y.toFixed(1)}, ${v.z.toFixed(1)})` : 'none'
+        console.log(`[Server] waterPlant REJECTED too_far: ${plantId} by ${playerAddress} — plant ${fmt(plantPos)}, player ${fmt(playerPos)}${playerEnt ? '' : ' (no server entity for this address)'}`)
         room.send('waterRejected', { plantId, reason: 'too_far' }, { to: [playerAddress] })
         return
       }
@@ -2041,6 +1960,7 @@ export async function server(): Promise<void> {
       // the old expiry timer bails on its own because wateredAt moves.
       if (ps.isWatered && expiresInMs(plantId) > EXPIRY_TELL_MS) {
         breakStreak(playerAddress)
+        console.log(`[Server] waterPlant REJECTED already_watered: ${plantId} by ${playerAddress}`)
         room.send('waterRejected', { plantId, reason: 'already_watered' }, { to: [playerAddress] })
         return
       }
@@ -2086,7 +2006,6 @@ export async function server(): Promise<void> {
         sendNotice(playerAddress, flairTierMessage(tier, boardGet(lifetime, playerAddress)?.total ?? 0))
         console.log(`[Server] ${displayName} reached flair tier ${tier}`)
       }
-      await grantTributeIfEarned(playerAddress)
       broadcastLeaderboard()
       console.log(`[Server] ${plantId} watered by ${playerAddress} (${getWateredCount()}/${currentBloomThreshold()} garden)`)
       checkBloomThreshold()
@@ -2516,29 +2435,6 @@ export async function server(): Promise<void> {
     }
   })
 
-  // ── Message: adminTributeDraft (tribute plot editor) — save / load the draft ──
-  // Baked into TRIBUTE_HERO_PLOTS by hand afterwards; this Storage copy only survives
-  // restarts. The console line below is the one that actually gets baked.
-  onRoomMessage<{ json: string }>('adminTributeDraft', async (data, address) => {
-    if (!isAdmin(address)) { sendNotice(address, 'Test tools: admin wallet only'); return }
-    if (!data.json) {
-      let saved = ''
-      saved = draftText(await loadScene<unknown>('tributeDraft'))
-      room.send('tributeDraft', { json: saved }, { to: [address] })
-      return
-    }
-    try {
-      const list = JSON.parse(data.json)
-      if (!Array.isArray(list) || list.length > 100) throw new Error('not a list of ≤ 100 plots')
-      tributeDraftWriter.save(data.json)
-      const ts = list.map((p: { x: number; z: number; rot: number }) => `  { x: ${p.x}, z: ${p.z}, rot: ${p.rot} },`).join('\n')
-      console.log(`[Server] Tribute draft saved: ${list.length} plots — bake into TRIBUTE_HERO_PLOTS:\n${ts}`)
-    } catch (err) {
-      sendNotice(address, 'Tribute draft rejected')
-      console.error('[Server] adminTributeDraft rejected:', err)
-    }
-  })
-
   // ── Message: adminPlanterDraft (planter layout tool) — save / load the draft layout ──
   // Baked into BOX_POSITIONS by hand afterwards; this Storage copy only survives restarts.
   onRoomMessage<{ json: string }>('adminPlanterDraft', async (data, address) => {
@@ -2559,7 +2455,7 @@ export async function server(): Promise<void> {
     }
   })
 
-  // ── Message: adminGrantWaters (test panel) — exercise flair tiers + tribute grant ──
+  // ── Message: adminGrantWaters (test panel) — exercise flair tiers ──
   onRoomMessage<{ amount: number }>('adminGrantWaters', async (data, address) => {
     if (!isAdmin(address)) { sendNotice(address, 'Test tools: admin wallet only'); return }
     const amount = Math.max(1, Math.min(1000, Math.floor(data?.amount ?? 0)))
@@ -2575,7 +2471,6 @@ export async function server(): Promise<void> {
     sendNotice(address, tier > tierBefore
       ? flairTierMessage(tier, total)
       : `[Test] +${amount} waters → ${total} lifetime`)
-    await grantTributeIfEarned(address)
   })
 
   // ── Message: forceWater80 (test panel) ──────────────────────
@@ -2634,7 +2529,6 @@ export async function server(): Promise<void> {
     await sendCollection(address)
     await sendDiscovered(address)
     await sendOnboarding(address)
-    sendTributes([address])
     sendAllAvenue([address])
     sendAllHeld([address])
     sendAllStreaks([address])
@@ -2680,6 +2574,12 @@ export async function server(): Promise<void> {
     saveLeaderboard()
     await saveLifetimeFor(address)
     broadcastLeaderboard([address])
+    // The nametag gets its NAME only from streakUpdate, which used to fire just on a streak change — so anyone
+    // without a perfect pour showed their wallet address (KJ 2026-09-29). Seed an entry (0) and announce it: this
+    // reaches everyone now, and sendAllStreaks hands it to later joiners.
+    const key = address.toLowerCase()
+    if (!waterStreak.has(key)) waterStreak.set(key, 0)
+    sendStreak(address)
     console.log(`[Server] Registered player: ${displayName} (${address})`)
   })
 

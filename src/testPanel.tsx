@@ -35,7 +35,6 @@ import { isLayoutToolOn, setLayoutTool, layoutCount, layoutSelectedInfo, layoutI
 import { isPerfOff, setPerfOff, perfLabel, getFpsAvg, resetFpsAvg, PerfToggle } from './potStressTest'
 import { isPropToolOn, setPropTool, propToolCount, propSelectedInfo, propIsCarrying, propSelectNearest, propPickUpOrDrop, propNudge, propRotateLeft, propRotateRight, propSnap90, propExport } from './propLayoutTool'
 import { isPlantToolOn, setPlantTool, plantToolCount, plantSelectedInfo, plantIsCarrying, plantSelectNearest, plantPickUpOrDrop, plantNudge, plantRotateLeft, plantRotateRight, plantSnap90, plantExport } from './plantLayoutTool'
-import { isTributeToolOn, setTributeTool, tributeCount, tributeSelectedInfo, tributeIsCarrying, tributeSelectNearest, tributePickUpOrDrop, tributeNudge, tributeRotateLeft, tributeRotateRight, tributeSnap90, tributeFaceMe, tributeExport } from './tributeLayoutTool'
 import {
   adminSpawnLocalSeed,
   adminSpawnSeedLadder,
@@ -308,7 +307,7 @@ export function TestPanelUi() {
           uiBackground={{ color: BTN_BLOOM }}
           onMouseDown={() => adminGrantWaters(100)}
         >
-          <Label value="Grant +100 lifetime waters (flair / tribute)" fontSize={12} color={WHITE} textAlign="middle-center" />
+          <Label value="Grant +100 lifetime waters (flair)" fontSize={12} color={WHITE} textAlign="middle-center" />
         </UiEntity>
 
         {/* Replays the whole tutorial — without this, whoever builds it can never see it
@@ -456,34 +455,6 @@ export function TestPanelUi() {
         <UiEntity uiTransform={{ display: isPropToolOn() ? 'flex' : 'none', width: '100%', flexDirection: 'row', margin: { bottom: 8 } }}>
           <SeedBtn label="Snap 90" color={BTN_OFF} onClick={propSnap90} />
           <SeedBtn label="Export to console" color={BTN_BLOOM} onClick={propExport} last />
-        </UiEntity>
-
-        {/* Tribute plot editor — same verbs as the planter editor. Edits the PLOTS, not
-            the planted roses: only the founding rose exists in-world, so ghost roses stand
-            at every plot while this is on (KJ 2026-09-21). */}
-        <UiEntity uiTransform={{ width: '100%', height: 36, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', margin: { bottom: 4 } }}>
-          <Label value={isTributeToolOn() ? `Tribute editor  (${tributeCount()})` : 'Tribute editor'} fontSize={12} color={WHITE} uiTransform={{ flexGrow: 1 }} />
-          <ToggleButton value={isTributeToolOn()} onChange={setTributeTool} />
-        </UiEntity>
-        <Label value={tributeSelectedInfo()} fontSize={11} color={MUTED} uiTransform={{ display: isTributeToolOn() ? 'flex' : 'none', width: '100%', height: 18, margin: { bottom: 4 } }} />
-        <UiEntity uiTransform={{ display: isTributeToolOn() ? 'flex' : 'none', width: '100%', flexDirection: 'row', margin: { bottom: 4 } }}>
-          <SeedBtn label="Select nearest" color={BTN_OFF} onClick={tributeSelectNearest} />
-          <SeedBtn label={tributeIsCarrying() ? "Drop" : "Pick up"} color={BTN_ON} onClick={tributePickUpOrDrop} last />
-        </UiEntity>
-        <UiEntity uiTransform={{ display: isTributeToolOn() ? 'flex' : 'none', width: '100%', flexDirection: 'row', margin: { bottom: 4 } }}>
-          <SeedBtn label="Nudge fwd" color={BTN_OFF} onClick={() => tributeNudge('fwd')} />
-          <SeedBtn label="Nudge back" color={BTN_OFF} onClick={() => tributeNudge('back')} />
-          <SeedBtn label="Nudge left" color={BTN_OFF} onClick={() => tributeNudge('left')} />
-          <SeedBtn label="Nudge right" color={BTN_OFF} onClick={() => tributeNudge('right')} last />
-        </UiEntity>
-        <UiEntity uiTransform={{ display: isTributeToolOn() ? 'flex' : 'none', width: '100%', flexDirection: 'row', margin: { bottom: 4 } }}>
-          <SeedBtn label="Turn -15" color={BTN_OFF} onClick={tributeRotateLeft} />
-          <SeedBtn label="Turn +15" color={BTN_OFF} onClick={tributeRotateRight} />
-          <SeedBtn label="Snap 90" color={BTN_OFF} onClick={tributeSnap90} />
-          <SeedBtn label="Face me" color={BTN_OFF} onClick={tributeFaceMe} last />
-        </UiEntity>
-        <UiEntity uiTransform={{ display: isTributeToolOn() ? 'flex' : 'none', width: '100%', flexDirection: 'row', margin: { bottom: 8 } }}>
-          <SeedBtn label="Save / export" color={BTN_BLOOM} onClick={tributeExport} last />
         </UiEntity>
         </UiEntity>
 

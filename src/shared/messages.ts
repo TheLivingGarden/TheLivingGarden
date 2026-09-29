@@ -94,8 +94,6 @@ export const room = registerMessages({
   giftReceived:     Schemas.Map({ from: Schemas.String, flower: Schemas.String, rarityTier: Schemas.Number }),
   /** Server → player: short feedback toast (rejections and confirmations). Broadcast when untargeted. */
   notice:           Schemas.Map({ text: Schemas.String }),
-  /** Server → all / joining player: every tribute plant (Phase 5b). json = TributeRecord[]. */
-  tributesUpdate:   Schemas.Map({ json: Schemas.String }),
 
   // ── The Avenue (design/communal-planters.md) ─────────────
   /** One Avenue slot's state — broadcast on change, sent per slot on join/full sync.
@@ -214,12 +212,8 @@ export const room = registerMessages({
   /** Test-panel only — wipe MY onboarding record so the whole tutorial replays. Without
    *  this, whoever built the tutorial can never see it again after doing it once. */
   adminResetOnboarding: Schemas.Map({}),
-  /** Tribute plot editor. Empty json = "send me the saved draft"; otherwise save this one.
-   *  A DRAFT only — deploys read TRIBUTE_HERO_PLOTS, never this. */
-  adminTributeDraft: Schemas.Map({ json: Schemas.String }),
-  tributeDraft:      Schemas.Map({ json: Schemas.String }),
   /** Plant layout editor — the 38 plants players water. Same draft/bake contract as the
-   *  planter and tribute tools: deploys read PLANT_LAYOUT, never this. */
+   *  planter tool: deploys read PLANT_LAYOUT, never this. */
   adminPlantDraft:   Schemas.Map({ json: Schemas.String }),
   plantDraft:        Schemas.Map({ json: Schemas.String }),
   /** Test-panel only — tells the server to bypass the daily limit for this player. */
@@ -227,7 +221,7 @@ export const room = registerMessages({
   /** Test-panel only — triggers bloom on the server so all clients sync correctly.
    *  variant: '' = roll normally; a BLOOM_VARIANTS id forces that variant at full scale. */
   forceBloom:       Schemas.Map({ variant: Schemas.String }),
-  /** Test-panel only — adds lifetime (+weekly) waters through the REAL flair/tribute path. */
+  /** Test-panel only — adds lifetime (+weekly) waters through the REAL flair path. */
   adminGrantWaters: Schemas.Map({ amount: Schemas.Number }),
   /** Test-panel only — waters exactly enough plants to reach the 80% bloom threshold. */
   forceWater80:     Schemas.Map({}),

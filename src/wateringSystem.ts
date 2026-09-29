@@ -64,7 +64,6 @@ import { setupPlayerTrailSystem, startPlayerTrail, stopPlayerTrail } from './pla
 import { setupSeedSystem } from './seedSystem'
 import { setupBoxSystem } from './boxSystem'
 import { setupPlanterLayoutTool } from './planterLayoutTool'
-import { setupTributeSystem } from './tributeSystem'
 import { setupAvenueSystem } from './avenueSystem'
 import { PLANT_LAYOUT } from './shared/layout'
 import { Quaternion, Color4 } from '@dcl/sdk/math'
@@ -1573,7 +1572,6 @@ export function setupWateringSystem(): void {
   setupSeedSystem()
   setupBoxSystem()
   setupPlanterLayoutTool()   // planter editor (admin): re-applies the saved layout draft
-  setupTributeSystem()
   setupAvenueSystem()        // the Avenue (entrance wall planters) — same post-room.clear() window
 
   room.onMessage('notifyServerTime', (data) => {
@@ -1949,7 +1947,7 @@ export function getWateringStatus() {
   }
 }
 
-/** Test panel: +amount lifetime waters through the server's real flair / tribute path. */
+/** Test panel: +amount lifetime waters through the server's real flair path. */
 export function adminGrantWaters(amount: number): void {
   if (room.isReady()) room.send('adminGrantWaters', { amount })
 }

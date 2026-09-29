@@ -164,8 +164,8 @@ export const BLOOM_TRIGGER_COOLDOWN_MS = 65_000   // TUNING
 export const EXPIRY_TELL_MS = 20_000   // TUNING
 /** Server anti-cheat (2026-09-28): the minimum gap between two accepted waters from the
  *  same address, and how close (metres, scene-local) they must be standing to the plant.
- *  waterPlant had neither before — a scripted client could farm the 1000-water tribute
- *  milestone alone. Loose on purpose: never meant to catch a human's real tap rate or
+ *  waterPlant had neither before — a scripted client could farm the lifetime-water
+ *  flair tiers alone. Loose on purpose: never meant to catch a human's real tap rate or
  *  aim, just a scripted loop or a water sent from across the garden. */
 export const WATER_COOLDOWN_MS = 1_500   // TUNING
 export const WATER_REACH_M     = 4       // TUNING
@@ -1052,47 +1052,6 @@ export function flairIcon(tier: number): { src: string; tint: { r: number; g: nu
 }
 /** Weekly board cadence — the reset moment is shown in-world (GDD §4.3). */
 export const WEEKLY_RESET_MS = 7 * 24 * 60 * 60 * 1000
-
-// ── v2 Phase 5b: tribute plants (GDD §4.2 "week 3+": a permanent, personal mark) ──
-/** Lifetime waters that grow a permanent tribute plant with the player's name. */
-export const TRIBUTE_MILESTONE = 1000   // TUNING — GDD "TBD: threshold, ~1,000"
-/** Fixed memorial-bed plots, filled in the order tributes are earned (never placed
- *  dynamically — clutter would cheapen the founding rose). Add plots when the bed fills. */
-export interface TributePlot { x: number; z: number; rot: number }
-/** `rot` = Euler Y of the rose standing there. Placed in-world with the tribute editor
- *  (src/tributeLayoutTool.ts, test panel) and baked back here — the stored draft is only
- *  ever a draft, deploys read this list. */
-export const TRIBUTE_HERO_PLOTS: ReadonlyArray<TributePlot> = [
-  { x: 4.5, z: 21.5, rot: 0 }, { x: 5.7,  z: 21.5, rot: 0 }, { x: 6.9,  z: 21.5, rot: 0 }, { x: 8.1,  z: 21.5, rot: 0 },
-  { x: 9.3, z: 21.5, rot: 0 }, { x: 10.5, z: 21.5, rot: 0 }, { x: 11.7, z: 21.5, rot: 0 }, { x: 12.9, z: 21.5, rot: 0 },
-]
-/** Overflow plots once the hero bed is full — rendered COMPACT (one model, hover text,
- *  no plaque). Left EMPTY on purpose: the plants run along the garden's edges and the
- *  Blender layout is about to change, so these come from the new layout export, not
- *  from a generated row. Until then, tribute #9+ is register-only. */
-export const TRIBUTE_HEDGE_PLOTS: ReadonlyArray<TributePlot> = []
-/** All plant-bearing plots, hero first. A record with plot −1 lives on the register only. */
-export const TRIBUTE_PLOTS: ReadonlyArray<TributePlot> = [...TRIBUTE_HERO_PLOTS, ...TRIBUTE_HEDGE_PLOTS]
-/** The permanent roll of every tribute (one text entity, paged) — in front of the bed. */
-export const TRIBUTE_REGISTER_POS = { x: 8.7, y: 1.25, z: 20.3 } as const
-/** The register board is OFF for now (KJ 2026-09-22, removed with the founding tribute);
- *  flip to true and it comes back at TRIBUTE_REGISTER_POS unchanged. */
-export const TRIBUTE_REGISTER_ENABLED = false
-export interface FoundingTribute { displayName: string; address: string; note: string }
-/** Seeded on first run — v2 ships with the first tribute already grown (GDD §4.2).
- *  address: fill in the honoree's wallet when known → the server also seeds their
- *  lifetime total to TRIBUTE_MILESTONE so they carry golden flair on the boards.
- *  EMPTY for now (KJ 2026-09-22: "remove the tribute plaque and tribute plant to Peter
- *  for now") — server.ts's loadTributes() retracts any founding tribute no longer listed
- *  here, so this alone removes the plant + plaque + register line on the next server
- *  restart. Re-add the PeterParker entry below to regrow it exactly as before. */
-export const FOUNDING_TRIBUTES: ReadonlyArray<FoundingTribute> = [
-  // { displayName: 'PeterParker', address: '0xCE0A77432DC952460c6cA1B8d8cf54169db3e210', note: 'v1 gardener - reached 1,000 waters twice' },
-]
-/** GLB paths; empty = greybox stand-in. Founding gets a unique model (KJ's custom rose),
- *  every later tribute reuses ONE standard plant tinted per player + a plaque. */
-export const TRIBUTE_MODEL_FOUNDING = ''   // e.g. 'assets/scene/Models/tribute/peterparker_rose.glb'
-export const TRIBUTE_MODEL_STANDARD = ''
 
 // ── v2 Phase 4: harvest, gift, box-watering (GDD §3 step 5, §5 social loop) ──
 /** Planters a player may hold at once — growing AND displaying (GDD §3.1, 2026-09-18:
