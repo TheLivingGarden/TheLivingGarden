@@ -444,7 +444,7 @@ export function SeedMenuUi(props: { px: (n: number) => number; fs: (n: number) =
           <UiEntity uiTransform={{ width: wide ? undefined : '100%', height: px(48), flexDirection: 'row', alignItems: 'center' }}>
             {actionBtn(sel && isHeld(sel) ? 'Put away' : 'Hold', RAISED, CREAM, () => { if (sel) holdFlower(isHeld(sel) ? -1 : sel.lastIndex) }, false)}
             {actionBtn('Gift', MOSS, CREAM, () => { giftMode = true; giftPage = 0 }, false)}
-            {actionBtn(avenueSlot ? 'Display here' : 'Gallery…', sel && sel.rarityTier >= AVENUE_MIN_TIER ? MOSS : RAISED, sel && sel.rarityTier >= AVENUE_MIN_TIER ? CREAM : DIM, () => {
+            {actionBtn(avenueSlot ? 'Display here' : 'Display', sel && sel.rarityTier >= AVENUE_MIN_TIER ? MOSS : RAISED, sel && sel.rarityTier >= AVENUE_MIN_TIER ? CREAM : DIM, () => {
               if (!sel) return
               if (sel.rarityTier < AVENUE_MIN_TIER) { showToast(`The Rare Plant Gallery is for ${rarityTierById(AVENUE_MIN_TIER).name} flowers and up`, 4_000, false); return }
               // Opened FROM a slot: straight in, that slot was the choice. Opened from the

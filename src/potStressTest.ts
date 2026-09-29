@@ -14,7 +14,7 @@
 
 import { engine, Entity, Transform, MeshRenderer, GltfContainer, ColliderLayer, Material, TextShape, PointerEvents, PointerEventType, InputAction, Animator, timers, VisibilityComponent, GltfNodeModifiers } from '@dcl/sdk/ecs'
 import { Color4 } from '@dcl/sdk/math'
-import { BOX_MODEL_SRC, BOX_MODEL_SCALE, BOX_MODEL_RIM_Y, BALLOON_MODEL_SRC, BALLOON_ANIM_CLIPS } from './shared/config'
+import { BOX_MODEL_SRC, BOX_MODEL_SCALE, BOX_MODEL_RIM_Y, BALLOON_MODEL_SRC } from './shared/config'
 import { createSign, moveSign, removeSign, setupSignSystem, Sign } from './signs'
 import { setAllPlantersVisible } from './boxSystem'
 import { setDropsSuppressed, setAllPlantsVisible } from './wateringSystem'
@@ -153,7 +153,6 @@ export function spawnTestPots(): void {
       const balloon = engine.addEntity()
       Transform.create(balloon, { position: { x, y: 0, z }, scale: { x: BOX_MODEL_SCALE, y: BOX_MODEL_SCALE, z: BOX_MODEL_SCALE } })
       GltfContainer.create(balloon, { src: BALLOON_MODEL_SRC, visibleMeshesCollisionMask: ColliderLayer.CL_NONE, invisibleMeshesCollisionMask: ColliderLayer.CL_NONE })
-      timers.setTimeout(() => Animator.createOrReplace(balloon, { states: BALLOON_ANIM_CLIPS.map(clip => ({ clip, playing: true, loop: true })) }), 1_000)
       entities.push(balloon)
     }
     pots.push({ x, z, label: growing ? `Gardener ${n}'s seed\nopens in 7h ${n % 60}m` : 'Empty planter\nTap to plant' })

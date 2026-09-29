@@ -106,3 +106,29 @@ export function checkPlant(beds: ReadonlyArray<Bed>, info: BoxInfoFn, player: st
   if (mine) return { ok: false, reason: 'own_bed_first', bed: mine.id }
   return { ok: true }
 }
+
+/** Which OWNED bed to free so a newcomer can get a bed of their own (KJ 2026-09-29: with every bed owned, the "protected
+ *  while a free bed exists" rule stops protecting anyone and players spill into each other's plots).
+ *  A bed is only releasable when EVERY planter in it belongs to someone who is not connected and has been away at least
+ *  `minAwayMs` (never seen = away forever). Of those, the bed whose most recent owner visit is oldest goes first.
+ *  Returns null when nothing qualifies. `skip` = bed ids already tried this pass. */
+export function pickBedToRelease(
+  beds: ReadonlyArray<Bed>,
+  info: BoxInfoFn,
+  isConnected: (owner: string) => boolean,
+  lastSeenAt: (owner: string) => number,
+  now: number,
+  minAwayMs: number,
+  skip: ReadonlySet<number> = new Set(),
+): Bed | null {
+  let best: Bed | null = null, bestSeen = Infinity
+  for (const bed of beds) {
+    if (skip.has(bed.id)) continue
+    const owners = bed.boxIds.map(id => info(id)).filter((i): i is BoxOwnerInfo => !!i && !!i.owner)
+    if (owners.length === 0) continue                                   // already free
+    if (owners.some(o => isConnected(o.owner) || now - lastSeenAt(o.owner) < minAwayMs)) continue
+    const seen = Math.max(...owners.map(o => lastSeenAt(o.owner)))
+    if (seen < bestSeen) { bestSeen = seen; best = bed }
+  }
+  return best
+}

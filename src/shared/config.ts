@@ -564,20 +564,20 @@ export const TUTORIAL_DONE_MS    = 6_000   // the closing "you're set" moment
 
 /** The step cards, in order. `kind` says what finishes the step (onboarding.ts). */
 export const TUTORIAL_TEXT = {
-  water:   { title: 'Water the garden', body: 'Face a plant with a water drop, press and hold to pour, and let go in the green.' },
-  bloom:   { title: 'Wake the Bloom', body: 'Keep the garden above 80% and the giant flower in the centre bursts open. More gardeners, and rarer flowers on show in the Gallery, both raise your Luck boost — check it under the health meter.' },
+  water:   { title: 'Water a plant', body: 'Face a plant with a water drop, press and hold to pour, and let go in the green.' },
+  bloom:   { title: 'Water the garden', body: 'Keep the garden above 80% and the giant flower in the centre bursts open. More gardeners, and rarer flowers on show in the Gallery, both raise your Luck boost — check it under the health meter.' },
   seeds:   { title: 'Catch the seeds', body: 'A seed has landed - follow the arrows and walk into it to catch it.' },
   arch:    { title: 'To the nursery', body: 'Follow the arrows through the arch - that is where seeds are grown.' },
   shed:    { title: 'The potting shed', body: 'Your seeds live on this rack - the rarer ones glow.' },
   plot:    { title: 'Your plot', body: 'Tap a free planter in your bed to plant a seed. It opens on a real-world timer.' },
   plotLook:{ title: 'Your plot', body: 'This is your bed - your planters grow here. Plant a seed whenever you catch one.' },
-  tend:    { title: 'Tend your seedling', body: 'Tap your seedling to water it - each tend makes it grow faster.' },
+  tend:    { title: 'Water your seedling', body: 'Tap your seedling to water it - each water makes it grow faster.' },
   harvest: { title: 'Harvest your flower', body: 'Your flower has opened! Tap it to keep it.' },
   shelf:   { title: 'Your flowers', body: 'Every flower you harvest stands on this shelf. Hold one, or gift it to another gardener.' },
   toFame:  { title: 'The Rare Plant Gallery', body: 'Follow the arrows through the arches to the Rare Plant Gallery.' },
   fame:    { title: 'The Rare Plant Gallery', body: 'Only the rarest plants go on show here - and every one makes every Bloom\'s seeds rarer, for everyone. Tap a stand to display yours.' },
   loop:    { title: 'Seed shower', body: 'Head back and water the roses again - every Bloom brings a new seed shower.' },
-  done:    { title: 'You know the garden', body: 'Tap Tutorial any time to walk it again' },
+  done:    { title: 'You know the garden', body: 'Tap ? any time to walk it again' },
 } as const
 /** How long a tutorial planter is held for its player, and how often the client
  *  re-asks while it has no reservation (someone else may have taken the last one). */
@@ -604,8 +604,13 @@ export const TOON_HIGHLIGHT_SCALE = BOX_MODEL_SCALE * 1.03
  *  original combined layout exactly. Shown while a box holds a seed or an unharvested
  *  flower (v.owner truthy). The file has two 5 s loop clips, presumably one per balloon
  *  cluster — both are played simultaneously since it isn't confirmed which drives what. */
-export const BALLOON_MODEL_SRC   = 'assets/scene/Models/planterBalloon/planterBalloon.glb'
-export const BALLOON_ANIM_CLIPS  = ['balloons', 'balloons.001'] as const
+/** Static, un-skinned balloon in its raised pose (KJ 2026-09-29). Replaced planterBalloon.glb, whose skinned clip +
+ *  text Tweens cost too much to run on every planter. */
+export const BALLOON_MODEL_SRC   = 'assets/scene/Models/staticBalloon/StaticBalloon.glb'
+/** The ANIMATED balloon (skinned clip 'balloons' + text Tweens) — only a small pool of these is ever live, on the planters
+ *  nearest the player (boxSystem balloonPoolSystem); every other planter shows the static one. */
+export const BALLOON_ANIMATED_SRC = 'assets/scene/Models/planterBalloon/planterBalloon.glb'
+export const BALLOON_ANIM_CLIPS   = ['balloons', 'balloons.001'] as const
 /** KJ's seedling model (2026-09-17), stands in for the greybox sprout sphere while a
  *  box's seed is growing (unopened). The source file ships with no material — a
  *  `Material` component on the GltfContainer entity does NOT retint an imported mesh
@@ -643,9 +648,13 @@ export const BOX_GROW_MS = 2 * 60_000
  *  2-minute playtest base and a 4-hour production base then keep the same SHAPE, and
  *  there is still one knob to turn. Index = rarity tier (Common .. Unique). */
 export const BOX_GROW_TIER_MULT: ReadonlyArray<number> = [1, 1.5, 2, 2.5, 3, 4, 5, 6]   // TUNING
+/** Mythic and Unique are ABSOLUTE waits, not multiples of the base (KJ 2026-09-29): a day for a Mythic, three and a
+ *  half days for a Unique — the wait is part of what they are, and it stays put when BOX_GROW_MS is tuned. */
+export const LEGEND_GROW_MS: ReadonlyArray<number> = [24 * 3_600_000, 84 * 3_600_000]   // TUNING — tiers 6, 7
 export function growMsForTier(tier: number): number {
-  const i = Math.max(0, Math.min(BOX_GROW_TIER_MULT.length - 1, Math.round(tier) || 0))
-  return Math.round(BOX_GROW_MS * BOX_GROW_TIER_MULT[i])
+  const t = Math.max(0, Math.min(BOX_GROW_TIER_MULT.length - 1, Math.round(tier) || 0))
+  if (t >= 6) return LEGEND_GROW_MS[t - 6]
+  return Math.round(BOX_GROW_MS * BOX_GROW_TIER_MULT[t])
 }
 /** A visitor's watering shaves a FRACTION of that seed's own timer, not a flat amount:
  *  10% of a Common was the whole point of the gesture, and the same milliseconds off a
@@ -679,12 +688,16 @@ export function formatGrowTime(ms: number): string {
   const mins = Math.round(ms / 60_000)
   if (mins < 60) return `${mins} minute${mins === 1 ? '' : 's'}`
   const hrs = Math.round(mins / 60)
+  if (hrs >= 48) { const d = Math.floor(hrs / 24), h = hrs % 24; return h === 0 ? `${d} days` : `${d} days ${h} hours` }
   return `${hrs} hour${hrs === 1 ? '' : 's'}`
 }
 /** Compact form for a tile: "2m" / "90m" / "6h". */
 export function shortGrowTime(ms: number): string {
   const mins = Math.round(ms / 60_000)
-  return mins < 60 ? `${mins}m` : `${Math.round(mins / 60)}h`
+  if (mins < 60) return `${mins}m`
+  const hrs = Math.round(mins / 60)
+  if (hrs >= 48) { const d = Math.floor(hrs / 24), h = hrs % 24; return h === 0 ? `${d}d` : `${d}d ${h}h` }
+  return `${hrs}h`
 }
 
 // ── Rarity + plant species catalog (2026-09-18) ──────────────────────────────
@@ -1094,6 +1107,9 @@ export const BOX_CAP_DEFAULT       = 2   // TUNING
  *  tidied up — opened flower → their My flowers, growing seed → back to their pouch. */
 export const PLANTER_RESERVE_FREE    = 5                     // TUNING — at ~100 planters
 export const PLANTER_TIDY_MIN_AWAY_MS = 24 * 60 * 60 * 1000  // TUNING
+/** Free BEDS to keep in reserve (KJ 2026-09-29): with no free bed the plot protection stops protecting anyone and players
+ *  spill into each other's beds. Below this, a bed whose owners have all been away past PLANTER_TIDY_MIN_AWAY_MS is released. */
+export const BED_RESERVE_FREE = 2   // TUNING
 /** Keepsake collection size — a TECHNICAL backstop, not a gameplay limit (KJ 2026-09-19:
  *  "players can be hoarders"; was 20). The whole collection is stored and sent as one JSON
  *  list (~85 B per flower) on every harvest / gift / join, so this only guards payload size:

@@ -134,3 +134,42 @@ describe('makeBeds with explicit groups', () => {
     expect(makeBeds(ps, origin)).toEqual(deriveBeds(ps, origin))
   })
 })
+
+import { pickBedToRelease } from '../src/shared/beds'
+
+describe('releasing a bed so a newcomer can have one', () => {
+  const beds = [
+    { id: 1, boxIds: ['a1', 'a2'], cx: 0, cz: 0 },
+    { id: 2, boxIds: ['b1', 'b2'], cx: 5, cz: 0 },
+    { id: 3, boxIds: ['c1', 'c2'], cx: 9, cz: 0 },
+  ]
+  const DAY = 86_400_000, NOW = 100 * DAY
+  const owners: Record<string, string> = { a1: 'alice', a2: 'alice', b1: 'bob', c1: 'cara' }
+  const info = (id: string) => (owners[id] ? { owner: owners[id], ownerName: owners[id], plantedAt: 1 } : undefined)
+  const seen: Record<string, number> = { alice: NOW - 10 * DAY, bob: NOW - 3 * DAY, cara: NOW - 30 * DAY }
+  const pick = (connected: string[] = [], skip = new Set<number>()) =>
+    pickBedToRelease(beds, info, o => connected.includes(o), o => seen[o] ?? 0, NOW, DAY, skip)
+
+  it('frees the bed whose owner has been away longest', () => {
+    expect(pick()?.id).toBe(3)
+  })
+  it('never frees a bed whose owner is connected, or was seen within the minimum away time', () => {
+    expect(pick(['cara'])?.id).toBe(1)
+    seen.bob = NOW - 1000
+    expect(pick(['cara', 'alice'])).toBeNull()
+    seen.bob = NOW - 3 * DAY
+  })
+  it('does not touch a bed that is already free, and honours skip', () => {
+    expect(pick([], new Set([3, 1]))?.id).toBe(2)
+    expect(pick([], new Set([1, 2, 3]))).toBeNull()
+  })
+  it('will not free a bed while any planter in it belongs to someone still around', () => {
+    owners.c2 = 'dave'; seen.dave = NOW - 1000
+    expect(pick()?.id).toBe(1)
+    delete owners.c2
+  })
+  it('treats a never-seen owner as away forever', () => {
+    owners.b2 = 'ghost'
+    expect(pick([], new Set([1, 3]))?.id).toBe(2)
+  })
+})

@@ -19,8 +19,9 @@ import {
 import { Vector3 } from '@dcl/sdk/math'
 import { loadScene, loadPlayer, createSceneWriter, createPlayerWriter, KeyWriter, isStorableAddress, onSaveProblem } from './persistence'
 import { lastSeenToStore } from './lastSeen'
+import { reachVerdict } from './reach'
 import { chooseHandSeed } from './hand'
-import { makeBeds, checkPlant } from '../shared/beds'
+import { makeBeds, checkPlant, bedOwner, pickBedToRelease } from '../shared/beds'
 import { slimKeepsake, chunkCollection, MAX_SAFE_MESSAGE_BYTES } from '../shared/collection'
 import { PlantSync }          from '../shared/schemas'
 import { room }               from '../shared/messages'
@@ -79,6 +80,7 @@ import {
   PLANTER_RESERVE_TTL_MS,
   FINALE_RARE_TIER,
   PLANTER_RESERVE_FREE,
+  BED_RESERVE_FREE,
   PLANTER_TIDY_MIN_AWAY_MS,
   FLOWER_COLLECTION_CAP,
   BOX_WATER_MAX,
@@ -1480,6 +1482,15 @@ async function ensureFreePlanters(): Promise<void> {
       await tidyPlanter(b)
       free++
     }
+    // Then keep a few free BEDS too, not just free planters (a bed stays "owned" while any planter in it is planted).
+    const skip = new Set<number>()
+    while (beds.filter(b => bedOwner(b, bedInfo) === null).length < BED_RESERVE_FREE) {
+      const bed = pickBedToRelease(beds, bedInfo, isConnected, o => lastSeen.get(o.toLowerCase()) ?? 0, Date.now(), PLANTER_TIDY_MIN_AWAY_MS, skip)
+      if (!bed) break
+      skip.add(bed.id)
+      console.log(`[Server] Releasing Bed ${bed.id} — every owner has been away ${Math.round(PLANTER_TIDY_MIN_AWAY_MS / 3_600_000)}h+ and free beds were low`)
+      for (const id of bed.boxIds) { const b = boxes.get(id); if (b && b.owner) await tidyPlanter(b) }
+    }
   } finally { ensuringFree = false }
 }
 
@@ -1941,7 +1952,8 @@ export async function server(): Promise<void> {
         unverifiedReach.add(addrKey)
         console.log(`[Server] no server-side position for ${playerAddress} — reach check skipped for them this session`)
       }
-      if (!plantPos || (playerPos && Vector3.distance(plantPos, playerPos) > WATER_REACH_M)) {
+      const reach = reachVerdict(plantPos, playerPos, WATER_REACH_M)
+      if (reach === 'no_plant' || reach === 'too_far') {
         breakStreak(playerAddress)
         // Logged with both positions: a mobile client whose Transform never reaches the server reads as
         // "too far" from every plant (KJ 2026-09-29: mobile local-preview pours were rolled back).
@@ -2050,7 +2062,7 @@ export async function server(): Promise<void> {
     sendPouch(playerAddress)
     console.log(`[Server] ${name} caught the rainbow seed → tier ${tier} (${golden.gatheredBy.size} caught so far)`)
     room.send('seedGathered', { seedId, by: name, byAddress: playerAddress, rarityTier: tier }, { to: [playerAddress] })
-    room.send('notice', { text: `${name} caught the rainbow seed!` })   // everyone — a shared moment
+    room.send('notice', { text: `${name.length > 14 ? `${name.slice(0, 13)}…` : name} caught the rainbow seed!` })   // everyone — a shared moment
   }
 
   // ── Message: adminSpawnSeed (test panel) ────────────────────
@@ -2213,7 +2225,7 @@ export async function server(): Promise<void> {
       // change happened to resync it. A targeted boxState corrects v.tends/opensLocalAt
       // from server truth the same way every other box update already does.
       sendBox(b, [playerAddress])
-      sendNotice(playerAddress, 'It has had all the water it wants for now - tend it again when it grows')
+      sendNotice(playerAddress, 'It has had all the water it wants for now - water it again when it grows')
       return
     }
     lastTendAt.set(addrKey, now)

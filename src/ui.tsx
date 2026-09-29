@@ -49,6 +49,7 @@ type BannerState = 'idle' | 'countdown' | 'bloom'
 let bannerState:    BannerState = 'idle'
 let bannerCountdown = ''   // e.g. "42s" — kept current by the watering system's ticker
 let bannerBloomLabel = ''  // variant / scale-aware bloom headline
+let bannerBloomSub   = ''  // optional second line (rare variants say what is special, instead of a separate toast)
 let bannerHealth    = 0    // 0–1
 let playerCount     = 0
 let luckPercent     = 0    // 2026-09-28: how much rarer the next Bloom's seeds roll right now
@@ -58,11 +59,14 @@ let bloomRemainingFrac  = 1    // ring sweep during a bloom (1 → 0)
 let shownHealth   = 0          // eased toward bannerHealth so the ring sweeps instead of jumping
 let lastRenderAt  = 0
 
-// Banner opens on change, then folds away. Alpha-only fade.
+// The banner is PULL-ONLY now (KJ 2026-09-29, "clear and concise"): tapping the health ring toggles it.
+// It still opens by itself for the two moments that matter — the 80% countdown and the Bloom. A band
+// crossing or a gardener joining/leaving used to pop it open; they now just nudge the ring (one soft
+// gold pulse, alpha only) and the player chooses whether to read the detail.
 const BANNER_OPEN_MS  = 6_000
 const BANNER_BLOOM_MS = 12_000
 const FADE_MS         = 180
-let bannerOpenUntil = Date.now() + 9_000   // greet the player with context on load
+let bannerOpenUntil = 0
 let bannerWasOpen   = false
 let bannerFlipAt    = 0
 let healthBand      = -1
@@ -71,13 +75,28 @@ function openBanner(ms = BANNER_OPEN_MS): void {
   bannerOpenUntil = Math.max(bannerOpenUntil, Date.now() + ms)
 }
 
+// Ring nudge — "something changed, tap me". Alpha-only, no size tween (phone jitter).
+const NUDGE_MS = 1_800
+let ringNudgeAt = 0
+function nudgeRing(): void { ringNudgeAt = Date.now() }
+// "tap" cue under the ring until the first tap (or the first minute of the session).
+const RING_HINT_MS = 60_000
+const sessionStart = Date.now()
+let ringTapped = false
+function onRingTap(): void {
+  ringTapped = true
+  // Countdown / bloom hold the banner open on their own; tapping only toggles the resting states.
+  if (bannerState === 'idle' && bannerIsOpen(Date.now())) bannerOpenUntil = 0
+  else openBanner()
+}
+
 // ---------------------------------------------------------------
 // Public API — toasts and pills (stacked under the banner)
 // ---------------------------------------------------------------
 
 /** @param color optional text colour (e.g. a seed's rarity colour); default cream */
 export function showToast(text: string, durationMs: number, _large = false, color?: { r: number; g: number; b: number }): void {
-  toastText    = text
+  toastText    = text.length > 56 ? `${text.slice(0, 55)}…` : text   // a long line wrapped and pushed the pill down (KJ 2026-09-29)
   toastColor   = color ?? null
   toastVisible = true
   const gen    = ++toastGen
@@ -129,11 +148,12 @@ export function hidePersistent(): void { persistVisible = false }
 // ---------------------------------------------------------------
 
 export function showBannerIdle(): void {
-  if (bannerState !== 'idle') openBanner()
+  if (bannerState !== 'idle') nudgeRing()
   bannerState = 'idle'
 }
-export function showBannerBloom(label = ''): void {
+export function showBannerBloom(label = '', sub = ''): void {
   bannerBloomLabel = label
+  bannerBloomSub   = sub
   bannerState = 'bloom'
   bloomRemainingFrac = 1
   bloomRemainingLabel = ''
@@ -151,13 +171,13 @@ export function updateBannerCountdown(countdown: string): void {
 export function updateBannerHealth(ratio: number): void {
   bannerHealth = Math.max(0, Math.min(1, ratio))
   const band = bannerHealth >= 0.8 ? 2 : bannerHealth >= 0.5 ? 1 : 0
-  if (healthBand !== -1 && band !== healthBand) openBanner()
+  if (healthBand !== -1 && band !== healthBand) nudgeRing()
   healthBand = band
 }
 
 /** Gardeners present — a change matters now (it sets how fast plants dry), so say so. */
 export function updatePlayerCount(n: number): void {
-  if (n !== playerCount && playerCount !== 0) openBanner()
+  if (n !== playerCount && playerCount !== 0) nudgeRing()
   playerCount = n
 }
 
@@ -352,6 +372,10 @@ function uiComponent() {
   // 122 + ~24 (2026-09-28: the luck row added a 4th line, hidden only during a bloom).
   const bannerH    = px(isBloom ? 96 : 146)
   const ringSize   = px(RING_SIZE)
+  const hintH      = fs(20)
+  const showHint   = !ringTapped && now - sessionStart < RING_HINT_MS && !bannerShown
+  const nudgeT     = Math.max(0, 1 - (now - ringNudgeAt) / NUDGE_MS)
+  const nudgeA     = nudgeT * (0.5 + 0.5 * Math.cos((1 - nudgeT) * Math.PI * 4))   // two soft pulses, fading
   // Seed chip sits BOTTOM CENTRE (KJ 2026-09-20), like an inventory bar. Anchored on the
   // MEASURED bottom inset rather than a fixed offset, so it rides above whatever the
   // client owns down there — the phone's joystick and interaction cluster included.
@@ -367,7 +391,7 @@ function uiComponent() {
   const title = isBloom ? (bannerBloomLabel || 'The Garden is in Full Bloom!')
               : isCount ? `Hold 80% for ${bannerCountdown} to wake the bloom`
               : 'Garden health'
-  const sub   = isBloom ? 'The Bloom is open - seeds drift down over the next few minutes'
+  const sub   = isBloom ? (bannerBloomSub || 'The Bloom is open - seeds drift down over the next few minutes')
               : isCount ? `${pctLabel} - ${gardeners} gardener${gardeners === 1 ? '' : 's'} here, plants dry in ${dryMinutes()} min`
               : need > 0 ? `${pctLabel} - ${need} more plant${need === 1 ? '' : 's'} to wake the bloom`
               : `${pctLabel} - hold it to wake the bloom`
@@ -399,17 +423,20 @@ function uiComponent() {
       />
 
       {/* ═════ HEALTH RING — top right, the resting HUD. Tap to open the banner. ═════ */}
-      <UiEntity uiTransform={{ positionType: 'absolute', position: { top: topPx, right: pct(rightPct) }, width: ringSize, height: ringSize }}>
+      <UiEntity uiTransform={{ positionType: 'absolute', position: { top: topPx, right: pct(rightPct) }, width: ringSize, height: ringSize + hintH }}>
         <UiEntity
           uiTransform={{ positionType: 'absolute', position: { top: 0, left: 0 }, width: ringSize, height: ringSize }}
           uiBackground={{ textureMode: 'stretch', texture: { src: RING_SHEET }, uvs: ringUvs(frame) }}
         />
         <UiEntity
           uiTransform={{ positionType: 'absolute', position: { top: 0, left: 0 }, width: ringSize, height: ringSize, alignItems: 'center', justifyContent: 'center' }}
-          onMouseDown={() => openBanner()}
+          onMouseDown={onRingTap}
         >
           <Label value={ringLabel} fontSize={fs(isBloom && bloomRemainingLabel ? RING_FONT - 6 : RING_FONT)} color={{ ...CREAM, a: 1 }} textAlign="middle-center" uiTransform={{ width: '100%', height: '100%' }} />
         </UiEntity>
+        {/* nudge: a gold outline that breathes twice and fades — the ring's "something changed" */}
+        <UiEntity uiTransform={{ display: nudgeA > 0.02 ? 'flex' : 'none', positionType: 'absolute', position: { top: 0, left: 0 }, width: ringSize, height: ringSize, borderRadius: Math.round(ringSize / 2), borderWidth: px(4), borderColor: { ...GOLD, a: nudgeA } }} />
+        <Label value="tap" fontSize={fs(13)} color={{ ...CREAM, a: 0.6 }} textAlign="middle-center" textWrap="nowrap" uiTransform={{ display: showHint ? 'flex' : 'none', positionType: 'absolute', position: { top: ringSize, left: 0 }, width: ringSize, height: hintH }} />
       </UiEntity>
 
       {/* ═════ SEED CHIP — bottom centre, always there (dim when empty) so the menu and
@@ -435,14 +462,6 @@ function uiComponent() {
       >
         <Label value="?" fontSize={fs(CHIP_FONT)} color={{ ...CREAM, a: 0.9 }} textAlign="middle-center" uiTransform={{ width: '100%', height: '100%' }} />
       </UiEntity>
-      {/* Tutorial — replays the guided walk, or brings back a card closed with X */}
-      <UiEntity
-        uiTransform={{ height: px(CHIP_H), margin: { left: px(GAP) }, padding: { left: px(20), right: px(20) }, alignItems: 'center', justifyContent: 'center', borderRadius: px(CHIP_H / 2) }}
-        uiBackground={{ color: coach ? { r: 0.18, g: 0.49, b: 0.34, a: 0.95 } : DARK }}
-        onMouseDown={() => coachActions?.tutorial()}
-      >
-        <Label value="Tutorial" fontSize={fs(PILL_FONT)} color={{ ...CREAM, a: 0.9 }} textAlign="middle-center" textWrap="nowrap" uiTransform={{ height: '100%' }} />
-      </UiEntity>
       </UiEntity>
 
       {/* ═════ BANNER — top centre, opens on change, alpha fade only ═════ */}
@@ -452,7 +471,7 @@ function uiComponent() {
           uiBackground={{ color: { ...DARK, a: DARK.a * a } }}
         >
           <UiEntity uiTransform={{ width: '100%', height: fs(TITLE_FONT + 8), flexDirection: 'row', alignItems: 'center' }}>
-            <Label value={title} fontSize={fs(TITLE_FONT)} color={{ ...titleColor, a }} textAlign={isBloom ? 'middle-center' : 'middle-left'} uiTransform={{ flexGrow: 1, height: '100%' }} />
+            <Label value={title} fontSize={fs(TITLE_FONT)} color={{ ...titleColor, a }} textAlign="middle-left" textWrap="nowrap" uiTransform={{ flexGrow: 1, height: '100%' }} />
             <UiEntity uiTransform={{ display: isBloom ? 'none' : 'flex', flexDirection: 'row', alignItems: 'center', height: '100%' }}>
               <UiEntity uiTransform={{ width: fs(20), height: fs(20), margin: { right: px(6) } }} uiBackground={{ textureMode: 'stretch', texture: { src: `${UI_DIR}glyph_users.png` }, color: { ...DIM, a } }} />
               <Label value={`${gardeners}`} fontSize={fs(SUB_FONT + 2)} color={{ ...DIM, a }} textAlign="middle-center" uiTransform={{ height: '100%' }} />
@@ -465,7 +484,7 @@ function uiComponent() {
             <UiEntity uiTransform={{ positionType: 'absolute', position: { left: '80%', top: -px(4) }, width: Math.max(2, px(3)), height: px(BAR_H + 8) }} uiBackground={{ color: { ...GOLD, a } }} />
           </UiEntity>
 
-          <Label value={sub} fontSize={fs(SUB_FONT)} color={{ ...DIM, a }} textAlign={isBloom ? 'middle-center' : 'middle-left'} uiTransform={{ width: '100%', height: fs(SUB_FONT + 8) }} />
+          <Label value={sub} fontSize={fs(SUB_FONT)} color={{ ...DIM, a }} textAlign="middle-left" textWrap="nowrap" uiTransform={{ width: '100%', height: fs(SUB_FONT + 8) }} />
 
           {/* Luck (2026-09-28: "display bloom luck on screen... under the garden health
               meter"): how much rarer the NEXT bloom's seeds roll right now, from gardeners
@@ -485,7 +504,7 @@ function uiComponent() {
       <UiEntity uiTransform={{ display: toastVisible ? 'flex' : 'none', positionType: 'absolute', position: coachUp() ? { bottom: bottomPx + px(CHIP_H) + px(GAP), left: 0 } : { top: toastY, left: 0 }, width: '100%', flexDirection: 'row', justifyContent: 'center' }}>
         <UiEntity uiTransform={{ height: px(PILL_H), flexDirection: 'row', alignItems: 'center', padding: { left: px(PILL_PAD_X - 6), right: px(PILL_PAD_X) }, borderRadius: px(PILL_H / 2) }} uiBackground={{ color: DARK }}>
           <UiEntity uiTransform={{ width: px(26), height: px(26), margin: { right: px(10) } }} uiBackground={{ textureMode: 'stretch', texture: { src: glyph.src }, color: { ...glyph.tint, a: 1 } }} />
-          <Label value={toastText} fontSize={fs(PILL_FONT)} color={{ ...(toastColor ?? CREAM), a: 1 }} textAlign="middle-center" uiTransform={{ height: '100%' }} />
+          <Label value={toastText} fontSize={fs(PILL_FONT)} color={{ ...(toastColor ?? CREAM), a: 1 }} textAlign="middle-center" textWrap="nowrap" uiTransform={{ height: '100%' }} />
         </UiEntity>
       </UiEntity>
 
@@ -575,7 +594,7 @@ function uiComponent() {
       <DiscoveryCardUi px={px} fs={fs} mobile={mobile} />
       <HoldMeterUi px={px} fs={fs} mobile={mobile} />
       <MilestoneCardUi px={px} fs={fs} mobile={mobile} />
-      <InfoPanelUi px={px} fs={fs} mobile={mobile} topPx={topPx} aboveChipPx={bottomPx + px(CHIP_H) + px(GAP)} maxW={Math.round(currentVirtualW * (1 - hIns * 2))} maxH={Math.round(currentVirtualH * (1 - ins.top - ins.bottom)) - topPx - bottomPx} />
+      <InfoPanelUi px={px} fs={fs} mobile={mobile} tutorialLabel={tutorialActive ? 'Resume tutorial' : 'Replay tutorial'} onTutorial={() => coachActions?.tutorial()} topPx={topPx} aboveChipPx={bottomPx + px(CHIP_H) + px(GAP)} maxW={Math.round(currentVirtualW * (1 - hIns * 2))} maxH={Math.round(currentVirtualH * (1 - ins.top - ins.bottom)) - topPx - bottomPx} />
       <SeedMenuUi px={px} fs={fs} mobile={mobile} topPx={topPx} aboveChipPx={bottomPx + px(CHIP_H) + px(GAP)} maxW={Math.round(currentVirtualW * (1 - hIns * 2))} maxH={Math.round(currentVirtualH * (1 - ins.top - ins.bottom)) - topPx - bottomPx} />
 
     </UiEntity>

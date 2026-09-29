@@ -39,16 +39,18 @@ import {
   pointerEventsSystem,
   InputAction,
   Animator,
-  GltfContainerLoadingState,
   Tween,
   TweenSequence,
+  GltfContainerLoadingState,
   EasingFunction,
   Billboard, BillboardMode,
   timers, VisibilityComponent } from '@dcl/sdk/ecs'
 import { Quaternion } from '@dcl/sdk/math'
+import { isMobile } from '@dcl/sdk/platform'
+import { BALLOON_TEXT_TRACK } from './balloonTextTrack'
 import { getPlayer } from '@dcl/sdk/players'
 import { room } from './shared/messages'
-import { BOX_POSITIONS, BOX_WATER_MAX, WATER_DROP_MODEL_SRC, BOX_MODEL_SRC, BOX_MODEL_SCALE, BOX_MODEL_RIM_Y, BED_FILL_ORIGIN, BEDS_EXPLICIT, growMsForTier, growStageOf, tendsAvailable, BALLOON_MODEL_SRC, BALLOON_ANIM_CLIPS, SEED_MODEL_HEIGHT, seedModelSrc, SEEDLING_MODEL_SRC_NORMAL, SEEDLING_MODEL_SRC_RARE, rarityTierById, plantSpeciesById, withArticle } from './shared/config'
+import { BOX_POSITIONS, BOX_WATER_MAX, WATER_DROP_MODEL_SRC, BOX_MODEL_SRC, BOX_MODEL_SCALE, BOX_MODEL_RIM_Y, BED_FILL_ORIGIN, BEDS_EXPLICIT, growMsForTier, growStageOf, tendsAvailable, BALLOON_MODEL_SRC, BALLOON_ANIMATED_SRC, BALLOON_ANIM_CLIPS, SEED_MODEL_HEIGHT, seedModelSrc, SEEDLING_MODEL_SRC_NORMAL, SEEDLING_MODEL_SRC_RARE, rarityTierById, plantSpeciesById, withArticle } from './shared/config'
 import { showToast } from './notifications'
 import { makeBeds, bedOwner, checkPlant, Bed } from './shared/beds'
 import { attachPlantVfx, attachSeedlingVfx, detachPlantVfx, setupPlantVfx } from './plantVfx'
@@ -57,7 +59,6 @@ import { showDiscovery } from './discoveryCard'
 import { triggerSparkle } from './sparkleSystem'
 import { setPouch, getBoxCap, isBoxCapKnown, nextSeedTier } from './playerInventory'
 import { createSign, moveSign, setupSignSystem, Sign } from './signs'
-import { BALLOON_TEXT_TRACK } from './balloonTextTrack'
 import { playSfx } from './sounds'
 import { playWateringBeat } from './wateringSystem'
 import { beginHold, isHolding } from './skillCheck'
@@ -83,19 +84,19 @@ const PLAQUE_SCAN_MS  = 400
 const SEEDLING_SCALE = 0.25
 const SEEDLING_MODEL_MIN_Y = 1.15   // seedling.glb's geometry starts 1.15 above its origin
 // Balloon countdown, in the balloon GLB's own space (the entity carries BOX_MODEL_SCALE).
-// Same spot as the baked 'Text.002' mesh it replaces, nudged just in front of it.
-const BALLOON_TEXT_NODE = 'Text.002'
+// Static balloon (KJ 2026-09-29): one un-skinned mesh in its raised pose, so EVERY planted planter shows a
+// balloon at the right height and nothing animates — no clip, no Tweens, no per-frame write-back.
 const BALLOON_TEXT_POS  = { x: -0.011, y: 2.816, z: -0.29 }
 const BALLOON_TEXT_FONT = 0.8   // TUNING — must fit inside the balloon's dark disc
 const BALLOON_TEXT_COLOR = { r: 1.0, g: 0.95, b: 0.82, a: 1 }
 const FLOWER_SCALE  = 0.5   // fallback sphere size, only used if a species id isn't found
 const TOAST_MS      = 5_000
 const LABEL_TICK_MS = 1_000
-const TAP_DISTANCE  = 8     // m — mobile is third-person only, camera sits well behind the avatar
 // const enums in @dcl/ecs internals, not re-exported (same as plantVfx's particle enums)
-const LS_NOT_FOUND = 2, LS_FINISHED_WITH_ERROR = 3, LS_FINISHED = 4   // LoadingState
-const EF_LINEAR  = 0   // EasingFunction
-const TL_RESTART = 0   // TweenLoop
+const LS_FINISHED = 4   // LoadingState
+const EF_LINEAR   = 0   // EasingFunction
+const TL_RESTART  = 0   // TweenLoop
+const TAP_DISTANCE  = 8     // m — mobile is third-person only, camera sits well behind the avatar
 
 // ---------------------------------------------------------------
 // State
@@ -110,10 +111,7 @@ interface BoxView {
   plantKey:     string          // what `plant` currently shows — rebuilt only when this changes
   balloon:      Entity | null   // animated balloon while the box holds a seed or flower
   balloonText:  Entity | null   // countdown / "Ready to Harvest" on the balloon
-  balloonMover: Entity | null   // text parent: replays Bone.003's position (Tween)
-  balloonPivot: Entity | null   // child of the mover: replays Bone.003's rotation (Tween)
-  balloonAnimPending: boolean   // waiting for the balloon GLB to load before starting clip + text together
-  balloonLive:  boolean         // inside the balloon budget — its clip + text Tweens run
+  animSlot:     number          // index into balloonPool while an animated balloon stands in for the static one, else -1
   owner:        string
   ownerName:    string
   rarityTier:   number
@@ -300,7 +298,7 @@ function balloonTextFor(v: BoxView, now: number): string {
 /** Hover prompt for the one tap the box currently offers. */
 function hoverFor(v: BoxView): string {
   if (!v.owner) return 'Plant seed'
-  if (isMine(v)) return v.opened ? 'Harvest' : tendReady(v, Date.now()) ? 'Tend your seed' : 'Growing…'
+  if (isMine(v)) return v.opened ? 'Harvest' : tendReady(v, Date.now()) ? 'Water' : 'Growing…'
   if (v.opened) return `${v.ownerName}'s flower`
   return v.waters >= BOX_WATER_MAX ? 'Fully watered' : 'Water'
 }
@@ -367,61 +365,37 @@ function setPlantVisual(v: BoxView, pos: PlanterPos): void {
 }
 
 /** One pooled balloon per box, created the first time the box is planted and never removed —
- *  shown/hidden by scale. Removing it made the Unity explorer's ResetMaterialSystem throw (it
- *  restores the Text.002 override's material on a GLB already being torn down — KJ log
- *  2026-09-18 15:40, on harvest), and every replant re-loaded the GLB and re-synced its clip.
- *  While hidden its clip and text Tweens are STOPPED: the explorer writes every looping-tweened
- *  entity's Transform back to the scene each frame, hidden or not — 96 always-on balloons were
- *  192 messages per tick and held the scene tick at ~13 fps (KJ debug panel 2026-09-19). */
+ *  shown/hidden by scale. Removing it made the Unity explorer's ResetMaterialSystem throw on harvest
+ *  (KJ log 2026-09-18), and every replant re-loaded the GLB. It is a STATIC mesh (StaticBalloon.glb,
+ *  2026-09-29): the old skinned, animated balloon needed a clip and two looping Tweens per box, and
+ *  the explorer writes every looping-tweened Transform back to the scene each frame — 96 of them held
+ *  the tick at ~13 fps, so only the nearest 8 were allowed to move and the rest sagged low under text
+ *  that stayed up high. Static = every balloon at the right height, zero per-frame cost. */
 function setBalloonVisual(v: BoxView, pos: PlanterPos): void {
   if (!v.owner) { if (v.balloon !== null) hideBalloon(v); return }
-  if (v.balloon === null) createBalloon(v, pos)   // motion starts when balloonBudgetSystem picks it
+  if (v.balloon === null) createBalloon(v, pos)
   const tr = Transform.getMutable(v.balloon!)
-  if (tr.scale.x !== BOX_MODEL_SCALE) tr.scale = { x: BOX_MODEL_SCALE, y: BOX_MODEL_SCALE, z: BOX_MODEL_SCALE }
+  const k = v.animSlot >= 0 ? 0 : BOX_MODEL_SCALE   // an animated balloon is standing in — keep the static one hidden
+  if (tr.scale.x !== k) tr.scale = { x: k, y: k, z: k }
 }
 
 function hideBalloon(v: BoxView): void {
+  if (v.animSlot >= 0) releaseSlot(v)
   if (v.balloon === null) return
   const tr = Transform.getMutable(v.balloon)
   if (tr.scale.x !== 0) tr.scale = { x: 0, y: 0, z: 0 }
-  stopBalloonMotion(v)
-}
-
-/** Freeze a balloon: clip stopped, text Tweens removed (no per-frame write-back). */
-function stopBalloonMotion(v: BoxView): void {
-  v.balloonLive = false
-  v.balloonAnimPending = false
-  if (v.balloon !== null && Animator.has(v.balloon)) Animator.stopAllAnimations(v.balloon)
-  for (const e of [v.balloonMover, v.balloonPivot]) {
-    if (e === null) continue
-    TweenSequence.deleteFrom(e)
-    Tween.deleteFrom(e)
-  }
 }
 
 function createBalloon(v: BoxView, pos: PlanterPos): void {
   const balloon = engine.addEntity()
   Transform.create(balloon, { position: { x: pos.x, y: 0, z: pos.z }, rotation: planterRotation(pos), scale: { x: 0, y: 0, z: 0 } })
   GltfContainer.create(balloon, { src: BALLOON_MODEL_SRC, visibleMeshesCollisionMask: ColliderLayer.CL_NONE, invisibleMeshesCollisionMask: ColliderLayer.CL_NONE })
-  // Hide the baked "Harvest in" mesh (KJ's GLB left untouched) — the live text below replaces it
-  GltfNodeModifiers.create(balloon, { modifiers: [{
-    path: BALLOON_TEXT_NODE, castShadows: false,
-    material: { material: { $case: 'pbr', pbr: { albedoColor: { r: 1, g: 1, b: 1, a: 0 }, transparencyMode: MaterialTransparencyMode.MTM_ALPHA_BLEND } } },
-  }] })
-  // balloon → mover (bone position) → pivot (bone rotation) → text (facing). The motion is
-  // renderer-side Tweens started on the same tick as the Animator (balloonStartSystem).
-  const mover = engine.addEntity()
-  Transform.create(mover, { parent: balloon, position: BALLOON_TEXT_POS })
-  const pivot = engine.addEntity()
-  Transform.create(pivot, { parent: mover })
+  // The countdown / "Ready to Harvest" text rides on the balloon's dark disc, facing out.
   const text = engine.addEntity()
-  Transform.create(text, { parent: pivot, rotation: Quaternion.fromEulerDegrees(0, 180, 0) })
+  Transform.create(text, { parent: balloon, position: BALLOON_TEXT_POS, rotation: Quaternion.fromEulerDegrees(0, 180, 0) })
   TextShape.create(text, { text: balloonTextFor(v, Date.now()), fontSize: BALLOON_TEXT_FONT, textColor: BALLOON_TEXT_COLOR, textAlign: TextAlignMode.TAM_MIDDLE_CENTER })
   v.balloon = balloon
   v.balloonText = text
-  v.balloonMover = mover
-  v.balloonPivot = pivot
-  v.balloonAnimPending = false   // balloonBudgetSystem starts it when it's near
 }
 
 /** Everything setPlantVisual depends on. boxState arrives on every watering too, and the
@@ -607,7 +581,7 @@ function onTap(v: BoxView): void {
   if (isMine(v)) {
     if (v.opened) { console.log(`[Boxes] harvesting ${v.boxId}`); room.send('harvestBox', { boxId: v.boxId }); return }
     if (tendReady(v, Date.now())) { tendOnto(v); return }
-    showToast(`Still growing — ready in ${countdown(v, Date.now())}. Tend it again when it grows`, TOAST_MS, false)
+    showToast(`Still growing — ready in ${countdown(v, Date.now())}. Water it again when it grows`, TOAST_MS, false)
     return
   }
   if (v.opened) { showToast(`${v.ownerName}'s ${flowerName(v)}, on show`, TOAST_MS, false); return }
@@ -641,7 +615,7 @@ function createBox(p: PlanterPos & { id: string }): BoxView {
   Transform.create(hit, { parent: base, position: PLANTER_COLLIDER_CENTER, scale: PLANTER_COLLIDER_SIZE })
   MeshCollider.setBox(hit, ColliderLayer.CL_POINTER | ColliderLayer.CL_PHYSICS)
 
-  const v: BoxView = { boxId: p.id, base, hit, labelText: '', plant: null, plantKey: '', balloon: null, balloonText: null, balloonMover: null, balloonPivot: null, balloonAnimPending: false, balloonLive: false, owner: '', ownerName: '', rarityTier: 0, opened: false, flower: '', opensLocalAt: 0, waters: 0, lastWaterer: '', drop: null, stage: 0, tends: 0, plantedAt: 0 }
+  const v: BoxView = { boxId: p.id, base, hit, labelText: '', plant: null, plantKey: '', balloon: null, balloonText: null, animSlot: -1, owner: '', ownerName: '', rarityTier: 0, opened: false, flower: '', opensLocalAt: 0, waters: 0, lastWaterer: '', drop: null, stage: 0, tends: 0, plantedAt: 0 }
   pointerEventsSystem.onPointerDown(
     { entity: hit, opts: { button: InputAction.IA_POINTER, hoverText: 'Plant seed', maxDistance: TAP_DISTANCE } },
     () => onTap(v),
@@ -859,7 +833,9 @@ function updateBeds(): void {
     const owner = bedOwner(bs.bed, bedInfo)
     const mine = !!owner && owner.owner === me
     // "Name's plot" for everyone, including me (KJ 2026-09-25: my name, not "Your plot")
-    const text = owner ? `${owner.ownerName}'s\nplot` : 'Free plot'
+    // …and how many of its planters are still free (KJ 2026-09-29: show what the bed has left to use)
+    const freeN = bs.bed.boxIds.filter(id => { const v = views.get(id); return !v || !v.owner }).length
+    const text = owner ? `${owner.ownerName}'s\nplot · ${freeN === 0 ? 'full' : `${freeN} free`}` : 'Free plot'
     if (text !== bs.text_) {
       bs.text_ = text
       const ts = TextShape.getMutable(bs.text)
@@ -901,7 +877,7 @@ function boxTickSystem(dt: number): void {
   const now = Date.now()
   updateBeds()
   for (const v of views.values()) {
-    if (v.balloonLive) setBalloonText(v, now)
+    if (v.balloonText !== null && v.owner) { setBalloonText(v, now); if (v.animSlot >= 0) setSlotText(v, now) }
     if (v.owner && !v.opened && v.plant !== null && !held.has(v.boxId)) {
       const s = stageFor(v, now)
       if (s > v.stage) growTo(v, s)
@@ -955,37 +931,40 @@ function setBalloonText(v: BoxView, now: number): void {
   if (TextShape.get(v.balloonText).text !== text) TextShape.getMutable(v.balloonText).text = text
 }
 
-// Balloon budget: every planted box has a skinned, animated balloon whose text follows it via
-// 2 looping Tweens — and the explorer writes a looping-tweened entity's Transform back into the
-// scene EVERY frame. A full garden (~90 boxes) was ~180 inbound messages per tick + 90 animated
-// balloons (KJ 17 fps). Only the nearest BALLOON_LIVE within BALLOON_LIVE_M move; the rest
-// freeze in place (clip stopped, Tweens removed) until you walk up to them.
-const BALLOON_LIVE    = 8      // TUNING
-const BALLOON_LIVE_M  = 18     // TUNING — m
-const BALLOON_SCAN_MS = 500
+// ---------------------------------------------------------------
+// Animated balloon pool (KJ 2026-09-29: "i expected the balloons to animate when i got near").
+// Every planted planter shows the STATIC balloon. The few planters nearest the player swap it for an
+// animated one from this small pool: the skinned clip plus two looping Tweens that carry the text along
+// the bone. The explorer writes every looping-tweened Transform back to the scene each frame (96 of
+// them held the tick at ~13 fps), so the pool stays tiny and is re-picked as you walk.
+// ---------------------------------------------------------------
+interface BalloonSlot { balloon: Entity; mover: Entity; pivot: Entity; text: Entity; boxId: string | null }
+const balloonPool: BalloonSlot[] = []
+const BALLOON_ANIM_M    = 14      // TUNING — m
+const BALLOON_SCAN_MS   = 500
 let balloonScanAccum = 0
-function balloonBudgetSystem(dt: number): void {
-  balloonScanAccum += dt * 1_000
-  if (balloonScanAccum < BALLOON_SCAN_MS) return
-  balloonScanAccum = 0
-  const me = Transform.getOrNull(engine.PlayerEntity)?.position
-  if (!me) return
-  const near = new Set([...views.values()]
-    .filter(v => v.owner && v.balloon !== null && !deleted.has(v.boxId))
-    .map(v => { const p = layout.get(v.boxId)!; return { v, d: Math.hypot(p.x - me.x, p.z - me.z) } })
-    .filter(r => r.d <= BALLOON_LIVE_M)
-    .sort((a, b) => a.d - b.d)
-    .slice(0, BALLOON_LIVE)
-    .map(r => r.v))
-  const now = Date.now()
-  for (const v of views.values()) {
-    if (near.has(v) && !v.balloonLive) {
-      v.balloonLive = true
-      v.balloonAnimPending = true   // balloonStartSystem starts clip + text together once loaded
-      setBalloonText(v, now)
-    } else if (!near.has(v) && v.balloonLive) {
-      stopBalloonMotion(v)
-    }
+
+function createBalloonPool(): void {
+  // Phone: static balloons only (KJ 2026-09-29: on mobile the animated ones sat at odd heights and their text drifted out of sync).
+  const n = isMobile() ? 0 : 6   // TUNING
+  for (let i = 0; i < n; i++) {
+    const balloon = engine.addEntity()
+    Transform.create(balloon, { position: { x: 0, y: -50, z: 0 }, scale: { x: 0, y: 0, z: 0 } })
+    GltfContainer.create(balloon, { src: BALLOON_ANIMATED_SRC, visibleMeshesCollisionMask: ColliderLayer.CL_NONE, invisibleMeshesCollisionMask: ColliderLayer.CL_NONE })
+    // Hide the baked "Harvest in" mesh (KJ's GLB left untouched) — the live text below replaces it
+    GltfNodeModifiers.create(balloon, { modifiers: [{
+      path: 'Text.002', castShadows: false,
+      material: { material: { $case: 'pbr', pbr: { albedoColor: { r: 1, g: 1, b: 1, a: 0 }, transparencyMode: MaterialTransparencyMode.MTM_ALPHA_BLEND } } },
+    }] })
+    // balloon → mover (bone position) → pivot (bone rotation) → text (facing)
+    const mover = engine.addEntity()
+    Transform.create(mover, { parent: balloon, position: BALLOON_TEXT_POS })
+    const pivot = engine.addEntity()
+    Transform.create(pivot, { parent: mover })
+    const text = engine.addEntity()
+    Transform.create(text, { parent: pivot, rotation: Quaternion.fromEulerDegrees(0, 180, 0) })
+    TextShape.create(text, { text: '', fontSize: BALLOON_TEXT_FONT, textColor: BALLOON_TEXT_COLOR, textAlign: TextAlignMode.TAM_MIDDLE_CENTER })
+    balloonPool.push({ balloon, mover, pivot, text, boxId: null })
   }
 }
 
@@ -1004,22 +983,61 @@ function trackSequence(kind: 'move' | 'rotate'): NonNullable<Parameters<typeof T
 const MOVE_SEQ   = trackSequence('move')
 const ROTATE_SEQ = trackSequence('rotate')
 
-/** Start the balloon clip and its text's Tweens on the SAME tick, once the renderer reports
- *  the GLB loaded. A fixed timer guessed the load time: on a slow/late-joining client the
- *  clip started when the GLB finished loading, seconds after the guess, and the text ran
- *  ahead of the balloon by that gap forever (KJ, mobile preview 2026-09-18). */
-function balloonStartSystem(): void {
-  for (const v of views.values()) {
-    if (!v.balloonAnimPending || v.balloon === null || v.balloonMover === null || v.balloonPivot === null) continue
-    const state = GltfContainerLoadingState.getOrNull(v.balloon)?.currentState
-    if (state === LS_NOT_FOUND || state === LS_FINISHED_WITH_ERROR) { v.balloonAnimPending = false; continue }
-    if (state !== LS_FINISHED) continue
-    v.balloonAnimPending = false
-    Animator.createOrReplace(v.balloon, { states: BALLOON_ANIM_CLIPS.map(clip => ({ clip, playing: true, loop: true, shouldReset: true })) })
-    Tween.createOrReplace(v.balloonMover, MOVE_SEQ[0])
-    TweenSequence.createOrReplace(v.balloonMover, { sequence: MOVE_SEQ.slice(1), loop: TL_RESTART })
-    Tween.createOrReplace(v.balloonPivot, ROTATE_SEQ[0])
-    TweenSequence.createOrReplace(v.balloonPivot, { sequence: ROTATE_SEQ.slice(1), loop: TL_RESTART })
+function setSlotText(v: BoxView, now: number): void {
+  const slot = balloonPool[v.animSlot]
+  if (!slot) return
+  const text = balloonTextFor(v, now)
+  if (TextShape.get(slot.text).text !== text) TextShape.getMutable(slot.text).text = text
+}
+
+/** Put an animated balloon on this planter and hide its static one. Clip and text Tweens start on the same tick. */
+function assignSlot(v: BoxView, pos: PlanterPos, i: number): void {
+  const slot = balloonPool[i]
+  slot.boxId = v.boxId
+  v.animSlot = i
+  const tr = Transform.getMutable(slot.balloon)
+  tr.position = { x: pos.x, y: 0, z: pos.z }
+  tr.rotation = planterRotation(pos)
+  tr.scale = { x: BOX_MODEL_SCALE, y: BOX_MODEL_SCALE, z: BOX_MODEL_SCALE }
+  setSlotText(v, Date.now())
+  if (v.balloon !== null) Transform.getMutable(v.balloon).scale = { x: 0, y: 0, z: 0 }
+  Animator.createOrReplace(slot.balloon, { states: BALLOON_ANIM_CLIPS.map(clip => ({ clip, playing: true, loop: true, shouldReset: true })) })
+  Tween.createOrReplace(slot.mover, MOVE_SEQ[0])
+  TweenSequence.createOrReplace(slot.mover, { sequence: MOVE_SEQ.slice(1), loop: TL_RESTART })
+  Tween.createOrReplace(slot.pivot, ROTATE_SEQ[0])
+  TweenSequence.createOrReplace(slot.pivot, { sequence: ROTATE_SEQ.slice(1), loop: TL_RESTART })
+}
+
+/** Stop the motion (no per-frame write-back), park the animated balloon, bring the static one back. */
+function releaseSlot(v: BoxView): void {
+  const slot = balloonPool[v.animSlot]
+  v.animSlot = -1
+  if (!slot) return
+  slot.boxId = null
+  if (Animator.has(slot.balloon)) Animator.stopAllAnimations(slot.balloon)
+  for (const e of [slot.mover, slot.pivot]) { TweenSequence.deleteFrom(e); Tween.deleteFrom(e) }
+  Transform.getMutable(slot.balloon).scale = { x: 0, y: 0, z: 0 }
+  if (v.owner && v.balloon !== null) Transform.getMutable(v.balloon).scale = { x: BOX_MODEL_SCALE, y: BOX_MODEL_SCALE, z: BOX_MODEL_SCALE }
+}
+
+function balloonPoolSystem(dt: number): void {
+  balloonScanAccum += dt * 1_000
+  if (balloonScanAccum < BALLOON_SCAN_MS) return
+  balloonScanAccum = 0
+  const me = Transform.getOrNull(engine.PlayerEntity)?.position
+  if (!me) return
+  const near = [...views.values()]
+    .filter(v => v.owner && v.balloon !== null)
+    .map(v => { const p = layout.get(v.boxId); return { v, p, d: p ? Math.hypot(p.x - me.x, p.z - me.z) : Infinity } })
+    .filter(r => r.d <= BALLOON_ANIM_M)
+    .sort((a, b) => a.d - b.d)
+    .slice(0, balloonPool.length)
+  const keep = new Set(near.map(r => r.v))
+  for (const v of views.values()) if (v.animSlot >= 0 && !keep.has(v)) releaseSlot(v)
+  for (const r of near) {
+    if (r.v.animSlot >= 0 || !r.p) continue
+    const free = balloonPool.findIndex(s => s.boxId === null && GltfContainerLoadingState.getOrNull(s.balloon)?.currentState === LS_FINISHED)
+    if (free >= 0) assignSlot(r.v, r.p, free)
   }
 }
 
@@ -1127,9 +1145,9 @@ export function setupBoxSystem(): void {
 
   setupSignSystem()
   setupPlantVfx()
+  createBalloonPool()
+  engine.addSystem(balloonPoolSystem)
   engine.addSystem(boxTickSystem)
-  engine.addSystem(balloonBudgetSystem)
-  engine.addSystem(balloonStartSystem)
   engine.addSystem(plantRevealSystem)
   engine.addSystem(plaqueHomeSystem)
   console.log(`[Boxes] ${views.size} seed boxes ready · boxState listeners=${room.listenerCount('boxState')}`)

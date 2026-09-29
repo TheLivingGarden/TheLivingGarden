@@ -30,6 +30,8 @@ const MOSS   = { r: 0.18,  g: 0.49,  b: 0.34,  a: 1 }
 export function InfoPanelUi(props: {
   px: (n: number) => number; fs: (n: number) => number
   mobile: boolean; topPx: number; aboveChipPx: number; maxW: number; maxH: number
+  /** Replay / Resume tutorial — replaces the old standalone Tutorial pill (2026-09-29). */
+  tutorialLabel: string; onTutorial: () => void
 }) {
   if (!open) return null
   const { px, fs, mobile } = props
@@ -50,6 +52,14 @@ export function InfoPanelUi(props: {
         <UiEntity uiTransform={{ width: px(34), height: px(34), alignItems: 'center', justifyContent: 'center' }} onMouseDown={toggleInfo}>
           <Label value="x" fontSize={fs(22)} color={DIM} textAlign="middle-center" uiTransform={{ width: '100%', height: '100%' }} />
         </UiEntity>
+      </UiEntity>
+
+      <UiEntity
+        uiTransform={{ width: '100%', height: px(40), alignItems: 'center', justifyContent: 'center', margin: { bottom: px(8) }, borderRadius: px(20) }}
+        uiBackground={{ color: MOSS }}
+        onMouseDown={() => { toggleInfo(); props.onTutorial() }}
+      >
+        <Label value={props.tutorialLabel} fontSize={fs(16)} color={CREAM} textAlign="middle-center" textWrap="nowrap" uiTransform={{ height: '100%' }} />
       </UiEntity>
 
       <Label value={s.title} fontSize={fs(19)} color={{ ...MOSS, r: 0.45, g: 0.82, b: 0.6 }} textAlign="middle-left" uiTransform={{ width: '100%', height: fs(28) }} />

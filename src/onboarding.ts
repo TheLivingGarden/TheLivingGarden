@@ -437,7 +437,7 @@ function endTutorial(): void {
   endedThisSession = true
   room.send('tourProgress', { step: stepIdx, done: true })   // ended: never auto-starts again
   stop()
-  showMoment('Tutorial ended', 'Tap Tutorial to walk it again', 3_500)
+  showMoment('Tutorial ended', 'Tap ? to walk it again', 3_500)
 }
 
 /** Is the current step finished? Every check is a change since the step began, or an
@@ -485,18 +485,18 @@ function currentCard(p: Vector3): { title: string; body: string; primary?: strin
     const need = Math.max(0, BLOOM_THRESHOLD - getWateringStatus().wateredCount)
     return need > 0
       ? { title: TUTORIAL_TEXT.bloom.title, body: `Water ${need} more plant${need === 1 ? '' : 's'} to start the Bloom. Watered plants dry out, so keep going!` }
-      : { title: 'Hold it!', body: 'That is enough - keep the plants watered and the Bloom opens in a moment.' }
+      : TUTORIAL_TEXT.bloom
   }
   // The seeds leave BLOOM_OPEN_MS after the trigger, once the flower is open — say so, or the
   // wait reads as nothing happening.
   if (s === 'seeds' && getSeedCount() === 0 && isBloomActive()) {
     const left = bloomSeenAt ? Math.ceil((BLOOM_OPEN_MS - (Date.now() - bloomSeenAt)) / 1000) : 0
-    return { title: 'Wait for it...', body: left > 0 ? `The Bloom is opening - the first seed falls in ${left}s. Stay close!` : 'The Bloom is opening - the first seed falls any second. Stay close!' }
+    return { title: TUTORIAL_TEXT.seeds.title, body: left > 0 ? `Seeds fall in ${left}s - stay close and walk into one to catch it.` : 'Seeds are falling - walk into one to catch it.' }
   }
   if (s === 'fame') return { ...TUTORIAL_TEXT.fame, primary: 'Got it' }
   if (s === 'harvest' && myOpenedPlanter(p) === null) {
     const g = myGrowingStatus()
-    return { title: TUTORIAL_TEXT.harvest.title, body: `Your seed opens in ${countdown(g.nextMs)} - tend it at each stage, or water the garden while you wait.` }
+    return { title: TUTORIAL_TEXT.harvest.title, body: `Your seed opens in ${countdown(g.nextMs)} - water it at each stage, or water the garden while you wait.` }
   }
   if (s === 'tend') {
     const g = myGrowingStatus()

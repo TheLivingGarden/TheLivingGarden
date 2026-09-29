@@ -1662,9 +1662,6 @@ export function setupWateringSystem(): void {
     currentBloomScale = typeof data?.scale === 'number' && data.scale > 0 ? Math.min(data.scale, 1) : 1
     currentBloomVariant = data?.variant || 'classic'
     const variant = bloomVariantById(currentBloomVariant)
-    if (!isBloomActive() && variant.id !== 'classic') {
-      showToast(`${withArticle(variant.name, true)}! Rare seeds fall thicker tonight`, 6_000, false)
-    }
     // The rare variant changes the light itself — also on a late joiner's re-send
     if (variant.id === 'moonlit') startMoonlight()
     // Phase 6b: the variant's palette on every pooled bloom FX, before any of it fires
@@ -1678,7 +1675,7 @@ export function setupWateringSystem(): void {
     stopWateringEmote()
     stopPreBloomTicker()   // stop immediately — prevents stale "1s" from being re-written
     resetClientSustain()   // sustain complete — bloom is firing
-    showBannerBloom(bannerLabel)   // switch banner from countdown → bloom before visual effects ramp up
+    showBannerBloom(bannerLabel, variant.id !== 'classic' ? 'Rare seeds fall thicker tonight' : '')   // switch banner from countdown → bloom before visual effects ramp up
     for (const e of bloomCountdownLabels) TextShape.getMutable(e).text = ''  // clear countdown before reset ticker starts
     bloomDurationMs = typeof data?.durationMs === 'number' && data.durationMs > 0 ? data.durationMs : BLOOM_RESET_DELAY_MS
     startBloomResetTicker(typeof data?.elapsedMs === 'number' && data.elapsedMs > 0 ? data.elapsedMs : 0)  // countdown to garden reset, aligned for late joiners

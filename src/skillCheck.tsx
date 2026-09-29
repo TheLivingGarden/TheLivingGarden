@@ -52,6 +52,7 @@ const DIM   = { r: 0.83, g: 0.82, b: 0.78 }
 const WATER = { r: 0.42, g: 0.72, b: 0.95 }
 const RED   = { r: 0.9, g: 0.36, b: 0.32 }
 const GOLD  = { r: 0.98, g: 0.78, b: 0.3 }
+const PERFECT = { r: 0.55, g: 0.93, b: 0.62 }   // "Perfect pour" — light green, not yellow (KJ 2026-09-29)
 const CARD      = { r: 0.08, g: 0.06, b: 0.055, a: 0.9 }
 const TRACK     = { r: 0.13, g: 0.1, b: 0.09, a: 0.95 }
 const GREEN     = { r: 0.24, g: 0.78, b: 0.36 }   // the target window — lit, so the target reads at a glance
@@ -153,7 +154,7 @@ export function HoldMeterUi(props: { px: (n: number) => number; fs: (n: number) 
     : h.outcome === 'tap'   ? 'Press and hold to pour'
     : 'Watered'
   const lineColor = pouring ? (!h.aimed ? GOLD : over ? RED : CREAM)
-                  : h.outcome === 'sweet' ? GOLD : h.outcome === 'over' ? RED : h.outcome === 'tap' ? CREAM : DIM
+                  : h.outcome === 'sweet' ? PERFECT : h.outcome === 'over' ? RED : h.outcome === 'tap' ? CREAM : DIM
   const DROP_W = 24, DROP_H = 30
 
   return (
