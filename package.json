@@ -17,11 +17,13 @@
   },
   "devDependencies": {
     "@dcl/gltf-validator-ts": "^1.0.19",
-    "@dcl/js-runtime": "7.26.1-32160793830.commit-0b97733",
-    "@dcl/sdk": "7.26.1-32160793830.commit-0b97733",
+    "@dcl/js-runtime": "https://sdk-team-cdn.decentraland.org/@dcl/js-sdk-toolchain/branch/fix/storage-read-failure-throws/@dcl/js-runtime/dcl-js-runtime-7.29.1-36021790753.commit-72e1674.tgz",
+    "@dcl/sdk": "https://sdk-team-cdn.decentraland.org/@dcl/js-sdk-toolchain/branch/fix/storage-read-failure-throws/dcl-sdk-7.29.1-36021790753.commit-72e1674.tgz",
+    "@dcl/sdk-commands": "https://sdk-team-cdn.decentraland.org/@dcl/js-sdk-toolchain/branch/fix/storage-read-failure-throws/dcl-sdk-commands-7.29.1-36021790753.commit-72e1674.tgz",
     "@types/jest": "^29.5.14",
     "jest": "^29.7.0",
-    "ts-jest": "^29.2.5"
+    "ts-jest": "^29.2.5",
+    "typescript": "^5.0.2"
   },
   "engines": {
     "node": ">=16.0.0",
