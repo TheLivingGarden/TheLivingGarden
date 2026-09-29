@@ -89,7 +89,7 @@ describe('bedOwner and checkPlant', () => {
   })
 })
 
-describe("the baked layout from KJ's scene.glb (2026-09-25)", () => {
+describe("the baked layout from KJ's scene.glb (re-baked 2026-09-29)", () => {
   const beds = makeBeds(BOX_POSITIONS, BED_FILL_ORIGIN, BEDS_EXPLICIT)
   it('is 96 planters with unique ids', () => {
     expect(BOX_POSITIONS).toHaveLength(96)

@@ -262,131 +262,132 @@ export function plantDecayMs(plantId: string, gardeners: number): number {
 // ── v2: seed boxes (GDD §3 step 4, §4.1 D1 hook, §4.3 seed appointment) ──
 // A caught seed is planted in a named box in the SHARED garden; it grows on a
 // real-world timer and opens as an unidentified flower (rarity known, identity not).
-// Planter layout — REBAKED 2026-09-25 from KJ's new scene.glb: the five PlanterBox_newMat strips are the planter rows. 96 planters =
-// 24 beds of 4 (design/planter-beds-from-scene-glb.json), one bed per block below, numbered from the shed door outward. Planters sit on each
-// strip's centre line (1.5 m pitch, 1 m between beds), 1 m clear of the shed footprint. world = (8 - glb.x, glb.z + 24). rot: 0 = front faces
-// +z, 90 = +x, 180 = -z, 270 = -x; rows face the door axis. Ids are stable: KJ's four planted planters (box_4, box_6, box_99, box_100) are bed 1,
-// the other 50 old ids are reused, 42 are new. Before this: baked 2026-09-22 from the in-world planter editor.
+// Planter layout — REBAKED 2026-09-29 from KJ's updated scene.glb: six 1.38 m x 28.4 m planter strips (PlanterBox_newMat.052 holds four rows,
+// .001 two). 96 planters = 24 beds of 4 (design/planter-beds-from-scene-glb.json), four beds per strip, numbered from the shed door outward.
+// Each strip carries its beds centred on it: planters on the strip's centre line, 1.5 m pitch, 1 m between beds, 0.72 m spare at each end. Rows face the
+// door axis (x -18.9): west of it rot 90 (front +x), east of it rot 270 (front -x). world = (8 - glb.x, glb.z + 24). rot: 0 = front faces +z, 90 = +x,
+// 180 = -z, 270 = -x. Ids are stable BY BED: new bed k keeps the ids of the previous bake's bed k, so KJ's four planted planters (box_4, box_6, box_99,
+// box_100) are still bed 1 (now the strip nearest the door, x -16.85). Previous tables: design/layout-tables.bak-0929.ts. Before that: 2026-09-25 bake.
 export const BOX_POSITIONS: ReadonlyArray<{ id: string; x: number; z: number; rot: number }> = [
-  { id: 'box_4', x: -19.22, z: 36.36, rot: 90 },
-  { id: 'box_6', x: -19.22, z: 34.86, rot: 90 },
-  { id: 'box_99', x: -19.22, z: 33.36, rot: 90 },
-  { id: 'box_100', x: -19.22, z: 31.86, rot: 90 },
+  { id: 'box_4', x: -16.85, z: 36.75, rot: 270 },
+  { id: 'box_6', x: -16.85, z: 35.25, rot: 270 },
+  { id: 'box_99', x: -16.85, z: 33.75, rot: 270 },
+  { id: 'box_100', x: -16.85, z: 32.25, rot: 270 },
 
-  { id: 'box_1', x: -9.83, z: 36.36, rot: 270 },
-  { id: 'box_2', x: -9.83, z: 34.86, rot: 270 },
-  { id: 'box_3', x: -9.83, z: 33.36, rot: 270 },
-  { id: 'box_50', x: -9.83, z: 31.86, rot: 270 },
+  { id: 'box_1', x: -12.85, z: 36.75, rot: 270 },
+  { id: 'box_2', x: -12.85, z: 35.25, rot: 270 },
+  { id: 'box_3', x: -12.85, z: 33.75, rot: 270 },
+  { id: 'box_50', x: -12.85, z: 32.25, rot: 270 },
 
-  { id: 'box_51', x: -29.97, z: 35.15, rot: 90 },
-  { id: 'box_52', x: -29.97, z: 33.65, rot: 90 },
-  { id: 'box_53', x: -29.97, z: 32.15, rot: 90 },
-  { id: 'box_54', x: -29.97, z: 30.65, rot: 90 },
+  { id: 'box_51', x: -8.84, z: 36.75, rot: 270 },
+  { id: 'box_52', x: -8.84, z: 35.25, rot: 270 },
+  { id: 'box_53', x: -8.84, z: 33.75, rot: 270 },
+  { id: 'box_54', x: -8.84, z: 32.25, rot: 270 },
 
-  { id: 'box_55', x: -19.22, z: 29.36, rot: 90 },
-  { id: 'box_56', x: -19.22, z: 27.86, rot: 90 },
-  { id: 'box_57', x: -19.22, z: 26.36, rot: 90 },
-  { id: 'box_58', x: -19.22, z: 24.86, rot: 90 },
+  { id: 'box_55', x: -31.24, z: 36.75, rot: 90 },
+  { id: 'box_56', x: -31.24, z: 35.25, rot: 90 },
+  { id: 'box_57', x: -31.24, z: 33.75, rot: 90 },
+  { id: 'box_58', x: -31.24, z: 32.25, rot: 90 },
 
-  { id: 'box_59', x: -1.33, z: 37.11, rot: 270 },
-  { id: 'box_60', x: -1.33, z: 35.61, rot: 270 },
-  { id: 'box_61', x: -1.33, z: 34.11, rot: 270 },
-  { id: 'box_62', x: -1.33, z: 32.61, rot: 270 },
+  { id: 'box_59', x: -4.83, z: 36.75, rot: 270 },
+  { id: 'box_60', x: -4.83, z: 35.25, rot: 270 },
+  { id: 'box_61', x: -4.83, z: 33.75, rot: 270 },
+  { id: 'box_62', x: -4.83, z: 32.25, rot: 270 },
 
-  { id: 'box_63', x: -9.83, z: 29.36, rot: 270 },
-  { id: 'box_64', x: -9.83, z: 27.86, rot: 270 },
-  { id: 'box_65', x: -9.83, z: 26.36, rot: 270 },
-  { id: 'box_66', x: -9.83, z: 24.86, rot: 270 },
+  { id: 'box_63', x: -35.25, z: 36.75, rot: 90 },
+  { id: 'box_64', x: -35.25, z: 35.25, rot: 90 },
+  { id: 'box_65', x: -35.25, z: 33.75, rot: 90 },
+  { id: 'box_66', x: -35.25, z: 32.25, rot: 90 },
 
-  { id: 'box_67', x: -29.97, z: 28.15, rot: 90 },
-  { id: 'box_68', x: -29.97, z: 26.65, rot: 90 },
-  { id: 'box_69', x: -29.97, z: 25.15, rot: 90 },
-  { id: 'box_70', x: -29.97, z: 23.65, rot: 90 },
+  { id: 'box_67', x: -16.85, z: 29.75, rot: 270 },
+  { id: 'box_68', x: -16.85, z: 28.25, rot: 270 },
+  { id: 'box_69', x: -16.85, z: 26.75, rot: 270 },
+  { id: 'box_70', x: -16.85, z: 25.25, rot: 270 },
 
-  { id: 'box_71', x: -1.33, z: 30.11, rot: 270 },
-  { id: 'box_72', x: -1.33, z: 28.61, rot: 270 },
-  { id: 'box_73', x: -1.33, z: 27.11, rot: 270 },
-  { id: 'box_74', x: -1.33, z: 25.61, rot: 270 },
+  { id: 'box_71', x: -12.85, z: 29.75, rot: 270 },
+  { id: 'box_72', x: -12.85, z: 28.25, rot: 270 },
+  { id: 'box_73', x: -12.85, z: 26.75, rot: 270 },
+  { id: 'box_74', x: -12.85, z: 25.25, rot: 270 },
 
-  { id: 'box_75', x: -19.22, z: 22.36, rot: 90 },
-  { id: 'box_76', x: -19.22, z: 20.86, rot: 90 },
-  { id: 'box_77', x: -19.22, z: 19.36, rot: 90 },
-  { id: 'box_78', x: -19.22, z: 17.86, rot: 90 },
+  { id: 'box_75', x: -8.84, z: 29.75, rot: 270 },
+  { id: 'box_76', x: -8.84, z: 28.25, rot: 270 },
+  { id: 'box_77', x: -8.84, z: 26.75, rot: 270 },
+  { id: 'box_78', x: -8.84, z: 25.25, rot: 270 },
 
-  { id: 'box_79', x: -9.83, z: 22.36, rot: 270 },
-  { id: 'box_80', x: -9.83, z: 20.86, rot: 270 },
-  { id: 'box_81', x: -9.83, z: 19.36, rot: 270 },
-  { id: 'box_82', x: -9.83, z: 17.86, rot: 270 },
+  { id: 'box_79', x: -31.24, z: 29.75, rot: 90 },
+  { id: 'box_80', x: -31.24, z: 28.25, rot: 90 },
+  { id: 'box_81', x: -31.24, z: 26.75, rot: 90 },
+  { id: 'box_82', x: -31.24, z: 25.25, rot: 90 },
 
-  { id: 'box_83', x: -29.97, z: 21.15, rot: 90 },
-  { id: 'box_84', x: -29.97, z: 19.65, rot: 90 },
-  { id: 'box_85', x: -29.97, z: 18.15, rot: 90 },
-  { id: 'box_86', x: -29.97, z: 16.65, rot: 90 },
+  { id: 'box_83', x: -4.83, z: 29.75, rot: 270 },
+  { id: 'box_84', x: -4.83, z: 28.25, rot: 270 },
+  { id: 'box_85', x: -4.83, z: 26.75, rot: 270 },
+  { id: 'box_86', x: -4.83, z: 25.25, rot: 270 },
 
-  { id: 'box_87', x: -1.33, z: 23.11, rot: 270 },
-  { id: 'box_88', x: -1.33, z: 21.61, rot: 270 },
-  { id: 'box_89', x: -1.33, z: 20.11, rot: 270 },
-  { id: 'box_90', x: -1.33, z: 18.61, rot: 270 },
+  { id: 'box_87', x: -35.25, z: 29.75, rot: 90 },
+  { id: 'box_88', x: -35.25, z: 28.25, rot: 90 },
+  { id: 'box_89', x: -35.25, z: 26.75, rot: 90 },
+  { id: 'box_90', x: -35.25, z: 25.25, rot: 90 },
 
-  { id: 'box_91', x: -19.22, z: 15.36, rot: 90 },
-  { id: 'box_92', x: -19.22, z: 13.86, rot: 90 },
-  { id: 'box_93', x: -19.22, z: 12.36, rot: 90 },
-  { id: 'box_94', x: -19.22, z: 10.86, rot: 90 },
+  { id: 'box_91', x: -16.85, z: 22.75, rot: 270 },
+  { id: 'box_92', x: -16.85, z: 21.25, rot: 270 },
+  { id: 'box_93', x: -16.85, z: 19.75, rot: 270 },
+  { id: 'box_94', x: -16.85, z: 18.25, rot: 270 },
 
-  { id: 'box_97', x: -9.83, z: 15.36, rot: 270 },
-  { id: 'box_98', x: -9.83, z: 13.86, rot: 270 },
-  { id: 'box_101', x: -9.83, z: 12.36, rot: 270 },
-  { id: 'box_102', x: -9.83, z: 10.86, rot: 270 },
+  { id: 'box_97', x: -12.85, z: 22.75, rot: 270 },
+  { id: 'box_98', x: -12.85, z: 21.25, rot: 270 },
+  { id: 'box_101', x: -12.85, z: 19.75, rot: 270 },
+  { id: 'box_102', x: -12.85, z: 18.25, rot: 270 },
 
-  { id: 'box_103', x: -29.97, z: 14.15, rot: 90 },
-  { id: 'box_104', x: -29.97, z: 12.65, rot: 90 },
-  { id: 'box_105', x: -29.97, z: 11.15, rot: 90 },
-  { id: 'box_106', x: -29.97, z: 9.65, rot: 90 },
+  { id: 'box_103', x: -8.84, z: 22.75, rot: 270 },
+  { id: 'box_104', x: -8.84, z: 21.25, rot: 270 },
+  { id: 'box_105', x: -8.84, z: 19.75, rot: 270 },
+  { id: 'box_106', x: -8.84, z: 18.25, rot: 270 },
 
-  { id: 'box_107', x: -1.33, z: 16.11, rot: 270 },
-  { id: 'box_108', x: -1.33, z: 14.61, rot: 270 },
-  { id: 'box_109', x: -1.33, z: 13.11, rot: 270 },
-  { id: 'box_110', x: -1.33, z: 11.61, rot: 270 },
+  { id: 'box_107', x: -31.24, z: 22.75, rot: 90 },
+  { id: 'box_108', x: -31.24, z: 21.25, rot: 90 },
+  { id: 'box_109', x: -31.24, z: 19.75, rot: 90 },
+  { id: 'box_110', x: -31.24, z: 18.25, rot: 90 },
 
-  { id: 'box_111', x: -19.22, z: 8.36, rot: 90 },
-  { id: 'box_112', x: -19.22, z: 6.86, rot: 90 },
-  { id: 'box_113', x: -19.22, z: 5.36, rot: 90 },
-  { id: 'box_114', x: -19.22, z: 3.86, rot: 90 },
+  { id: 'box_111', x: -4.83, z: 22.75, rot: 270 },
+  { id: 'box_112', x: -4.83, z: 21.25, rot: 270 },
+  { id: 'box_113', x: -4.83, z: 19.75, rot: 270 },
+  { id: 'box_114', x: -4.83, z: 18.25, rot: 270 },
 
-  { id: 'box_115', x: -9.83, z: 8.36, rot: 270 },
-  { id: 'box_116', x: -9.83, z: 6.86, rot: 270 },
-  { id: 'box_117', x: -9.83, z: 5.36, rot: 270 },
-  { id: 'box_118', x: -9.83, z: 3.86, rot: 270 },
+  { id: 'box_115', x: -35.25, z: 22.75, rot: 90 },
+  { id: 'box_116', x: -35.25, z: 21.25, rot: 90 },
+  { id: 'box_117', x: -35.25, z: 19.75, rot: 90 },
+  { id: 'box_118', x: -35.25, z: 18.25, rot: 90 },
 
-  { id: 'box_119', x: -29.97, z: 7.15, rot: 90 },
-  { id: 'box_120', x: -29.97, z: 5.65, rot: 90 },
-  { id: 'box_121', x: -29.97, z: 4.15, rot: 90 },
-  { id: 'box_122', x: -29.97, z: 2.65, rot: 90 },
+  { id: 'box_119', x: -16.85, z: 15.75, rot: 270 },
+  { id: 'box_120', x: -16.85, z: 14.25, rot: 270 },
+  { id: 'box_121', x: -16.85, z: 12.75, rot: 270 },
+  { id: 'box_122', x: -16.85, z: 11.25, rot: 270 },
 
-  { id: 'box_123', x: -1.33, z: 9.11, rot: 270 },
-  { id: 'box_124', x: -1.33, z: 7.61, rot: 270 },
-  { id: 'box_125', x: -1.33, z: 6.11, rot: 270 },
-  { id: 'box_126', x: -1.33, z: 4.61, rot: 270 },
+  { id: 'box_123', x: -12.85, z: 15.75, rot: 270 },
+  { id: 'box_124', x: -12.85, z: 14.25, rot: 270 },
+  { id: 'box_125', x: -12.85, z: 12.75, rot: 270 },
+  { id: 'box_126', x: -12.85, z: 11.25, rot: 270 },
 
-  { id: 'box_127', x: -29.97, z: 0.15, rot: 90 },
-  { id: 'box_128', x: -29.97, z: -1.35, rot: 90 },
-  { id: 'box_129', x: -29.97, z: -2.85, rot: 90 },
-  { id: 'box_130', x: -29.97, z: -4.35, rot: 90 },
+  { id: 'box_127', x: -8.84, z: 15.75, rot: 270 },
+  { id: 'box_128', x: -8.84, z: 14.25, rot: 270 },
+  { id: 'box_129', x: -8.84, z: 12.75, rot: 270 },
+  { id: 'box_130', x: -8.84, z: 11.25, rot: 270 },
 
-  { id: 'box_131', x: -22.69, z: -5.86, rot: 0 },
-  { id: 'box_132', x: -21.19, z: -5.86, rot: 0 },
-  { id: 'box_133', x: -19.69, z: -5.86, rot: 0 },
-  { id: 'box_134', x: -18.19, z: -5.86, rot: 0 },
+  { id: 'box_131', x: -31.24, z: 15.75, rot: 90 },
+  { id: 'box_132', x: -31.24, z: 14.25, rot: 90 },
+  { id: 'box_133', x: -31.24, z: 12.75, rot: 90 },
+  { id: 'box_134', x: -31.24, z: 11.25, rot: 90 },
 
-  { id: 'box_135', x: -15.69, z: -5.86, rot: 0 },
-  { id: 'box_136', x: -14.19, z: -5.86, rot: 0 },
-  { id: 'box_137', x: -12.69, z: -5.86, rot: 0 },
-  { id: 'box_138', x: -11.19, z: -5.86, rot: 0 },
+  { id: 'box_135', x: -4.83, z: 15.75, rot: 270 },
+  { id: 'box_136', x: -4.83, z: 14.25, rot: 270 },
+  { id: 'box_137', x: -4.83, z: 12.75, rot: 270 },
+  { id: 'box_138', x: -4.83, z: 11.25, rot: 270 },
 
-  { id: 'box_139', x: -8.69, z: -5.86, rot: 0 },
-  { id: 'box_140', x: -7.19, z: -5.86, rot: 0 },
-  { id: 'box_141', x: -5.69, z: -5.86, rot: 0 },
-  { id: 'box_142', x: -4.19, z: -5.86, rot: 0 },
+  { id: 'box_139', x: -35.25, z: 15.75, rot: 90 },
+  { id: 'box_140', x: -35.25, z: 14.25, rot: 90 },
+  { id: 'box_141', x: -35.25, z: 12.75, rot: 90 },
+  { id: 'box_142', x: -35.25, z: 11.25, rot: 90 },
 ]
 // ── Onboarding (v2) ──────────────────────────────────────────
 /** KJ's ground arrow (2026-09-20): 20 tris, gold emissive, no texture, lying flat in
@@ -878,8 +879,43 @@ export function rollPlantSpecies(tier = 0): string {
  *  regular species with a tint. While a pool is EMPTY that tier falls back to the regular catalogue, so the game
  *  keeps working until the art lands. To add one: append an entry here (id, name, modelSrc, scale/offsets as for
  *  PLANT_SPECIES) and drop `assets/images/plantThumbs/<id>.png`. See design/bespoke-plants.md. Plan: 12 Mythic, 6 Unique. */
-export const MYTHIC_PLANTS: ReadonlyArray<PlantSpecies> = []
-export const UNIQUE_PLANTS: ReadonlyArray<PlantSpecies> = []
+export const MYTHIC_PLANTS: ReadonlyArray<PlantSpecies> = [
+  { id: 'stout_paradise_anemone', name: 'Stout Paradise Anemone', pack: 'mythic', modelSrc: 'assets/scene/Models/plants/mythic/stout_paradise_anemone/stout_paradise_anemone.glb', scale: 0.4228, baseYOffset: 0.001, offsetX: 0.0, offsetZ: -0.0002 },
+  { id: 'all_seeing_berry', name: 'All-Seeing Berry', pack: 'mythic', modelSrc: 'assets/scene/Models/plants/mythic/all_seeing_berry/all_seeing_berry.glb', scale: 0.373, baseYOffset: 0.021, offsetX: -0.0264, offsetZ: 0.0404 },
+  { id: 'pumpkin_sprite', name: 'Pumpkin Sprite', pack: 'mythic', modelSrc: 'assets/scene/Models/plants/mythic/pumpkin_sprite/pumpkin_sprite.glb', scale: 0.6943, baseYOffset: -0.0029, offsetX: -0.013, offsetZ: -0.0004 },
+  { id: 'anemone_lantern', name: 'Anemone Lantern', pack: 'mythic', modelSrc: 'assets/scene/Models/plants/mythic/anemone_lantern/anemone_lantern.glb', scale: 0.4293, baseYOffset: -0.0051, offsetX: -0.0002, offsetZ: -0.0017 },
+  { id: 'shy_curlberry', name: 'Shy Curlberry', pack: 'mythic', modelSrc: 'assets/scene/Models/plants/mythic/shy_curlberry/shy_curlberry.glb', scale: 0.359, baseYOffset: 0.0152, offsetX: 0.0, offsetZ: 0.0 },
+  { id: 'violet_alien_anemone', name: 'Violet Alien Anemone', pack: 'mythic', modelSrc: 'assets/scene/Models/plants/mythic/violet_alien_anemone/violet_alien_anemone.glb', scale: 0.443, baseYOffset: -0.0039, offsetX: -0.0057, offsetZ: 0.0446 },
+  { id: 'sunlit_coral', name: 'Sunlit Coral', pack: 'mythic', modelSrc: 'assets/scene/Models/plants/mythic/sunlit_coral/sunlit_coral.glb', scale: 0.3671, baseYOffset: 0.0055, offsetX: -0.0265, offsetZ: 0.0191 },
+  { id: 'teal_trumpet', name: 'Teal Trumpet', pack: 'mythic', modelSrc: 'assets/scene/Models/plants/mythic/teal_trumpet/teal_trumpet.glb', scale: 0.3624, baseYOffset: 0.0196, offsetX: 0.0191, offsetZ: 0.0037 },
+  { id: 'squishy_succulent', name: 'Squishy Succulent', pack: 'mythic', modelSrc: 'assets/scene/Models/plants/mythic/squishy_succulent/squishy_succulent.glb', scale: 0.3412, baseYOffset: -0.0025, offsetX: 0.0254, offsetZ: 0.0258 },
+  { id: 'nobbly_puff_plant', name: 'Nobbly Puff Plant', pack: 'mythic', modelSrc: 'assets/scene/Models/plants/mythic/nobbly_puff_plant/nobbly_puff_plant.glb', scale: 0.3438, baseYOffset: -0.0012, offsetX: 0.0363, offsetZ: -0.0077 },
+  { id: 'spiral_bloom', name: 'Spiral Bloom', pack: 'mythic', modelSrc: 'assets/scene/Models/plants/mythic/spiral_bloom/spiral_bloom.glb', scale: 0.2442, baseYOffset: -0.003, offsetX: -0.007, offsetZ: -0.0346 },
+  { id: 'judgement_berry', name: 'Judgement Berry', pack: 'mythic', modelSrc: 'assets/scene/Models/plants/mythic/judgement_berry/judgement_berry.glb', scale: 0.376, baseYOffset: 0.002, offsetX: 0.0097, offsetZ: 0.0124 },
+  { id: 'mosaic_reef_bloom', name: 'Mosaic Reef Bloom', pack: 'mythic', modelSrc: 'assets/scene/Models/plants/mythic/mosaic_reef_bloom/mosaic_reef_bloom.glb', scale: 0.4162, baseYOffset: 0.0079, offsetX: -0.0137, offsetZ: 0.0527 },
+  { id: 'sunset_anemone', name: 'Sunset Anemone', pack: 'mythic', modelSrc: 'assets/scene/Models/plants/mythic/sunset_anemone/sunset_anemone.glb', scale: 0.3389, baseYOffset: -0.0025, offsetX: 0.001, offsetZ: 0.0348 },
+  { id: 'sprouted_anemone', name: 'Sprouted Anemone', pack: 'mythic', modelSrc: 'assets/scene/Models/plants/mythic/sprouted_anemone/sprouted_anemone.glb', scale: 0.3444, baseYOffset: -0.0025, offsetX: 0.0004, offsetZ: 0.0629 },
+  { id: 'sour_banana_plant', name: 'Sour Banana Plant', pack: 'mythic', modelSrc: 'assets/scene/Models/plants/mythic/sour_banana_plant/sour_banana_plant.glb', scale: 0.4328, baseYOffset: 0.0319, offsetX: -0.0054, offsetZ: 0.0381 },
+  { id: 'coral_bloom', name: 'Coral Bloom', pack: 'mythic', modelSrc: 'assets/scene/Models/plants/mythic/coral_bloom/coral_bloom.glb', scale: 0.3269, baseYOffset: -0.0009, offsetX: 0.0077, offsetZ: -0.0078 },
+  { id: 'sprouted_pink_lily', name: 'Sprouted Pink Lily', pack: 'mythic', modelSrc: 'assets/scene/Models/plants/mythic/sprouted_pink_lily/sprouted_pink_lily.glb', scale: 0.2122, baseYOffset: 0.0119, offsetX: -0.0141, offsetZ: 0.0005 },
+  { id: 'moonroot_carrot', name: 'Moonroot Carrot', pack: 'mythic', modelSrc: 'assets/scene/Models/plants/mythic/moonroot_carrot/moonroot_carrot.glb', scale: 0.3544, baseYOffset: 0.0161, offsetX: -0.0234, offsetZ: -0.0341 },
+  { id: 'spotted_midnight_lily', name: 'Spotted Midnight Lily', pack: 'mythic', modelSrc: 'assets/scene/Models/plants/mythic/spotted_midnight_lily/spotted_midnight_lily.glb', scale: 0.359, baseYOffset: -0.0011, offsetX: -0.0, offsetZ: -0.0 },
+]
+export const UNIQUE_PLANTS: ReadonlyArray<PlantSpecies> = [
+  { id: 'alien_strawberry_vine', name: 'Alien Strawberry Vine', pack: 'unique', modelSrc: 'assets/scene/Models/plants/unique/alien_strawberry_vine/alien_strawberry_vine.glb', scale: 0.308, baseYOffset: -0.0008, offsetX: 0.0031, offsetZ: 0.0638 },
+  { id: 'striped_anemone', name: 'Striped Anemone', pack: 'unique', modelSrc: 'assets/scene/Models/plants/unique/striped_anemone/striped_anemone.glb', scale: 0.354, baseYOffset: 0.0096, offsetX: 0.0648, offsetZ: 0.1353 },
+  { id: 'budding_anemone', name: 'Budding Anemone', pack: 'unique', modelSrc: 'assets/scene/Models/plants/unique/budding_anemone/budding_anemone.glb', scale: 0.354, baseYOffset: 0.0096, offsetX: 0.069, offsetZ: 0.1063 },
+  { id: 'hidden_fern_bulb', name: 'Hidden Fern Bulb', pack: 'unique', modelSrc: 'assets/scene/Models/plants/unique/hidden_fern_bulb/hidden_fern_bulb.glb', scale: 0.3423, baseYOffset: -0.0006, offsetX: -0.0083, offsetZ: 0.0257 },
+  { id: 'giant_bugberry', name: 'Giant Bugberry', pack: 'unique', modelSrc: 'assets/scene/Models/plants/unique/giant_bugberry/giant_bugberry.glb', scale: 0.4313, baseYOffset: -0.0041, offsetX: 0.0141, offsetZ: -0.0 },
+  { id: 'snake_eye_vine', name: 'Snake-Eye Vine', pack: 'unique', modelSrc: 'assets/scene/Models/plants/unique/snake_eye_vine/snake_eye_vine.glb', scale: 0.3655, baseYOffset: -0.0033, offsetX: 0.024, offsetZ: -0.0219 },
+  { id: 'striped_honey_pot', name: 'Striped Honey Pot', pack: 'unique', modelSrc: 'assets/scene/Models/plants/unique/striped_honey_pot/striped_honey_pot.glb', scale: 0.3756, baseYOffset: -0.0052, offsetX: 0.0401, offsetZ: -0.0069 },
+  { id: 'peacock_bloom', name: 'Peacock Bloom', pack: 'unique', modelSrc: 'assets/scene/Models/plants/unique/peacock_bloom/peacock_bloom.glb', scale: 0.2631, baseYOffset: 0.0009, offsetX: -0.018, offsetZ: 0.021 },
+  { id: 'puffer_plant', name: 'Puffer Plant', pack: 'unique', modelSrc: 'assets/scene/Models/plants/unique/puffer_plant/puffer_plant.glb', scale: 0.3355, baseYOffset: 0.0006, offsetX: 0.0, offsetZ: -0.0 },
+  { id: 'golden_step_palm', name: 'Golden Step Palm', pack: 'unique', modelSrc: 'assets/scene/Models/plants/unique/golden_step_palm/golden_step_palm.glb', scale: 0.2065, baseYOffset: 0.003, offsetX: -0.0021, offsetZ: 0.0052 },
+]
+/** Mythic + Unique plants: the Almanac's "Legends". Each exists at ONE rarity only (its own tier). */
+export const LEGEND_PLANTS: ReadonlyArray<PlantSpecies> = [...MYTHIC_PLANTS, ...UNIQUE_PLANTS]
+export function legendTier(id: string): number { return MYTHIC_PLANTS.some(s => s.id === id) ? 6 : UNIQUE_PLANTS.some(s => s.id === id) ? 7 : -1 }
 export function bespokePool(tier: number): ReadonlyArray<PlantSpecies> {
   return tier === 6 ? MYTHIC_PLANTS : tier === 7 ? UNIQUE_PLANTS : []
 }
@@ -919,11 +955,14 @@ export const FINALE_RARE_TIER = 2
  *  planter field — exactly what KJ's screenshot showed). Two independent checks:
  *  `StandTop.root` (local -7.97, 0.17, -30.66) maps to x 15.969, and the mean of the four
  *  markers below is 15.976 — they are centred on their own stand. */
+// y RAISED 0.979 -> 1.479 on 2026-09-29: the stand in scene.glb rose 0.5 m after these markers were
+// baked (StandBottom's plinth tops are now y 1.48), which sank the avatars half a metre into their
+// pods. The marker nodes themselves are gone from the file, so x/z are kept and y follows the plinths.
 export const PODIUM_SLOTS: ReadonlyArray<{ x: number; y: number; z: number }> = [
-  { x: 13.173, y: 0.979, z: -6.714 },   // Armature       (local x -5.173)
-  { x: 15.029, y: 0.979, z: -6.714 },   // Armature.001   (local x -7.029)
-  { x: 16.907, y: 0.979, z: -6.714 },   // Armature.002   (local x -8.907)
-  { x: 18.794, y: 0.979, z: -6.714 },   // Armature.003   (local x -10.794)
+  { x: 13.173, y: 1.479, z: -6.714 },   // Armature       (local x -5.173)
+  { x: 15.029, y: 1.479, z: -6.714 },   // Armature.001   (local x -7.029)
+  { x: 16.907, y: 1.479, z: -6.714 },   // Armature.002   (local x -8.907)
+  { x: 18.794, y: 1.479, z: -6.714 },   // Armature.003   (local x -10.794)
 ]
 /** Euler Y. The markers carry GLB yaw 180 and I reasoned an X-mirror would preserve it;
  *  KJ checked in-world 2026-09-21 and they faced backwards, so the import lands them at 0.

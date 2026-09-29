@@ -87,6 +87,7 @@ import {
   BLOOM_TRIGGER_COOLDOWN_MS, EXPIRY_TELL_MS,
   WATER_COOLDOWN_MS, WATER_REACH_M,
   plantSpeciesById,
+  LEGEND_PLANTS,
   rarityTierById,
   galleryBoost,
   AVENUE_POSITIONS,
@@ -1213,6 +1214,7 @@ function speciesCount(list: string[]): number {
   const ids = new Set<string>()
   for (const e of list) { const bar = e.lastIndexOf('|'); ids.add(bar === -1 ? e : e.slice(0, bar)) }
   ids.delete('')
+  for (const s of LEGEND_PLANTS) ids.delete(s.id)   // Legends have their own row; the species ladder counts regular species only
   return ids.size
 }
 

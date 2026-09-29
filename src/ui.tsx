@@ -211,7 +211,7 @@ const EDGE       = 16          // gap from the safe-area edge
 function barColor(): { r: number; g: number; b: number } {
   return bannerHealth >= 0.8 ? BAR_GREEN : bannerHealth >= 0.5 ? BAR_ORANGE : BAR_RED
 }
-// Ring sprites: ONE sprite sheet (ring_sheet.png, 8×8 cells of 256 px) holding all 41 health
+// Ring sprites: ONE sprite sheet (ring_sheet.png, 1024², 8×8 cells of 128 px — downsized from 2048² on 2026-09-29) holding all 41 health
 // frames then all 21 bloom frames, packed from the original ring_NN / ringbloom_NN PNGs
 // (2026-09-19, originals kept). The ring shows a frame by moving its UV window, so the texture
 // never changes — changing an element's texture made the client rebuild its background (a
@@ -225,7 +225,7 @@ const RING_FRAME_COUNT  = RING_STEPS  + 1   // 41 frames: 0…40
 const BLOOM_FRAME_COUNT = BLOOM_STEPS + 1   // 21 frames: 0…20
 const RING_SHEET      = `${UI_DIR}ring_sheet.png`
 const RING_SHEET_COLS = 8                    // 8×8 grid, frames in reading order from the top-left
-const RING_TEXEL      = 0.5 / 2048           // half-texel inset so neighbouring cells never bleed in
+const RING_TEXEL      = 0.5 / 1024           // half-texel inset so neighbouring cells never bleed in (sheet is 1024², 128 px cells — was 2048², KJ 2026-09-29: far bigger than the ~132 px ring needs)
 /** UVs of one sheet cell, bottom-left vertex clockwise (PBUiBackground.uvs order). */
 function ringUvs(i: number): number[] {
   const col = i % RING_SHEET_COLS, row = Math.floor(i / RING_SHEET_COLS), k = 1 / RING_SHEET_COLS

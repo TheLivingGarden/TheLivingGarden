@@ -1,11 +1,16 @@
 // =============================================================
 // The Living Garden — Vertical Progress Bars
 //
-// All bar positions are defined in BAR_DEFINITIONS — no Creator
-// Hub placeholder entities required.  Each bar is a code-created
-// background plate; fill and marker ticks are parented to it so
-// they inherit rotation.  Labels are world-space so they render
-// correctly regardless of bar orientation.
+// All bar positions are defined in BAR_DEFINITIONS (or baked in PROP_LAYOUT by the Prop editor).
+// One parent per bar (KJ 2026-09-29: "when I move the progress bar the numbers and the emissive
+// fill must move with it — a parent/children situation"):
+//   root  — UNSCALED, carries position + rotation + the ProgressBar_N name the Prop editor moves
+//   ├ plate — the scaled background box
+//   │ ├ fill   (grows from the bottom)
+//   │ └ ticks
+//   └ labels — children of the root, NOT the plate: a TextShape under the plate's stretched
+//              0.25 × 3 × 0.06 scale would be distorted. Placed in the root's local space.
+// Sparks read the root's CURRENT position, so they follow a moved bar too.
 // =============================================================
 
 import {
@@ -16,9 +21,11 @@ import {
   MaterialTransparencyMode,
   Transform,
   TextShape,
+  Name,
 } from '@dcl/sdk/ecs'
 import { Color4, Quaternion } from '@dcl/sdk/math'
 import { BLOOM_THRESHOLD, TOTAL_PLANTS } from './shared/config'
+import { PROP_LAYOUT } from './shared/layout'
 
 // ===============================================================
 // ██████╗  █████╗ ██████╗      ██████╗ ██████╗ ███╗   ██╗███████╗██╗ ██████╗
@@ -142,6 +149,7 @@ export function setBloomRatio(ratio: number): void {
 // ---------------------------------------------------------------
 
 interface Bar {
+  root:         Entity   // unscaled parent — its live Transform is where the bar is now
   fill:         Entity
   targetRatio:  number   // where the bar should end up
   displayRatio: number   // currently rendered (lerps toward targetRatio)
@@ -149,9 +157,6 @@ interface Bar {
   fillScaleZ:   number
   fillFrontZ:   number
   minFillH:     number
-  worldX:       number   // world-space bar centre X
-  worldY:       number   // world-space bar centre Y (lifted)
-  worldZ:       number   // world-space bar centre Z
   barHeight:    number   // world height of bar (metres)
   lastSparkMs:  number   // timestamp of last spark burst — for cooldown
 }
@@ -172,31 +177,23 @@ const sparkPool: PooledSpark[] = []
 // Helpers
 // ---------------------------------------------------------------
 
-/** World-space +X (right) component from quaternion. */
-function quatRightX(qx: number, qy: number, qz: number, qw: number): number {
-  return 1 - 2 * (qy * qy + qz * qz)
-}
-/** World-space +X (right) Z component from quaternion. */
-function quatRightZ(qx: number, qy: number, qz: number, qw: number): number {
-  return 2 * (qx * qz - qy * qw)
-}
-
 /** Activate pool slots at the fill tip of a bar. No entities are created. */
 function spawnSparks(bar: Bar): void {
   const now = Date.now()
   if (now - bar.lastSparkMs < SPARK_COOLDOWN_MS) return   // per-bar cooldown
   bar.lastSparkMs = now
 
-  const tipY = bar.worldY + (bar.targetRatio - 0.5) * bar.barHeight
+  const at = Transform.get(bar.root).position   // where the bar stands NOW (it may have been moved)
+  const tipY = at.y + (bar.targetRatio - 0.5) * bar.barHeight
   let spawned = 0
   for (const s of sparkPool) {
     if (spawned >= SPARK_COUNT) break
     if (s.active) continue
     const angle = Math.random() * Math.PI * 2
     const speed = Math.random() * SPARK_SPREAD
-    s.x      = bar.worldX + Math.cos(angle) * speed * 0.1
+    s.x      = at.x + Math.cos(angle) * speed * 0.1
     s.y      = tipY
-    s.z      = bar.worldZ + Math.sin(angle) * speed * 0.1
+    s.z      = at.z + Math.sin(angle) * speed * 0.1
     s.vx     = Math.cos(angle) * speed
     s.vy     = SPARK_RISE * (0.7 + Math.random() * 0.6)
     s.vz     = Math.sin(angle) * speed
@@ -215,23 +212,31 @@ function spawnSparks(bar: Bar): void {
 // ---------------------------------------------------------------
 
 export function setupProgressBars(): void {
-  for (const def of BAR_DEFINITIONS) {
+  BAR_DEFINITIONS.forEach((def, i) => {
     const sx = def.width   // world width
     const sy = def.height  // world height
     const sz = def.depth   // world depth
-    const px = def.position.x
-    const py = def.position.y + BAR_LIFT_M   // lifted
-    const pz = def.position.z
-    const quat = Quaternion.fromEulerDegrees(def.rotation.x, def.rotation.y, def.rotation.z)
-    const { x: qx, y: qy, z: qz, w: qw } = quat
+    // 2026-09-29 (KJ: "connect them to the props editor") — same PROP_LAYOUT-direct-read
+    // pattern as PouchRack/FlowerShelf/ExamTable, not the generic composite-entity applier
+    // (applyPropLayout runs before setupProgressBars, so it would never find these). The
+    // baked value is the FULL final position (BAR_LIFT_M already folded in by the editor),
+    // unlike the BAR_DEFINITIONS fallback, which still needs it added.
+    const name = `ProgressBar_${i + 1}`
+    const o = PROP_LAYOUT[name]
+    const px = o ? o.x : def.position.x
+    const py = o ? o.y : def.position.y + BAR_LIFT_M
+    const pz = o ? o.z : def.position.z
+    const rotY = o?.rotY ?? def.rotation.y
+    const quat = Quaternion.fromEulerDegrees(def.rotation.x, rotY, def.rotation.z)
 
-    // ── Background plate — code-created entity, no Creator Hub dependency ─
+    // ── Root — unscaled parent of everything below; the one entity the Prop editor moves ─
+    const root = engine.addEntity()
+    Transform.create(root, { position: { x: px, y: py, z: pz }, rotation: quat })
+    Name.create(root, { value: name })   // discoverable by the Prop editor (propLayoutTool.ts)
+
+    // ── Background plate — child of the root, carries the bar's size ─
     const ph = engine.addEntity()
-    Transform.create(ph, {
-      position: { x: px, y: py, z: pz },
-      rotation: quat,
-      scale:    { x: sx, y: sy, z: sz },
-    })
+    Transform.create(ph, { parent: root, scale: { x: sx, y: sy, z: sz } })
     MeshRenderer.setBox(ph)
     Material.setPbrMaterial(ph, {
       albedoColor:       COLOR_BG,
@@ -262,6 +267,7 @@ export function setupProgressBars(): void {
       emissiveIntensity: FILL_EMISSION,
     })
     bars.push({
+      root,
       fill,
       targetRatio:  0,
       displayRatio: 0,
@@ -269,17 +275,12 @@ export function setupProgressBars(): void {
       fillScaleZ,
       fillFrontZ,
       minFillH,
-      worldX:      px,
-      worldY:      py,
-      worldZ:      pz,
       barHeight:   sy,
       lastSparkMs: 0,
     })
 
     // ── Marker ticks — children of background ─────────────────────
     const tickWorldDepth = Math.min(sz, MAX_TICK_DEPTH_M)
-    const rx = quatRightX(qx, qy, qz, qw)
-    const rz = quatRightZ(qx, qy, qz, qw)
 
     for (const m of MARKERS) {
       const localY     = m.ratio - 0.5
@@ -303,15 +304,11 @@ export function setupProgressBars(): void {
         emissiveIntensity: m.isThreshold ? THRESHOLD_EMISSION : MARKER_EMISSION,
       })
 
-      const labelDist = sx * 0.5 + LABEL_OFFSET_M
-      const labelX    = px + rx * labelDist
-      const labelY    = py + (m.ratio - 0.5) * sy
-      const labelZ    = pz + rz * labelDist
-
+      // Label: child of the ROOT (unscaled), to the bar's right, level with its tick.
       const label = engine.addEntity()
       Transform.create(label, {
-        position: { x: labelX, y: labelY, z: labelZ },
-        rotation: quat,
+        parent:   root,
+        position: { x: sx * 0.5 + LABEL_OFFSET_M, y: (m.ratio - 0.5) * sy, z: 0 },
       })
       TextShape.create(label, {
         text:      m.label,
@@ -319,7 +316,7 @@ export function setupProgressBars(): void {
         textColor: m.isThreshold ? COLOR_THRESHOLD : COLOR_MARKER,
       })
     }
-  }
+  })
 
   // ── Pre-allocate spark pool — no entity creation during gameplay ─
   for (let i = 0; i < SPARK_MAX_LIVE; i++) {

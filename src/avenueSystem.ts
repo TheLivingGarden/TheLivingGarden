@@ -1,7 +1,7 @@
 // =============================================================
 // Bloom Garden v2 — The Avenue (CLIENT ONLY)
 //
-// design/communal-planters.md (2026-09-22): 55 Hall of Fame stands (shared/hallOfFame.ts), holding
+// design/communal-planters.md (2026-09-22): the Hall of Fame stands (shared/hallOfFame.ts; 24 since the 2026-09-29 re-bake, were 55), holding
 // harvested Rare+ flowers. A gallery, not a garden — nothing grows or wilts here, the
 // flower is simply on show with its owner's name until they take it back (or the
 // crowding rule returns it to My flowers). The stands themselves are

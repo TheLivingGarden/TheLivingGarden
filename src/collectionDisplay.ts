@@ -64,6 +64,17 @@ let fPage = 0
 let fSig = ''
 let fTitle: Entity, fSubtitle: Entity
 let giftBoard: { root: Entity; text: Entity; tap: Entity } | null = null
+// Rarity tabs (KJ 2026-09-29: "I'd like to be able to see my flowers of different rarities" —
+// 188 kept sorted rarest-first put the Commons on page 11). A rail on top of the sign: "All" plus
+// one tab per tier in its rarity colour, each with how many you hold; tap one to show only that
+// rarity. FIXED positions, unowned tiers dimmed rather than hidden (the Almanac rule: a row that
+// never moves can be learned, and a gap reads as a gap).
+const RTAB_TIERS = [-1, ...RARITY_TIERS.map(t => t.id)]   // -1 = All
+const RTAB_PITCH = 0.42, RTAB_W = 0.36, RTAB_H = 0.24, RTAB_Y = 3.55
+interface RarityTab { tier: number; pill: Entity; count: Entity; tap: Entity; owned: boolean | null }
+let rarityTabs: RarityTab[] = []
+let rarityTabMarker: Entity | null = null
+let fFilter = -1   // -1 = All, else a rarity tier id
 let giftKey = ''
 
 /** The gift board: hidden with no flowers; "Gift a flower" while another gardener is here. */
@@ -109,6 +120,19 @@ function setupFlowerShelf(): void {
     tapArea(root, { x: sd * w * 0.38, y: 3.0, z: 0.2 }, { x: 0.7, y: 0.7, z: 0.1 }, dir < 0 ? 'Previous page' : 'Next page', () => turnFlowerPage(dir))
   })
 
+  // Rarity tab rail, sitting on top of the sign board (the board's top edge is y 3.35).
+  box(root, { x: 0, y: RTAB_Y, z: 0.28 }, { x: RTAB_TIERS.length * RTAB_PITCH + 0.12, y: RTAB_H + 0.12, z: 0.07 }, PLATE, 0.3)
+  rarityTabs = RTAB_TIERS.map((tier, i) => {
+    const x = (i - (RTAB_TIERS.length - 1) / 2) * RTAB_PITCH
+    const pill = box(root, { x, y: RTAB_Y, z: 0.23 }, { x: RTAB_W, y: RTAB_H, z: 0.02 }, CREAM, 0.4)
+    const count = label(root, { x, y: RTAB_Y, z: 0.2 }, '', 0.6, INK, RTAB_W, RTAB_H)
+    const name = tier < 0 ? 'All' : rarityTierById(tier).name
+    const tap = tapArea(root, { x, y: RTAB_Y, z: 0.19 }, { x: RTAB_W, y: RTAB_H + 0.06, z: 0.1 }, `Show ${name}`, () => setFilter(tier))
+    return { tier, pill, count, tap, owned: null }
+  })
+  // The selected tab's gold underline — one entity, moved.
+  rarityTabMarker = box(root, { x: 0, y: RTAB_Y - RTAB_H / 2 - 0.045, z: 0.22 }, { x: RTAB_W, y: 0.035, z: 0.02 }, GOLD, 1.2)
+
   fSlots = []
   for (let i = 0; i < F_PAGE; i++) {
     const row = i < F_PER_ROW ? 0 : 1
@@ -132,6 +156,43 @@ function setupFlowerShelf(): void {
   }
 }
 
+function setFilter(tier: number): void {
+  if (tier >= 0 && !groupFlowers().some(g => g.rarityTier === tier)) return   // an unowned tier's hover already says so
+  if (fFilter === tier) return
+  fFilter = tier
+  fPage = 0
+  fSig = ''
+  playSfx('tutorialTap')
+}
+
+/** Counts per tier, the dim/lit state of each tab, and where the underline sits. */
+function refreshTabs(all: Group[]): void {
+  const byTier = new Map<number, number>()
+  for (const g of all) byTier.set(g.rarityTier, (byTier.get(g.rarityTier) ?? 0) + g.count)
+  const total = all.reduce((n, g) => n + g.count, 0)
+  for (const t of rarityTabs) {
+    const n = t.tier < 0 ? total : (byTier.get(t.tier) ?? 0)
+    TextShape.getMutable(t.count).text = t.tier < 0 ? `All ${n}` : `${n}`
+    const owned = n > 0
+    if (owned !== t.owned) {
+      t.owned = owned
+      const base = t.tier < 0 ? { r: 0.9, g: 0.85, b: 0.7 } : rarityTierById(t.tier).seedColor
+      const k = owned ? 1 : 0.28   // unowned: a dark swatch of its colour
+      const c = Color4.create(base.r * k, base.g * k, base.b * k, 1)
+      Material.setPbrMaterial(t.pill, { albedoColor: c, emissiveColor: c, emissiveIntensity: owned ? 0.5 : 0.1, metallic: 0, roughness: 1 })
+      TextShape.getMutable(t.count).textColor = owned ? INK : CREAM
+      setHover(t.tap, t.tier < 0 ? 'Show all your flowers' : owned ? `Show your ${rarityTierById(t.tier).name} flowers` : `No ${rarityTierById(t.tier).name} flowers yet`)
+    }
+  }
+  // A filtered tier you no longer hold (gifted / displayed away) falls back to All.
+  if (fFilter >= 0 && !byTier.get(fFilter)) { fFilter = -1; fPage = 0 }
+  if (rarityTabMarker) {
+    const i = RTAB_TIERS.indexOf(fFilter)
+    const t = Transform.getMutable(rarityTabMarker)
+    t.position = { ...t.position, x: (i - (RTAB_TIERS.length - 1) / 2) * RTAB_PITCH }
+  }
+}
+
 function turnFlowerPage(dir: number): void {
   const pages = Math.max(1, Math.ceil(fGroups.length / F_PAGE))
   fPage = (fPage + dir + pages) % pages
@@ -146,16 +207,19 @@ function holdSlot(i: number): void {
 }
 
 function refreshFlowerShelf(): void {
-  fGroups = groupFlowers()
+  const all = groupFlowers()
+  const sig = `${fFilter}|${fPage}|${getFlowers().length}|${all.map(g => g.key + g.count).join(',')}`
+  if (sig === fSig) return
+  refreshTabs(all)   // may drop a filter that no longer has flowers
+  fGroups = fFilter < 0 ? all : all.filter(g => g.rarityTier === fFilter)
   const pages = Math.max(1, Math.ceil(fGroups.length / F_PAGE))
   if (fPage >= pages) fPage = pages - 1
-  const sig = `${fPage}|${getFlowers().length}|${fGroups.map(g => g.key + g.count).join(',')}`
-  if (sig === fSig) return
-  fSig = sig
+  fSig = `${fFilter}|${fPage}|${getFlowers().length}|${all.map(g => g.key + g.count).join(',')}`
 
-  TextShape.getMutable(fSubtitle).text = fGroups.length === 0
+  const shown = fGroups.reduce((n, g) => n + g.count, 0)
+  TextShape.getMutable(fSubtitle).text = all.length === 0
     ? 'grow a flower in a planter'
-    : `page ${fPage + 1} of ${pages}   -   ${getFlowers().length} kept`
+    : `${fFilter < 0 ? 'All' : rarityTierById(fFilter).name}   -   page ${fPage + 1} of ${pages}   -   ${shown} kept`
 
   for (let i = 0; i < F_PAGE; i++) {
     const s = fSlots[i]

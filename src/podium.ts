@@ -19,9 +19,9 @@
 
 import {
   engine, Transform, AvatarShape, GltfContainer, MeshCollider, ColliderLayer,
-  VisibilityComponent, pointerEventsSystem, InputAction, Entity,
+  VisibilityComponent, pointerEventsSystem, InputAction, Entity, TextShape, TextAlignMode,
 } from '@dcl/sdk/ecs'
-import { Quaternion, Vector3 } from '@dcl/sdk/math'
+import { Quaternion, Vector3, Color4 } from '@dcl/sdk/math'
 import { room } from './shared/messages'
 import {
   PODIUM_SLOTS, PODIUM_ROTATION_Y, PODIUM_COUNT,
@@ -40,7 +40,20 @@ interface BoardEntry { displayName: string; count: number; tier: number; address
  *  AvatarShape.name still gives each figure the platform's own floating nametag; how big
  *  that renders at a distance is native explorer behaviour with no scene-side control
  *  (PBAvatarShape has no size/distance field to tune — checked the schema). */
-interface Slot { avatar: Entity }
+interface Slot { avatar: Entity; rank: Entity; waters: Entity }
+
+// "TOP GARDENERS" display (KJ 2026-09-29: the all-time LIST moved to the side-by-side boards on the far
+// wall; the podium keeps the people). A title on the stand's dark screen, and over each avatar a big
+// rank with their all-time waters underneath, on the panel behind them (Cube.001, face z -7.51). The
+// captions sit in the clear band between the canopy's underside (y 5.74) and the avatars' nametags
+// (about y 3.9), read from the garden side (+Z) so they turn 180. Both follow the paged entries.
+const TITLE_TEXT   = 'TOP GARDENERS'
+const TITLE_AT     = { x: 16.0, y: 7.45, z: -5.37 }   // on StandTop's screen (world y 7.0-8.7), garden face z -5.45
+const CAP_Z        = -7.35
+const CAP_RANK_Y   = 5.2
+const CAP_WATERS_Y = 4.6
+const CAP_GOLD     = Color4.create(1, 0.84, 0.1, 1)
+const CAP_GREEN    = Color4.create(0.6, 1, 0.6, 1)
 
 let entries: BoardEntry[] = []
 let page = 0
@@ -155,8 +168,17 @@ function build(): void {
     const avatar = engine.addEntity()
     Transform.create(avatar, { position: at, rotation: podiumRotation() })
 
-    slots.push({ avatar })
+    const caption = (y: number, text: string, font: number, color: Color4): Entity => {
+      const e = engine.addEntity()
+      Transform.create(e, { position: { x: at.x, y, z: CAP_Z }, rotation: Quaternion.fromEulerDegrees(0, 180, 0) })
+      TextShape.create(e, { text, fontSize: font, textColor: color, textAlign: TextAlignMode.TAM_MIDDLE_CENTER })
+      return e
+    }
+    slots.push({ avatar, rank: caption(CAP_RANK_Y, '', 3.2, CAP_GOLD), waters: caption(CAP_WATERS_Y, '', 1.7, CAP_GREEN) })
   }
+  const title = engine.addEntity()
+  Transform.create(title, { position: TITLE_AT, rotation: Quaternion.fromEulerDegrees(0, 180, 0) })
+  TextShape.create(title, { text: TITLE_TEXT, fontSize: 3.2, textColor: CAP_GOLD, textAlign: TextAlignMode.TAM_MIDDLE_CENTER })
   makePageButton(-1)
   makePageButton(1)
   // Print every slot's WORLD position: the stand sits under a parent rotated -90° on Y,
@@ -179,6 +201,8 @@ function render(): void {
     const e = entries[start + i]
     const show = !!e
     VisibilityComponent.createOrReplace(slot.avatar, { visible: show })
+    TextShape.getMutable(slot.rank).text   = e ? `#${start + i + 1}` : ''
+    TextShape.getMutable(slot.waters).text = e ? `${e.count} waters` : ''
     if (!show) {
       AvatarShape.deleteFrom(slot.avatar)          // an empty pod holds nobody
       continue

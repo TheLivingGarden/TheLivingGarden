@@ -21,7 +21,7 @@
 
 import ReactEcs, { UiEntity, Label } from '@dcl/sdk/react-ecs'
 import { timers } from '@dcl/sdk/ecs'
-import { PLANT_SPECIES, stampTotal, rarityTierById, plantSpeciesById, DISCOVERY_CARD_MS, MILESTONE_CARD_MS, nextMilestone, milestoneTarget, nextStampMilestone, stampMilestoneTarget } from './shared/config'
+import { PLANT_SPECIES, LEGEND_PLANTS, legendTier, stampTotal, rarityTierById, plantSpeciesById, DISCOVERY_CARD_MS, MILESTONE_CARD_MS, nextMilestone, milestoneTarget, nextStampMilestone, stampMilestoneTarget } from './shared/config'
 import { getDiscovered, stampsFound } from './playerInventory'
 import { room } from './shared/messages'
 
@@ -65,7 +65,7 @@ export function showDiscovery(flower: string, tier: number, delayMs = 0): void {
   const seen = getDiscovered()   // snapshotted NOW, even when the card is delayed for the reveal beat
   // Two different "new": a species never seen at all, and a species seen but never at
   // THIS rarity. The headline count is species, so only the former says "New species!".
-  const c = { flower, tier, isNew: !seen.has(flower), newTier: !seen.get(flower)?.has(tier), found: seen.size, stamps: stampsFound() }
+  const c = { flower, tier, isNew: !seen.has(flower), newTier: !seen.get(flower)?.has(tier), found: [...seen.keys()].filter(id => legendTier(id) < 0).length, stamps: stampsFound() }
   const show = () => { card = c; shownAt = Date.now(); cardDueAt = 0 }
   if (delayMs > 0) { cardDueAt = Date.now() + delayMs; timers.setTimeout(show, delayMs) } else show()
   console.log(`[Discovery] ${flower} tier=${tier} new=${c.isNew} newTier=${c.newTier} found=${c.found}/${PLANT_SPECIES.length}`)
@@ -192,7 +192,9 @@ export function DiscoveryCardUi(props: { px: (n: number) => number; fs: (n: numb
         {/* Discovery is recorded server-side the moment the planter opens, so this counts
             the new one immediately — whether they harvest it or leave it on show. */}
         <Label
-          value={`${c.found + (c.isNew ? 1 : 0)} of ${PLANT_SPECIES.length} species discovered`}
+          value={legendTier(c.flower) >= 0
+            ? `${LEGEND_PLANTS.filter(s => getDiscovered().has(s.id)).length} of ${LEGEND_PLANTS.length} legends discovered`
+            : `${c.found + (c.isNew ? 1 : 0)} of ${PLANT_SPECIES.length} species discovered`}
           fontSize={fs(14)}
           color={{ ...DIM, a: a * 0.85 }}
           textAlign="middle-center"

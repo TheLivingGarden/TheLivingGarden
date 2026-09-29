@@ -16,6 +16,7 @@ Thank you to the Decentraland Foundation for the opportunity to develop The Livi
 - Watering emote created by Decentraland Foundation. 
 - Genesis Plaza assets created by Decentraland Foundation.
 - The Rose by proilinub -- https://www.cgtrader.com/free-3d-models/various/various-models/the-rose-c6c339f1-3951-4a62-b60b-8fbb1e253316 -- License: Royalty Free (no AI) 
+- Stylize Plants and Flowers Pack 02 by lowpolyboy -- https://lowpolyboy.itch.io/stylize-plants-and-flowers-pack-02 -- Purchased on itch.io
 
 
 

@@ -30,11 +30,15 @@ import { flairIcon, almanacTitleByRank } from './shared/config'
 //  BOARD CONFIG — edit anything in this block; no other files need touching.
 // ===============================================================
 
-// RE-BAKED 2026-09-22 from scene.glb: the two 7.4 × 5 m panels `Cube.001` (world
-// x 12.39–19.80, y 1.48–6.46, z −7.62…−7.51, directly behind the podium avatars at z −6.71)
-// and `Cube.043` (same x/y, z 55.55–55.66, its mirror at the far end). The all-time title
-// goes on the dark screen at the top of the stand (StandTop, y 6.5–8.2, garden face z −5.45).
-// Found with the node-transformed bbox scan (thin vertical panels ≥3 m wide) — re-run it
+// RE-BAKED 2026-09-29 from scene.glb (KJ: "all time and weekly side by side"). The far wall mesh
+// `Cube.043` is now TWO 7.41 x 4.97 m panels at z 55.55-55.66, y 1.99-6.96: x 6.72-14.13 (centre 10.43)
+// and x 19.71-27.12 (centre 23.41). ALL TIME reads on the left, THIS WEEK on the right, each with the
+// full layout the weekly board had (title, header, ten rows, your own standing). Before this the single
+// weekly board sat at x 16, in the gap between the frames.
+// The podium back panel (`Cube.001`, x 12.39-19.80, y 1.99-6.96, z -7.62..-7.51) no longer carries a
+// list: the podium is the "TOP GARDENERS" display now (podium.ts: a title plus a rank/waters caption
+// over each avatar). The stand and that panel are both 0.5 m higher than on 09-22.
+// Found with the node-transformed bbox scan (thin vertical panels >= 3 m wide) - re-run it
 // if the panels move again.
 
 interface BoardTitle { x: number; y: number; z: number; rotationY: number; font: number }
@@ -61,35 +65,26 @@ interface BoardLayout {
   title:      BoardTitle
 }
 
+// Both read from the garden side (-Z), text 0.16 m in front of the panel face, one column using the whole
+// panel: title, header, ten rows, then the YOU row above the bottom edge (panel bottom is world y 1.99).
 const LB_BOARDS: ReadonlyArray<BoardLayout> = [
   {
-    // Behind the podium, read from the garden (+Z). The stand's LIGHT CANOPY (StandTop,
-    // world y 5.24–6.48) hangs in front of this panel and hid the top and bottom of the
-    // first layout (KJ screenshot) — rows now live entirely in the clear band between the
-    // canopy's underside and the avatars' nametags (~y 3.5): world 5.10 down to 3.78.
-    // Two columns of five, title on the dark screen above the canopy.
     kind: 'allTime',
-    position: { x: 16.1, y: 4.1, z: -7.35 }, rotationY: 180,
-    columns: [
-      { flairX: -3.50, rankX: -3.05, nameX: -2.85, scoreX: -0.35 },
-      { flairX:  0.20, rankX:  0.65, nameX:  0.85, scoreX:  3.40 },
-    ],
-    rows: 5, startY: 1.0, rowStep: 0.33, fontEntry: 1.5,
-    header: null,
-    you: null,          // no room under the rows before the nametags start
-    title: { x: 16.0, y: 7.35, z: -5.37, rotationY: 180, font: 2.6 },
-  },
-  {
-    // The far panel, read from the garden side (−Z), nothing in front of it: one column
-    // using the whole panel — title, header, ten rows, then the YOU row above the bottom
-    // edge (panel bottom is world y 1.48).
-    kind: 'weekly',
-    position: { x: 16.0, y: 3.97, z: 55.39 }, rotationY: 0,
+    position: { x: 10.43, y: 4.47, z: 55.39 }, rotationY: 0,
     columns: [{ flairX: -3.40, rankX: -2.95, nameX: -2.75, scoreX: 3.0 }],
     rows: 10, startY: 1.02, rowStep: 0.32, fontEntry: 1.5,
     header: { y: 1.5, font: 1.5 },
     you: { y: -2.28, font: 1.5 },
-    title: { x: 16.0, y: 3.97 + 2.03, z: 55.47, rotationY: 0, font: 2.0 },
+    title: { x: 10.43, y: 4.47 + 2.03, z: 55.47, rotationY: 0, font: 2.0 },
+  },
+  {
+    kind: 'weekly',
+    position: { x: 23.41, y: 4.47, z: 55.39 }, rotationY: 0,
+    columns: [{ flairX: -3.40, rankX: -2.95, nameX: -2.75, scoreX: 3.0 }],
+    rows: 10, startY: 1.02, rowStep: 0.32, fontEntry: 1.5,
+    header: { y: 1.5, font: 1.5 },
+    you: { y: -2.28, font: 1.5 },
+    title: { x: 23.41, y: 4.47 + 2.03, z: 55.47, rotationY: 0, font: 2.0 },
   },
 ]
 

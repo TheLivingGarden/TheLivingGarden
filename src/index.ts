@@ -36,7 +36,7 @@ export async function main() {
   setupPodium()
   setupPouchRack()   // after setupWateringSystem: the gift API it uses is registered by then
   setupCollectionDisplays()   // flower shelf + Almanac wall
-  setupHallOfFame()   // 55 rare-plant gallery stands from scene.glb
+  setupHallOfFame()   // the rare-plant gallery stands from scene.glb (24 since the 2026-09-29 re-bake)
   setupExamTable()    // potting-shed examination table (examTable.ts)
   setupGalleryThreads()   // Gallery flowers fly to the Bloom when it triggers — after room.clear() like the rest
   setupWaterStreakBadges()   // nametag: name + current water streak, after room.clear() like the rest

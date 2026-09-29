@@ -50,9 +50,18 @@ const DARK  = { r: 0.07, g: 0.063, b: 0.055, a: 0.9 }
 const CREAM = { r: 0.957, g: 0.918, b: 0.824 }
 const DIM   = { r: 0.83, g: 0.82, b: 0.78 }
 const WATER = { r: 0.42, g: 0.72, b: 0.95 }
-const GOOD  = { r: 0.35, g: 0.72, b: 0.5 }
 const RED   = { r: 0.9, g: 0.36, b: 0.32 }
 const GOLD  = { r: 0.98, g: 0.78, b: 0.3 }
+const CARD      = { r: 0.08, g: 0.06, b: 0.055, a: 0.9 }
+const TRACK     = { r: 0.13, g: 0.1, b: 0.09, a: 0.95 }
+const GREEN     = { r: 0.24, g: 0.78, b: 0.36 }   // the target window — lit, so the target reads at a glance
+const GREEN_RIM = { r: 0.62, g: 0.96, b: 0.62 }
+const SPLASH    = { r: 0.55, g: 0.8, b: 1.0 }
+const DROP_TINT = { r: 0.7, g: 0.88, b: 1.0 }
+const WHITE     = { r: 1, g: 1, b: 1, a: 1 }
+const UI_DIR    = 'assets/scene/Images/ui/'
+const DROP_SRC  = `${UI_DIR}glyph_drop.png`
+const FLAME_SRC = `${UI_DIR}glyph_flame.png`   // drawn 2026-09-29 (no emoji in the Unity client)
 
 const rand = (a: number, b: number): number => a + Math.random() * (b - a)
 
@@ -118,19 +127,25 @@ export function HoldMeterUi(props: { px: (n: number) => number; fs: (n: number) 
   if (h.done !== 0 && now >= h.done + shownFor) { hold = null; return null }
   if (h.done === 0 && now - h.startAt < HOLD_SHOW_AFTER_MS) return null   // a press only shows the meter once it is a hold
   const { px, fs } = props
-  const w = props.mobile ? 440 : 380
-  // 2026-09-28 ("prettier"): rounded to match every other bar in ui.tsx (the health ring's
-  // fill has its own borderRadius, not just the track) — plain rectangles inside a pill
-  // track read as a bug, not a style choice.
-  const BAR_R = 13
-  const seg = (from: number, to: number, color: { r: number; g: number; b: number }, a = 1) => (
+  // 2026-09-29 (KJ's mock-up: "make the skill check UI prettier"): outlined pill track, a splash at
+  // its start, the green window as a lit pill on top of the water, a drop riding the water level,
+  // and a streak row with a flame. Emoji do not render in the Unity client, hence the PNG glyphs.
+  const w = props.mobile ? 470 : 430
+  const BAR_H = 30, BAR_R = BAR_H / 2
+  const seg = (from: number, to: number, color: { r: number; g: number; b: number }, a: number, rim?: { r: number; g: number; b: number }) => (
     <UiEntity
-      uiTransform={{ positionType: 'absolute', position: { left: `${from * 100}%`, top: 0 }, width: `${Math.max(0, to - from) * 100}%`, height: '100%', borderRadius: px(BAR_R) }}
+      uiTransform={{
+        positionType: 'absolute', position: { left: `${from * 100}%`, top: 0 },
+        width: `${Math.max(0, to - from) * 100}%`, height: '100%', borderRadius: px(BAR_R),
+        ...(rim ? { borderWidth: px(2), borderColor: { ...rim, a: 0.95 } } : {}),
+      }}
       uiBackground={{ color: { ...color, a } }}
     />
   )
   const over = h.level >= h.over
   const pouring = h.done === 0
+  const showBar = !(h.outcome === 'tap' && !pouring)
+  const showStreak = pouring && streak > 1
   const line = pouring
     ? (!h.aimed ? 'Face the plant to pour' : over ? 'Too much!' : 'Let go in the green')
     : h.outcome === 'sweet' ? (resultStreak > 1 ? `Perfect pour  x${resultStreak}!` : `Perfect pour!  +${Math.round(HOLD_SWEET_BONUS * 100)}% water`)
@@ -139,25 +154,35 @@ export function HoldMeterUi(props: { px: (n: number) => number; fs: (n: number) 
     : 'Watered'
   const lineColor = pouring ? (!h.aimed ? GOLD : over ? RED : CREAM)
                   : h.outcome === 'sweet' ? GOLD : h.outcome === 'over' ? RED : h.outcome === 'tap' ? CREAM : DIM
+  const DROP_W = 24, DROP_H = 30
 
   return (
     <UiEntity uiTransform={{ positionType: 'absolute', position: { top: '58%', left: 0 }, width: '100%', flexDirection: 'row', justifyContent: 'center' }}>
       <UiEntity
-        uiTransform={{ width: px(w), flexDirection: 'column', alignItems: 'center', padding: { left: px(20), right: px(20), top: px(14), bottom: px(16) }, borderRadius: px(20) }}
-        uiBackground={{ color: DARK }}
+        uiTransform={{ width: px(w), flexDirection: 'column', alignItems: 'center', padding: { left: px(22), right: px(22), top: px(14), bottom: px(showStreak ? 12 : 18) }, borderRadius: px(26), borderWidth: px(2), borderColor: { r: 1, g: 1, b: 1, a: 0.08 } }}
+        uiBackground={{ color: CARD }}
       >
-        <Label value={line} fontSize={fs(pouring ? 16 : 20)} color={{ ...lineColor, a: 1 }} textAlign="middle-center" textWrap="nowrap" uiTransform={{ width: '100%', height: fs(28), flexShrink: 0 }} />
-        {/* the bar: water level, this pour's green window, and the red line after it */}
-        <UiEntity uiTransform={{ display: h.outcome === 'tap' && !pouring ? 'none' : 'flex', width: '100%', height: px(26), margin: { top: px(8) }, borderRadius: px(BAR_R), flexShrink: 0 }} uiBackground={{ color: { r: 1, g: 1, b: 1, a: 0.14 } }}>
-          {seg(0, h.level, over ? RED : WATER, h.aimed || !pouring ? 0.9 : 0.45)}
-          {seg(h.lo, h.hi, GOOD, 0.65)}
-          {seg(h.over, 1, RED, 0.5)}
+        <Label value={line} fontSize={fs(pouring ? 20 : 22)} color={{ ...lineColor, a: 1 }} textAlign="middle-center" textWrap="nowrap" uiTransform={{ width: '100%', height: fs(32), flexShrink: 0 }} />
+        {/* splash + the bar: water level, the red line, this pour's green window, and the drop riding the level */}
+        <UiEntity uiTransform={{ display: showBar ? 'flex' : 'none', width: '100%', height: px(BAR_H + 10), margin: { top: px(8) }, flexDirection: 'row', alignItems: 'center', flexShrink: 0 }}>
+          <UiEntity uiTransform={{ width: px(30), height: px(30), margin: { right: px(8) }, flexShrink: 0 }} uiBackground={{ textureMode: 'stretch', texture: { src: DROP_SRC }, color: { ...SPLASH, a: 1 } }} />
+          <UiEntity uiTransform={{ flexGrow: 1, height: px(BAR_H), borderRadius: px(BAR_R), borderWidth: px(2), borderColor: { ...CREAM, a: 0.3 } }} uiBackground={{ color: TRACK }}>
+            {seg(0, h.level, over ? RED : WATER, h.aimed || !pouring ? 0.95 : 0.5)}
+            {seg(h.over, 1, RED, 0.55)}
+            {seg(h.lo, h.hi, GREEN, 0.95, GREEN_RIM)}
+            <UiEntity
+              uiTransform={{ positionType: 'absolute', position: { left: `${h.level * 100}%`, top: -px((DROP_H - BAR_H) / 2) }, width: px(DROP_W), height: px(DROP_H), margin: { left: -px(DROP_W / 2) } }}
+              uiBackground={{ textureMode: 'stretch', texture: { src: DROP_SRC }, color: { ...DROP_TINT, a: 1 } }}
+            />
+          </UiEntity>
         </UiEntity>
-        <Label
-          value={streak > 1 && pouring ? `Streak x${streak}` : ''}
-          fontSize={fs(13)} color={{ ...GOLD, a: 0.9 }} textAlign="middle-center" textWrap="nowrap"
-          uiTransform={{ display: streak > 1 && pouring ? 'flex' : 'none', width: '100%', height: fs(20), margin: { top: px(4) }, flexShrink: 0 }}
-        />
+        {/* streak: ONE plain white label ("Streak x3") + a flame (KJ 2026-09-29: the count sometimes
+            rendered black and emoji-like beside the other text — split labels, orange word and a
+            cream number. One label, pure white, nothing to differ.) */}
+        <UiEntity uiTransform={{ display: showStreak ? 'flex' : 'none', height: fs(30), margin: { top: px(6) }, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+          <Label value={`Streak x${streak}`} fontSize={fs(20)} color={WHITE} textAlign="middle-center" textWrap="nowrap" uiTransform={{ width: Math.round(fs(20) * 0.62 * `Streak x${streak}`.length + fs(10)), height: '100%', flexShrink: 0 }} />
+          <UiEntity uiTransform={{ width: px(24), height: px(24), margin: { left: px(4) }, flexShrink: 0 }} uiBackground={{ textureMode: 'stretch', texture: { src: FLAME_SRC } }} />
+        </UiEntity>
       </UiEntity>
     </UiEntity>
   )

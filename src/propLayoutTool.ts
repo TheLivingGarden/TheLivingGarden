@@ -71,11 +71,11 @@ function groupDefs(): Array<{ id: string; names: string[] }> {
       names: [`lamppost${s}`, `lamppost_light_high${s}`, `lamppost_light_mid${s}`, `lamppost_light_low${s}`],
     })
   }
-  for (let i = 1; i <= 12; i++) defs.push({ id: `SitSpot_${i}`, names: [`Sit Spot_${i}`] })
   defs.push({ id: 'DiscordButton', names: ['Discord Button'] }, { id: 'DiscordButton_2', names: ['Discord Button_2'] })
   defs.push({ id: 'PouchRack', names: ['PouchRack'] })   // the world seed rack (pouchRack.ts)
   defs.push({ id: 'FlowerShelf', names: ['FlowerShelf'] }, { id: 'AlmanacWall', names: ['AlmanacWall'] })   // collectionDisplay.ts
   defs.push({ id: 'ExamTable', names: ['ExamTable'] })   // examTable.ts
+  for (let i = 1; i <= 4; i++) defs.push({ id: `ProgressBar_${i}`, names: [`ProgressBar_${i}`] })   // progressBarsSystem.ts
   return defs
 }
 

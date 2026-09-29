@@ -18,7 +18,10 @@
 // (KJ 2026-09-18). A handful of repeating states become material-cache hits instead.
 // Each step is still a main-thread material rebuild, so the step count and period are the
 // perf knobs: 3 levels = 4 rebuilds per period (was 8 with 5 levels).
-// The Exotic sway is a renderer-side Tween (was a per-frame Transform write).
+// The Exotic+ sway is a renderer-side looping Tween (was a per-frame Transform write). It is BUDGETED
+// like the rest (2026-09-29): the Unity explorer writes every looping-tweened Transform back to the
+// scene every frame, and it used to start at attach and run forever at any distance — one
+// write-back per Exotic/Mythic/Unique in the whole Rare Plant Gallery and every planter.
 // vfxFlags lets the dev test panel switch each effect off live for fps A/B checks.
 //
 // BUDGET: cost must not grow with the garden. Every BUDGET_MS the flowers are ranked by
@@ -27,7 +30,7 @@
 // pulse override (one rebuild back to the GLB's own material) and pauses its emitter.
 // =============================================================
 
-import { engine, Entity, Transform, GltfContainer, GltfContainerLoadingState, GltfNodeModifiers, ParticleSystem, Material, MaterialTransparencyMode, LightSource, Tween, TweenSequence } from '@dcl/sdk/ecs'
+import { engine, Entity, Transform, GltfContainer, GltfContainerLoadingState, GltfNodeModifiers, ParticleSystem, Material, MaterialTransparencyMode, LightSource, Tween, TweenSequence, TweenState } from '@dcl/sdk/ecs'
 import { Color4, Quaternion } from '@dcl/sdk/math'
 import { isMobile } from '@dcl/sdk/platform'
 import { SPARKLE_SRC, rarityTierById } from './shared/config'
@@ -39,6 +42,7 @@ const LS_FINISHED = 4   // LoadingState
 const PS_PLAYING = 0
 const EF_EASESINE = 6   // EasingFunction
 const TL_YOYO     = 1   // TweenLoop
+const TS_COMPLETED = 1  // TweenStateStatus
 
 type RGB = { r: number; g: number; b: number }
 const GREEN       = { r: 0.204, g: 0.808, b: 0.463 }
@@ -96,6 +100,7 @@ const VFX_RADIUS_M    = 12
 const MAX_PULSING     = MOBILE ? 4 : 8
 const MAX_EMITTERS    = MOBILE ? 3 : 6
 const MAX_LIGHTS      = 2               // desktop only (no lights on mobile at all)
+const MAX_SWAYING     = MOBILE ? 3 : 6  // looping Tweens = per-frame write-back, so they are capped too
 const BUDGET_MS       = 500
 const HYSTERESIS_M    = 1.5             // an effect already running ranks this much closer — no flip-flop at the edge
 
@@ -116,6 +121,8 @@ interface Active {
   inPulse:   boolean  // inside the budget for each effect
   inEmit:    boolean
   inLight:   boolean
+  inSway:    boolean
+  baseRot:   Quaternion.MutableQuaternion | null   // Exotic+: the resting rotation the sway swings around (null = no sway)
 }
 const active = new Map<string, Active>()
 
@@ -160,18 +167,41 @@ export function attachPlantVfx(key: string, plant: Entity, speciesId: string, ti
     sentKey: '',
     staticTint: false,
     soil: { x: soil.x, z: soil.z },
-    inPulse: false, inEmit: false, inLight: false,
+    inPulse: false, inEmit: false, inLight: false, inSway: false,
+    baseRot: def.tween ? restingRotation(plant) : null,
   })
-  budgetAccumMs = BUDGET_MS   // rank the newcomer on the next frame
-  if (def.tween) {
-    // Sway −yaw → +yaw → back, sine-eased, looping in the renderer
+  budgetAccumMs = BUDGET_MS   // rank the newcomer on the next frame (the sway starts there, if it makes the budget)
+}
+
+/** A copy of the flower's rotation as placed — what the sway swings around and returns to. */
+function restingRotation(plant: Entity): Quaternion.MutableQuaternion {
+  const q = Transform.get(plant).rotation
+  return Quaternion.create(q.x, q.y, q.z, q.w)
+}
+
+/** Sway −yaw → +yaw → back, sine-eased, looping in the renderer — only while in the budget. */
+function setSway(a: Active, on: boolean): void {
+  if (a.baseRot === null || a.inSway === on) return
+  if (on) {
+    // An entity runs ONE Tween. A flower that has just opened is still popping in (boxSystem's
+    // scale Tween, same frame as this attach): starting the sway now would replace it mid-grow
+    // and leave the flower part-sized. Wait until it has finished — the next rebudget retries.
+    const other = Tween.getOrNull(a.plant)
+    if (other && other.mode?.$case !== 'rotate' && TweenState.getOrNull(a.plant)?.state !== TS_COMPLETED) return
     const half = TWEEN_YAW_S * 500
-    const base = Transform.get(plant).rotation
-    const l = Quaternion.multiply(base, Quaternion.fromEulerDegrees(0, -TWEEN_YAW_DEG, 0))
-    const r = Quaternion.multiply(base, Quaternion.fromEulerDegrees(0, TWEEN_YAW_DEG, 0))
-    Tween.createOrReplace(plant, { duration: half, easingFunction: EF_EASESINE, mode: { $case: 'rotate', rotate: { start: l, end: r } } })
-    TweenSequence.createOrReplace(plant, { sequence: [], loop: TL_YOYO })
+    const l = Quaternion.multiply(a.baseRot, Quaternion.fromEulerDegrees(0, -TWEEN_YAW_DEG, 0))
+    const r = Quaternion.multiply(a.baseRot, Quaternion.fromEulerDegrees(0, TWEEN_YAW_DEG, 0))
+    Tween.createOrReplace(a.plant, { duration: half, easingFunction: EF_EASESINE, mode: { $case: 'rotate', rotate: { start: l, end: r } } })
+    TweenSequence.createOrReplace(a.plant, { sequence: [], loop: TL_YOYO })
+  } else {
+    // Stop the loop and put the flower back to rest: the write-back has left the scene's copy
+    // of its rotation wherever the sway happened to be.
+    if (Tween.has(a.plant)) Tween.deleteFrom(a.plant)
+    if (TweenSequence.has(a.plant)) TweenSequence.deleteFrom(a.plant)
+    const t = Transform.getMutableOrNull(a.plant)
+    if (t) t.rotation = a.baseRot
   }
+  a.inSway = on
 }
 
 /** Test panel: switch one effect family on/off on every live flower. */
@@ -211,7 +241,7 @@ export function attachSeedlingVfx(key: string, seedling: Entity, tier: number): 
     sentKey: '',
     staticTint: true,
     soil: { x: soil.x, z: soil.z },
-    inPulse: false, inEmit: false, inLight: false,
+    inPulse: false, inEmit: false, inLight: false, inSway: false, baseRot: null,
   })
   budgetAccumMs = BUDGET_MS
 }
@@ -234,7 +264,7 @@ export function attachHeldFlowerVfx(key: string, entity: Entity, speciesId: stri
     sentKey: '',
     staticTint: true,
     soil: { x: soil.x, z: soil.z },
-    inPulse: false, inEmit: false, inLight: false,
+    inPulse: false, inEmit: false, inLight: false, inSway: false, baseRot: null,   // a held item never sways (it walks away from its soil)
   })
   budgetAccumMs = BUDGET_MS
 }
@@ -245,6 +275,7 @@ export function detachPlantVfx(key: string): void {
   if (!a) return
   if (a.emitter !== null) engine.removeEntity(a.emitter)
   if (a.light !== null) engine.removeEntity(a.light)
+  if (a.inSway && Transform.has(a.plant)) setSway(a, false)   // re-attach on a living entity must not leave a loop running
   active.delete(key)
 }
 
@@ -321,6 +352,7 @@ function rebudget(): void {
   const pulse = pick(a => a.def.pulse !== null, a => a.inPulse, MAX_PULSING)
   const emit  = pick(a => a.emitter !== null,   a => a.inEmit,  MAX_EMITTERS)
   const light = pick(a => a.light !== null,     a => a.inLight, MAX_LIGHTS)
+  const sway  = pick(a => a.baseRot !== null,   a => a.inSway,  MAX_SWAYING)
   for (const a of active.values()) {
     const p = pulse.has(a), e = emit.has(a), l = light.has(a)
     if (a.inPulse && !p && !a.staticTint && GltfNodeModifiers.has(a.plant)) GltfNodeModifiers.deleteFrom(a.plant)   // seedlings fall back to the static tint
@@ -328,6 +360,7 @@ function rebudget(): void {
     if (a.inEmit !== e && a.emitter !== null) ParticleSystem.getMutable(a.emitter).active = e && vfxFlags.particles
     if (a.inLight !== l && a.light !== null) LightSource.getMutable(a.light).active = l && vfxFlags.lights
     a.inPulse = p; a.inEmit = e; a.inLight = l
+    setSway(a, sway.has(a))
   }
 }
 

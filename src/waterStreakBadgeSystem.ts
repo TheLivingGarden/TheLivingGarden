@@ -42,8 +42,9 @@ const SCALE_MAX     = 2.6
 const FADE_START_M  = 14
 const FADE_END_M    = 20
 
-// A garden accent rather than CTC's multi-tier career ladder — one streak number, one colour.
-const STREAK_COLOR = Color4.create(0.55, 0.90, 0.45, 1)   // leaf green
+// One streak number, one colour: plain white like the name (KJ 2026-09-29: the green digits kept
+// reading black — the leaf green had no contrast against the thick black outline).
+const STREAK_COLOR = Color4.create(1, 1, 1, 1)
 
 type StreakInfo = { name: string; streak: number }
 const streaks = new Map<string, StreakInfo>()   // lowercased address → info
@@ -174,8 +175,12 @@ function applyDistance(p: Plate): void {
   const nt = TextShape.getMutable(p.nameT)
   nt.textColor    = Color4.create(1, 1, 1, fade)
   nt.outlineColor = Color4.create(0, 0, 0, fade)
+  // The outline must fade with the text. It used to stay opaque, so at range the streak line
+  // faded to nothing but its black outline — "black like emoji" text (KJ 2026-09-29).
   const c = STREAK_COLOR
-  TextShape.getMutable(p.streakT).textColor = Color4.create(c.r, c.g, c.b, fade)
+  const stt = TextShape.getMutable(p.streakT)
+  stt.textColor    = Color4.create(c.r, c.g, c.b, fade)
+  stt.outlineColor = Color4.create(0, 0, 0, fade)
 }
 
 /** Hides the explorer's own nametags across the whole scene, so our plates replace them
