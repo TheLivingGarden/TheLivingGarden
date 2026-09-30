@@ -75,13 +75,19 @@ function collectTree(root: Entity): Entity[] {
   return out
 }
 
-function setShown(e: Entity, shown: boolean): void {
+// Visibility flips are QUEUED and drained a few per frame (KJ 2026-09-30, "stuttering"): crossing a range boundary used to flip a few
+// hundred entities inside one tick, and every flip is a component write the renderer has to act on. A steady trickle costs nothing.
+const STREAM_BUDGET_PER_FRAME = 30
+const flipQueue: Array<[Entity, boolean]> = []
+function setShown(e: Entity, shown: boolean): void { flipQueue.push([e, shown]) }
+function applyShown(e: Entity, shown: boolean): void {
   if (!Transform.has(e)) return   // removed since we hid it
   if (shown) VisibilityComponent.deleteFrom(e)
   else VisibilityComponent.createOrReplace(e, { visible: false })
 }
 
 function streamSystem(dt: number): void {
+  for (let n = 0; n < STREAM_BUDGET_PER_FRAME && flipQueue.length > 0; n++) { const [e, shown] = flipQueue.shift()!; applyShown(e, shown) }
   sweepIn -= dt
   if (sweepIn > 0) return
   sweepIn = SWEEP_S

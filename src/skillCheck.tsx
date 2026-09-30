@@ -149,7 +149,7 @@ export function HoldMeterUi(props: { px: (n: number) => number; fs: (n: number) 
   const showStreak = pouring && streak > 1
   const line = pouring
     ? (!h.aimed ? 'Face the plant to pour' : over ? 'Too much!' : 'Let go in the green')
-    : h.outcome === 'sweet' ? (resultStreak > 1 ? `Perfect pour  x${resultStreak}!` : `Perfect pour!  +${Math.round(HOLD_SWEET_BONUS * 100)}% water`)
+    : h.outcome === 'sweet' ? (resultStreak > 1 ? `Perfect pour  x${resultStreak}!` : 'Perfect pour!')
     : h.outcome === 'over'  ? 'Too much water!'
     : h.outcome === 'tap'   ? 'Press and hold to pour'
     : 'Watered'

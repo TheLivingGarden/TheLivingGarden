@@ -129,7 +129,9 @@ export function setTutorialActive(on: boolean): void { tutorialActive = on }
 export function isTutorialActive(): boolean { return tutorialActive }
 /** The card gives way to the bloom line and the "This bloom" summary (they share its spot), and to
  *  any card or menu the player opened — the Avenue card sat on top of it (KJ 2026-09-27). */
-const coachUp = (): boolean => coach !== null && !momentActive() && !isBloomFinaleShowing()
+// The finale card is never drawn while the tutorial runs (it is not mounted, see the render), so it must not hide the tutorial card either:
+// it used to, and the card vanished when a bloom ended and came back when the finale's timer ran out (KJ 2026-09-30).
+const coachUp = (): boolean => coach !== null && !momentActive() && (!isBloomFinaleShowing() || tutorialActive)
   && !isAvenueCardOpen() && !isSeedMenuOpen() && !isInfoOpen() && !isDiscoveryShowing()
 
 export function showDailyLimit(text: string): void {

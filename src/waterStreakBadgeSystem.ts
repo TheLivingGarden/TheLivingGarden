@@ -20,6 +20,7 @@ import {
 } from '@dcl/sdk/ecs'
 import { Color3, Color4, Vector3 } from '@dcl/sdk/math'
 import { room } from './shared/messages'
+import { flairIcon } from './shared/config'
 
 // Sized to sit where the real nametag did. Authored at REF_DIST_M and scaled by
 // camera distance so the plate keeps a near-constant screen size, then faded at
@@ -46,7 +47,7 @@ const FADE_END_M    = 20
 // reading black — the leaf green had no contrast against the thick black outline).
 const STREAK_COLOR = Color4.create(1, 1, 1, 1)
 
-type StreakInfo = { name: string; streak: number }
+type StreakInfo = { name: string; streak: number; tier: number }
 const streaks = new Map<string, StreakInfo>()   // lowercased address → info
 
 type Plate = {
@@ -55,6 +56,8 @@ type Plate = {
   pill:    Entity
   nameT:   Entity
   streakT: Entity
+  flair:   Entity   // the flair icon (sprout / flower / golden flower) left of the name
+  tier:    number   // last flair tier drawn, so the icon is only repainted on change
   avatar:  Entity   // the PlayerIdentityData entity, for distance/fade
   key:     string   // last rendered content, so we only rebuild on change
   fade:    number
@@ -102,15 +105,20 @@ function buildPlate(address: string, avatar: Entity): Plate {
     outlineColor: Color4.Black(), outlineWidth: 0.12,
   })
 
+  // Flair icon: same glyph set + tints as the boards and the "Watered by" labels (config flairIcon). A plane just in front of the pill.
+  const flair = engine.addEntity()
+  Transform.create(flair, { parent: carrier, position: { x: 0, y: 0, z: -0.006 }, scale: { x: 0, y: 0, z: 0 } })
+  MeshRenderer.setPlane(flair)
+
   return {
-    root, carrier, pill, nameT, streakT, avatar,
+    root, carrier, pill, nameT, streakT, avatar, flair, tier: 0,
     key: '', fade: -1, scale: 1, streak: -1, popMs: -1,
     bob: Math.random() * Math.PI * 2,
   }
 }
 
 function destroyPlate(p: Plate): void {
-  for (const e of [p.pill, p.nameT, p.streakT, p.carrier, p.root]) engine.removeEntity(e)
+  for (const e of [p.pill, p.nameT, p.streakT, p.flair, p.carrier, p.root]) engine.removeEntity(e)
 }
 
 /** Pill paint — rounded shape from the texture's alpha over a flat dark base. No emissive:
@@ -132,6 +140,19 @@ function paintPill(p: Plate, fade: number): void {
   })
 }
 
+const FLAIR_SIZE = 0.26   // plate units: a little taller than the pill so the glyph reads
+/** Paint the flair icon at `fade` alpha (the same fade the pill and text follow). */
+function paintFlair(p: Plate, fade: number): void {
+  const f = flairIcon(p.tier)
+  if (!f) return
+  const tex = Material.Texture.Common({ src: f.src })
+  Material.setPbrMaterial(p.flair, {
+    texture: tex, alphaTexture: tex,
+    albedoColor: Color4.create(f.tint.r, f.tint.g, f.tint.b, fade), emissiveColor: Color3.create(f.tint.r, f.tint.g, f.tint.b), emissiveIntensity: 0.9,
+    transparencyMode: MaterialTransparencyMode.MTM_ALPHA_BLEND, castShadows: false,
+  })
+}
+
 /** Applies name/streak text + pill width. Only called when the content changes. */
 function renderPlate(p: Plate, info: StreakInfo): void {
   p.fade = -1   // force a repaint so the pill's size/alpha catch up
@@ -140,8 +161,13 @@ function renderPlate(p: Plate, info: StreakInfo): void {
   const label = info.streak > 0 ? `${info.streak} STREAK` : ''
   // KJ 2026-09-30: the name sat too high and poked out of its pill. Name-only: dead centre. With a streak: name a little
   // lower than before and the streak line tucked under it, inside the taller pill.
-  Transform.getMutable(p.nameT).position   = { x: 0, y: label ? 0.05 : -0.004, z: -0.012 }
-  Transform.getMutable(p.streakT).position = { x: 0, y: -0.085, z: -0.012 }
+  // A flair icon gets its own slot INSIDE the plate (KJ 2026-09-30: it hung off the left edge): the pill grows by the slot's width and the
+  // text centres in what is left, so name and icon sit together in one plate.
+  const hasFlair = flairIcon(info.tier) !== null
+  const fsz = label ? FLAIR_SIZE : FLAIR_SIZE * 0.68   // a name-only pill is shorter, so its icon is too — it has to fit INSIDE the plate
+  const slot = hasFlair ? fsz + 0.05 : 0
+  Transform.getMutable(p.nameT).position   = { x: slot / 2, y: label ? 0.05 : -0.004, z: -0.012 }
+  Transform.getMutable(p.streakT).position = { x: slot / 2, y: -0.085, z: -0.012 }
   const st = TextShape.getMutable(p.streakT)
   st.text = label
   st.textColor = STREAK_COLOR
@@ -150,8 +176,13 @@ function renderPlate(p: Plate, info: StreakInfo): void {
   // quarter of the texture; the rest is transparent padding. No streak → a shorter,
   // name-only pill, same as CTC's title-less case.
   const chars = Math.max(info.name.length, Math.round(label.length * 1.15))
+  const pillW = PILL_PER_CHAR * chars + PILL_PAD + slot
+  p.tier = info.tier
+  // The icon sits in the slot at the pill's left end, vertically on the name line.
+  Transform.getMutable(p.flair).position = { x: -pillW / 2 + slot / 2 + 0.025, y: label ? 0.05 : -0.004, z: -0.02 }
+  Transform.getMutable(p.flair).scale = hasFlair ? { x: fsz, y: fsz, z: 1 } : { x: 0, y: 0, z: 0 }
   Transform.getMutable(p.pill).scale = {
-    x: PILL_PER_CHAR * chars + PILL_PAD,
+    x: pillW,
     y: (label ? PILL_H : PILL_H * 0.6) / PILL_BAND,
     z: 1,
   }
@@ -176,6 +207,7 @@ function applyDistance(p: Plate): void {
   p.fade = fade
 
   paintPill(p, fade)
+  paintFlair(p, fade)
   const nt = TextShape.getMutable(p.nameT)
   nt.textColor    = Color4.create(1, 1, 1, fade)
   nt.outlineColor = Color4.create(0, 0, 0, fade)
@@ -228,7 +260,7 @@ export function setupWaterStreakBadges(): void {
   engine.addSystem(animatePlates)
 
   room.onMessage('streakUpdate', (data) => {
-    streaks.set(data.address.toLowerCase(), { name: data.name, streak: data.streak })
+    streaks.set(data.address.toLowerCase(), { name: data.name, streak: data.streak, tier: data.tier ?? 0 })
   })
 
   let acc = 0
@@ -253,8 +285,8 @@ export function setupWaterStreakBadges(): void {
       // connection) → show the name alone rather than leaving a player anonymous
       // behind a hidden nametag. PlayerIdentityData carries no display name, so the
       // stand-in is a short address, replaced the moment a streakUpdate lands.
-      const info = streaks.get(key) ?? { name: `${data.address.slice(0, 6)}…`, streak: 0 }
-      const contentKey = `${info.name}|${info.streak}`
+      const info = streaks.get(key) ?? { name: `${data.address.slice(0, 6)}…`, streak: 0, tier: 0 }
+      const contentKey = `${info.name}|${info.streak}|${info.tier}`
       if (contentKey !== plate.key) {
         // A streak that went UP is worth celebrating on the plate; a reset to 0 isn't.
         if (plate.streak >= 0 && info.streak > plate.streak) plate.popMs = 0

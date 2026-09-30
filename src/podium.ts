@@ -134,13 +134,17 @@ function pageTarget(dir: -1 | 1): void {
 function makePageButton(dir: -1 | 1): void {
   // Just outside whichever marker is furthest that way, so the pagers follow the markers
   // rather than a spacing constant that no longer exists.
-  const xs = PODIUM_SLOTS.map(p => p.x)
-  const endX = dir > 0 ? Math.max(...xs) : Math.min(...xs)
-  const z = PODIUM_SLOTS.reduce((a, p) => a + p.z, 0) / PODIUM_SLOTS.length
-  const at = Vector3.create(endX + dir * PODIUM_PAGE_OFFSET, PODIUM_SLOTS[0].y + PODIUM_PAGE_Y, z)
+  // KJ 2026-09-30: Previous / Next were on the wrong sides. A visitor faces the podium from the garden (looking toward -Z), so the
+  // viewer's RIGHT is world -X: Next belongs at the low-x end, pointing -X, and Previous at the high-x end, pointing +X. `p` is the
+  // world-X direction this button points and sits toward; `dir` stays the page direction.
+  const p = -dir as -1 | 1
+  const xs = PODIUM_SLOTS.map(s => s.x)
+  const endX = p > 0 ? Math.max(...xs) : Math.min(...xs)
+  const z = PODIUM_SLOTS.reduce((a, s) => a + s.z, 0) / PODIUM_SLOTS.length
+  const at = Vector3.create(endX + p * PODIUM_PAGE_OFFSET, PODIUM_SLOTS[0].y + PODIUM_PAGE_Y, z)
   // drawTrail's rule: yaw = atan2(d.x, d.z) + the model's authored-forward offset points the
-  // tip along d. (The first cut had the sign flipped — Next pointed −X.) d = (dir, 0, 0).
-  const yaw = Math.atan2(dir, 0) * 180 / Math.PI + ARROW_FORWARD_YAW
+  // tip along d. (The first cut had the sign flipped — Next pointed −X.) d = (p, 0, 0).
+  const yaw = Math.atan2(p, 0) * 180 / Math.PI + ARROW_FORWARD_YAW
 
   // Two entities, not one composed quaternion: the parent yaws the flat chevron to point
   // along ±X, the child rolls it about its OWN tip axis (local Z) so the decal's face turns
@@ -149,7 +153,7 @@ function makePageButton(dir: -1 | 1): void {
   const pivot = engine.addEntity()
   Transform.create(pivot, { position: at, rotation: Quaternion.fromEulerDegrees(0, yaw, 0) })
   const e = engine.addEntity()
-  Transform.create(e, { parent: pivot, rotation: Quaternion.fromEulerDegrees(0, 0, -dir * PODIUM_ARROW_ROLL), scale: Vector3.create(ARROW_SCALE, ARROW_SCALE, ARROW_SCALE) })
+  Transform.create(e, { parent: pivot, rotation: Quaternion.fromEulerDegrees(0, 0, -p * PODIUM_ARROW_ROLL), scale: Vector3.create(ARROW_SCALE, ARROW_SCALE, ARROW_SCALE) })
   GltfContainer.create(e, { src: ARROW_MODEL_SRC, visibleMeshesCollisionMask: ColliderLayer.CL_NONE, invisibleMeshesCollisionMask: ColliderLayer.CL_NONE })
 
   // The arrow GLB carries no collision (decorative everywhere else it's used) — a

@@ -89,7 +89,7 @@ export const room = registerMessages({
    *  an accepted pour that wasn't sweet. Sent per gardener on change, and per connected
    *  gardener on join (like heldFlower), not as one full roster: this fires on every water,
    *  so a delta keeps the wire light. */
-  streakUpdate:     Schemas.Map({ address: Schemas.String, name: Schemas.String, streak: Schemas.Number }),
+  streakUpdate:     Schemas.Map({ address: Schemas.String, name: Schemas.String, streak: Schemas.Number, tier: Schemas.Number }),   // tier = lifetime-waters FLAIR tier (0-3), drawn beside the name on the nametag
   /** Server → receiver of a gift. */
   giftReceived:     Schemas.Map({ from: Schemas.String, flower: Schemas.String, rarityTier: Schemas.Number }),
   /** Server → player: short feedback toast (rejections and confirmations). Broadcast when untargeted. */

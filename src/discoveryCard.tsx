@@ -206,7 +206,7 @@ export function MilestoneCardUi(props: { px: (n: number) => number; fs: (n: numb
   const reward = `${withArticle(tier.name, true)} seed${m.planters > 0 ? ` and ${m.planters === 1 ? 'an extra planter' : `${m.planters} extra planters`}` : ''}`
 
   return (
-    <UiEntity uiTransform={{ positionType: 'absolute', position: { top: '34%', left: 0 }, width: '100%', flexDirection: 'row', justifyContent: 'center' }}>
+    <UiEntity uiTransform={{ positionType: 'absolute', position: { top: 0, left: 0 }, width: '100%', height: '100%', flexDirection: 'row', justifyContent: 'center', alignItems: 'center' }}>
       <UiEntity
         uiTransform={{ width: px(props.mobile ? 440 : 380), flexDirection: 'column', alignItems: 'center', padding: { left: px(24), right: px(24), top: px(20), bottom: px(20) }, borderRadius: px(22) }}
         uiBackground={{ color: { ...DARK, a: DARK.a * a } }}
@@ -276,7 +276,7 @@ export function DiscoveryCardUi(props: { px: (n: number) => number; fs: (n: numb
   const btnA = stage === 3 && c.items.some(i => i.boxId) ? a * Math.min(1, Math.max(0, (sinceReveal - 700 - lastItemAt) / 300)) : 0   // the choice arrives last
 
   return (
-    <UiEntity uiTransform={{ positionType: 'absolute', position: { top: batch ? '18%' : '34%', left: 0 }, width: '100%', flexDirection: 'row', justifyContent: 'center' }}>
+    <UiEntity uiTransform={{ positionType: 'absolute', position: { top: 0, left: 0 }, width: '100%', height: '100%', flexDirection: 'row', justifyContent: 'center', alignItems: 'center' }}>
       <UiEntity
         uiTransform={{ width: px(props.mobile ? 420 : 340), flexDirection: 'column', alignItems: 'center', padding: { left: px(24), right: px(24), top: px(18), bottom: px(20) }, borderRadius: px(22) }}
         uiBackground={{ color: { ...DARK, a: DARK.a * a } }}

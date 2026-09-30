@@ -148,7 +148,9 @@ const waterDropMap = new Map<Entity, Entity>()
 const SND_HOVER    = 'assets/scene/Sounds/hover.mp3'
 const SND_CLICK    = 'assets/scene/Sounds/click.mp3'
 const SND_WATERING = 'assets/scene/Sounds/watering.mp3'
-const SND_MAGIC    = 'assets/scene/Sounds/MagicFX.mp3'
+// The sparkle is the FIRST burst of MagicFX only (KJ 2026-09-30: "double chime -> single chime"). The original is a 6.4 s swell with two bursts,
+// at ~0.8 s and ~1.4 s; MagicFX_short.wav is its first 1.05 s with a 0.28 s fade out. (MagicFX.mp3 is still used by the golden-seed sfx.)
+const SND_MAGIC    = 'assets/scene/Sounds/MagicFX_short.wav'
 const SND_WILT     = 'assets/scene/Sounds/PlantWiltSound.mp3'
 const VOL_HOVER    = 0.7
 const VOL_CLICK    = 0.9
@@ -388,6 +390,45 @@ function resumeIdles(entity: Entity): void {
   const rose = roseMap.get(entity)
   if (rose !== undefined && Animator.has(rose) && isShown(rose)) {
     Animator.playSingleAnimation(rose, ANIM_UNHEALTHY_IDLE, true)
+  }
+}
+
+// Transition budget (KJ 2026-09-30: watering a LINE of roses on a phone stutters — each fresh water starts a 6 s skinned 'Play' clip, and a
+// line of plants starts a dozen at once). Same trick as the balloons: only a few plants play the transition, and only when they are near
+// enough to see it; every other plant snaps straight to its static healthy pose (the idle, which the animation budget already limits).
+const TRANSITION_CAP_PHONE   = 2
+const TRANSITION_CAP_DESKTOP = 8
+const TRANSITION_RANGE_PHONE   = 9    // m from the player
+const TRANSITION_RANGE_DESKTOP = 22
+const transitionStarts: number[] = []
+function playToHealthy(entity: Entity): void {
+  const now = Date.now()
+  while (transitionStarts.length > 0 && now - transitionStarts[0] > ANIM_TRANSITION_MS) transitionStarts.shift()
+  const phone = isMobile()
+  const p  = Transform.getOrNull(entity)?.position
+  const me = Transform.getOrNull(engine.PlayerEntity)?.position
+  const range = phone ? TRANSITION_RANGE_PHONE : TRANSITION_RANGE_DESKTOP
+  const near = !p || !me || Math.hypot(p.x - me.x, p.z - me.z) <= range
+  if (near && transitionStarts.length < (phone ? TRANSITION_CAP_PHONE : TRANSITION_CAP_DESKTOP)) {
+    transitionStarts.push(now)
+    Animator.playSingleAnimation(entity, ANIM_TO_HEALTHY)
+  } else {
+    Animator.playSingleAnimation(entity, ANIM_HEALTHY_STATE)   // no transition: the healthy pose straight away
+  }
+}
+
+// Hover follows the plant's state (KJ 2026-09-30: a watered plant still said "Hold to water"). A watered plant only takes a pour again
+// inside its expiry tell (a top-up), so that is the one watered state that still invites a hold.
+let hoverSweepIn = 0
+function plantHoverSystem(dt: number): void {
+  hoverSweepIn -= dt
+  if (hoverSweepIn > 0) return
+  hoverSweepIn = 0.4
+  for (const [entity, info] of plantRegistry) {
+    const watered = PlantData.getOrNull(entity)?.isWatered ?? false
+    const text = !watered ? (HOLD_WATERING_ENABLED ? 'Hold to water' : 'Water') : expiryTell.has(entity) ? 'Hold to top up' : 'Watered'
+    const ev = PointerEvents.getMutableOrNull(info.clickTarget)?.pointerEvents[0]?.eventInfo
+    if (ev && ev.hoverText !== text) ev.hoverText = text
   }
 }
 
@@ -1131,8 +1172,8 @@ function waterPlant(entity: Entity, plantId: string, sweet = false, fromHold = f
       if (!current.isWatered || current.wateredAt !== now) return
       hideRose(entity)
       showPlant(entity)
-      Animator.playSingleAnimation(entity, ANIM_TO_HEALTHY)
-      playMagicFXSound()
+      playToHealthy(entity)
+      if (!sweet) playMagicFXSound()   // a perfect pour already chimed at WATER_FX_MS — one chime, not two
       const plantPos = Transform.getOrNull(entity)?.position
       if (plantPos) {
         triggerSparkle(plantPos)
@@ -1151,7 +1192,7 @@ function waterPlant(entity: Entity, plantId: string, sweet = false, fromHold = f
     timers.setTimeout(() => {
       const current = PlantData.get(entity)
       if (!current.isWatered || current.wateredAt !== now) return
-      playMagicFXSound()
+      if (!sweet) playMagicFXSound()
       const plantPos = Transform.getOrNull(entity)?.position
       if (plantPos) {
         triggerSparkle(plantPos)
@@ -1461,6 +1502,7 @@ export function setupWateringSystem(): void {
   }
   engine.addSystem(plantAnimatorInitSystem)
   engine.addSystem(animBudgetSystem)   // idles only run near the player
+  engine.addSystem(plantHoverSystem)   // the hover text follows the plant's state
 
   setupPetalSystem()
   setupSparkleSystem()
@@ -1759,7 +1801,7 @@ export function setupWateringSystem(): void {
           hideRose(entity)
           showPlant(entity)
           setDropFade(entity, 'out')
-          Animator.playSingleAnimation(entity, ANIM_TO_HEALTHY)
+          playToHealthy(entity)
           triggerGroundLightBurst()
           if (plantPos) {
             playClip(SND_WATERING, VOL_WATERING, plantPos)

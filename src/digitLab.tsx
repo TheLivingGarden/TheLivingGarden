@@ -15,7 +15,7 @@
 
 import ReactEcs, { UiEntity, Label } from '@dcl/sdk/react-ecs'
 
-export const SHOW_DIGIT_LAB = true
+export const SHOW_DIGIT_LAB = false   // KJ 2026-09-30: every row rendered fine; kept (off) in case the grey digits come back
 
 const WHITE = { r: 1, g: 1, b: 1, a: 1 }
 const DIGITS = '0123456789'

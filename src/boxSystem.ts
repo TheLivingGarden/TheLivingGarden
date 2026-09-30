@@ -61,7 +61,7 @@ import { triggerSparkle } from './sparkleSystem'
 import { setPouch, getBoxCap, isBoxCapKnown, nextSeedTier } from './playerInventory'
 import { createSign, moveSign, setupSignSystem, Sign } from './signs'
 import { playSfx } from './sounds'
-import { playWateringBeat } from './wateringSystem'
+import { playWateringBeat, isWateringEmoteActive } from './wateringSystem'
 import { beginHold, isHolding } from './skillCheck'
 
 // ---------------------------------------------------------------
@@ -570,7 +570,7 @@ function tryPlant(v: BoxView): void {
  *  skillCheck.tsx's meter is a single module-level hold, so this also can't run at the same
  *  time as watering a garden plant. */
 function tendOnto(v: BoxView): void {
-  if (isHolding()) return
+  if (isHolding() || isWateringEmoteActive()) return   // one water at a time: the previous can animation has to finish (KJ 2026-09-30)
   const pos = layout.get(v.boxId)
   const at = pos ? { x: pos.x, y: BOX_MODEL_RIM_Y, z: pos.z } : { x: 0, y: 0, z: 0 }
   beginHold((outcome) => {
@@ -595,6 +595,7 @@ function onTap(v: BoxView): void {
   }
   if (v.opened) { showToast(`${v.ownerName}'s ${flowerName(v)}, on show`, TOAST_MS, false); return }
   if (v.waters >= BOX_WATER_MAX) { showToast(`${v.ownerName}'s seed has had all the water it can take`, TOAST_MS, false); return }
+  if (isWateringEmoteActive() || isHolding()) return   // one water at a time (KJ 2026-09-30): a tap during the previous pour's animation does nothing
   console.log(`[Boxes] watering ${v.ownerName}'s ${v.boxId}`)
   playWateringBeat()   // same optimistic timing as a garden plant; the server still validates
   room.send('waterBox', { boxId: v.boxId })

@@ -98,6 +98,7 @@ let beacons: Entity[] = []
 
 let target: Vector3 | null = null   // what the trail points at
 let heldBoxId = ''                  // planter the server is holding for us ('' = none)
+let pickedBoxId = ''                // planter the CLIENT chose to guide to when there is no reservation ('' = none)
 let repickIn = 0
 let retryIn  = 0
 let elapsed  = 0
@@ -276,7 +277,11 @@ function heldPlanter(from: Vector3, dt: number): Vector3 | null {
     const candidate = nearestFreePlanter(from)
     if (candidate) room.send('reserveBox', { boxId: candidate.boxId })
   }
-  return null
+  // No reservation (yet, or the server said no — every bed held or taken): the client picks an empty bed itself and guides the player
+  // to it anyway, arrows AND shell, instead of showing nothing (KJ 2026-09-30). The server still validates the plant when they tap.
+  const pick = nearestFreePlanter(from)
+  pickedBoxId = pick?.boxId ?? ''
+  return pick ? Vector3.create(pick.x, 0, pick.z) : null
 }
 
 /** Can the plot step actually plant? Needs a seed AND room under the planter cap — pointing
@@ -563,8 +568,8 @@ function tutorialSystem(dt: number): void {
   if (player && shellAccum <= 0) {
     shellAccum = ONBOARDING_REPICK_S
     const wanted: Array<{ x: number; z: number; rot: number }> = myPlanters(player)
-    if (active && step() === 'plot' && heldBoxId) {
-      const p = freePlanterPos(heldBoxId)
+    if (active && step() === 'plot' && (heldBoxId || pickedBoxId)) {
+      const p = freePlanterPos(heldBoxId || pickedBoxId)
       if (p) wanted.push({ x: p.x, z: p.z, rot: p.rot })
     }
     shellsOnPlanters(wanted)

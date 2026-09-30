@@ -1316,7 +1316,7 @@ const waterStreak = new Map<string, number>()   // lowercase address → streak
 
 function sendStreak(address: string, to?: string[]): void {
   const key = address.toLowerCase()
-  room.send('streakUpdate', { address: key, name: displayNameOf(address), streak: waterStreak.get(key) ?? 0 }, to ? { to } : undefined)
+  room.send('streakUpdate', { address: key, name: displayNameOf(address), streak: waterStreak.get(key) ?? 0, tier: tierOf(address) }, to ? { to } : undefined)
 }
 function sendAllStreaks(to: string[]): void { for (const a of waterStreak.keys()) sendStreak(a, to) }
 function bumpStreak(address: string): void {
@@ -2230,10 +2230,8 @@ export async function server(): Promise<void> {
     if (!bed && await releaseOneBed(PLANTER_TIDY_MIN_AWAY_PRESSURE_MS)) bed = beds.find(usable)
     if (!bed) { refuse(); return }
     const boxId = bed.boxIds.includes(data.boxId) && !boxes.get(data.boxId)?.owner ? data.boxId : bed.boxIds.find(id => !boxes.get(id)?.owner)!
-    // Never hold the last free bed: with a full garden that would block a real gardener outright.
-    const holder = bed.boxIds.map(reservationHolder).find(x => x)
-    const freeBeds = beds.filter(x => bedOwner(x, bedInfo) === null && !x.boxIds.some(id => reservationHolder(id))).length
-    if (freeBeds <= 1 && holder !== playerAddress) { refuse(); return }
+    // (The old "never hold the last free bed" refusal is gone, KJ 2026-09-30: it left a newcomer with no arrows at all when beds ran low.
+    // A hold lasts PLANTER_RESERVE_TTL_MS and ends the moment they plant.)
     const expiresAt = Date.now() + PLANTER_RESERVE_TTL_MS
     planterReservations.set(playerAddress, { boxId, expiresAt })
     room.send('boxReserved', { boxId, expiresAt }, { to: [playerAddress] })

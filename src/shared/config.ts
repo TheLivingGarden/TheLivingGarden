@@ -994,11 +994,13 @@ export const FINALE_RARE_TIER = 2
 // baked (StandBottom's plinth tops are now y 1.48), which sank the avatars half a metre into their
 // pods. The marker nodes themselves are gone from the file, so x/z are kept and y follows the plinths.
 export const PODIUM_SLOTS: ReadonlyArray<{ x: number; y: number; z: number }> = [
-  { x: 13.173, y: 1.479, z: -6.714 },   // Armature       (local x -5.173)
-  { x: 15.029, y: 1.479, z: -6.714 },   // Armature.001   (local x -7.029)
-  { x: 16.907, y: 1.479, z: -6.714 },   // Armature.002   (local x -8.907)
-  { x: 18.794, y: 1.479, z: -6.714 },   // Armature.003   (local x -10.794)
+  { x: 13.326, y: 1.479, z: -6.66 },
+  { x: 15.196, y: 1.479, z: -6.66 },
+  { x: 17.066, y: 1.479, z: -6.66 },
+  { x: 18.936, y: 1.479, z: -6.66 },
 ]
+// RE-CENTRED 2026-09-30 (KJ: avatars stood a little to one side of their pods): x / z are now the centres of the four plinth TOPS in
+// StandBottom (scene.glb, world = (8 - x, y, z + 24)), measured from the mesh. They were 0.14-0.17 m lower in x and 0.05 m off in z.
 /** Euler Y. The markers carry GLB yaw 180 and I reasoned an X-mirror would preserve it;
  *  KJ checked in-world 2026-09-21 and they faced backwards, so the import lands them at 0.
  *  0 = facing +Z, out of the stand and into the garden. */
