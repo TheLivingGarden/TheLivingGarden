@@ -96,7 +96,7 @@ function onRingTap(): void {
 
 /** @param color optional text colour (e.g. a seed's rarity colour); default cream */
 export function showToast(text: string, durationMs: number, _large = false, color?: { r: number; g: number; b: number }): void {
-  toastText    = text.length > 56 ? `${text.slice(0, 55)}…` : text   // a long line wrapped and pushed the pill down (KJ 2026-09-29)
+  toastText    = text.length > 120 ? `${text.slice(0, 119)}…` : text   // hard cap; the pill wraps up to 3 lines below
   toastColor   = color ?? null
   toastVisible = true
   const gen    = ++toastGen
@@ -399,7 +399,15 @@ function uiComponent() {
 
   // stack under the banner: toast → daily limit → persistent
   let stackY = topPx + (bannerShown ? bannerH + px(GAP) : 0)
-  const toastY = stackY;   if (toastVisible)      stackY += px(PILL_H) + px(GAP)
+  // A toast wraps onto up to 3 lines instead of running off (KJ 2026-09-29: "shorten the text and let it wrap"). A wrapped Label
+  // needs an EXPLICIT height here (a heightless one collapses on the phone), so estimate the line count from the length
+  // (~0.55 em per character, same as the tutorial card) and size the pill to match.
+  const toastMaxW   = px(720)
+  const toastCpl    = Math.max(12, Math.floor(toastMaxW / (fs(PILL_FONT) * 0.55)))
+  const toastLines  = Math.min(3, Math.max(1, Math.ceil(toastText.length / toastCpl)))
+  const toastLabelH = toastLines * Math.round(fs(PILL_FONT) * 1.3)
+  const toastH      = toastLines > 1 ? Math.max(px(PILL_H), toastLabelH + px(16)) : px(PILL_H)
+  const toastY = stackY;   if (toastVisible)      stackY += toastH + px(GAP)
   const dailyY = stackY;   if (dailyLimitVisible) stackY += px(PILL_H) + px(GAP)
   const persistY = stackY
   const glyph = toastGlyph(toastText)
@@ -502,9 +510,9 @@ function uiComponent() {
       {/* ═════ TOAST — under the banner, where the eyes already are ═════ */}
       {/* While the tutorial card holds that spot, toasts drop to just above the seed chip */}
       <UiEntity uiTransform={{ display: toastVisible ? 'flex' : 'none', positionType: 'absolute', position: coachUp() ? { bottom: bottomPx + px(CHIP_H) + px(GAP), left: 0 } : { top: toastY, left: 0 }, width: '100%', flexDirection: 'row', justifyContent: 'center' }}>
-        <UiEntity uiTransform={{ height: px(PILL_H), flexDirection: 'row', alignItems: 'center', padding: { left: px(PILL_PAD_X - 6), right: px(PILL_PAD_X) }, borderRadius: px(PILL_H / 2) }} uiBackground={{ color: DARK }}>
-          <UiEntity uiTransform={{ width: px(26), height: px(26), margin: { right: px(10) } }} uiBackground={{ textureMode: 'stretch', texture: { src: glyph.src }, color: { ...glyph.tint, a: 1 } }} />
-          <Label value={toastText} fontSize={fs(PILL_FONT)} color={{ ...(toastColor ?? CREAM), a: 1 }} textAlign="middle-center" textWrap="nowrap" uiTransform={{ height: '100%' }} />
+        <UiEntity uiTransform={{ height: toastH, flexDirection: 'row', alignItems: 'center', padding: { left: px(PILL_PAD_X - 6), right: px(PILL_PAD_X) }, borderRadius: Math.min(px(PILL_H / 2), Math.round(toastH / 2)) }} uiBackground={{ color: DARK }}>
+          <UiEntity uiTransform={{ width: px(26), height: px(26), margin: { right: px(10) }, flexShrink: 0 }} uiBackground={{ textureMode: 'stretch', texture: { src: glyph.src }, color: { ...glyph.tint, a: 1 } }} />
+          <Label value={toastText} fontSize={fs(PILL_FONT)} color={{ ...(toastColor ?? CREAM), a: 1 }} textAlign="middle-center" textWrap={toastLines > 1 ? 'wrap' : 'nowrap'} uiTransform={toastLines > 1 ? { width: toastMaxW, height: toastLabelH } : { height: '100%' }} />
         </UiEntity>
       </UiEntity>
 

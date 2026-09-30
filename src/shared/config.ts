@@ -565,7 +565,7 @@ export const TUTORIAL_DONE_MS    = 6_000   // the closing "you're set" moment
 /** The step cards, in order. `kind` says what finishes the step (onboarding.ts). */
 export const TUTORIAL_TEXT = {
   water:   { title: 'Water a plant', body: 'Face a plant with a water drop, press and hold to pour, and let go in the green.' },
-  bloom:   { title: 'Water the garden', body: 'Keep the garden above 80% and the giant flower in the centre bursts open. More gardeners, and rarer flowers on show in the Gallery, both raise your Luck boost — check it under the health meter.' },
+  bloom:   { title: 'Water the garden', body: 'Keep the garden above 80% and the giant flower in the centre bursts open. More gardeners, and rarer flowers on show in the Gallery, both raise your Luck boost. Tap the health ring any time to see it.' },
   seeds:   { title: 'Catch the seeds', body: 'A seed has landed - follow the arrows and walk into it to catch it.' },
   arch:    { title: 'To the nursery', body: 'Follow the arrows through the arch - that is where seeds are grown.' },
   shed:    { title: 'The potting shed', body: 'Your seeds live on this rack - the rarer ones glow.' },
@@ -1009,6 +1009,12 @@ export const PODIUM_ARROW_ROLL  = 90
 // ── Test tooling ─────────────────────────────────────────────
 /** Wallets allowed to use test handlers that write PERMANENT data (lifetime board /
  *  tributes). Lower-case. Pre-production: gate every test handler + unmount TestPanelUi. */
+/** One-off lifetime-water grants (KJ 2026-09-30). Applied server-side the next time the gardener's record loads, once per `id`
+ *  (the id is stored on their lifetime record, so a redeploy or restart never pays twice). Lowercase address. */
+export const WATER_GRANTS: ReadonlyArray<{ id: string; address: string; amount: number }> = [
+  { id: 'peterparker-2026-09-30', address: '0xce0a77432dc952460c6ca1b8d8cf54169db3e210', amount: 2000 },
+]
+
 export const ADMIN_ADDRESSES: ReadonlyArray<string> = ['0x8967ad851ccbd4c1a2d57a128d3c606fcab29bad']
 
 // ── v2 Phase 6: bloom variants + scaled-bloom FX (GDD §3 step 3, §5 "shareable moment") ──
@@ -1109,6 +1115,9 @@ export const PLANTER_RESERVE_FREE    = 5                     // TUNING — at ~1
 export const PLANTER_TIDY_MIN_AWAY_MS = 24 * 60 * 60 * 1000  // TUNING
 /** Free BEDS to keep in reserve (KJ 2026-09-29): with no free bed the plot protection stops protecting anyone and players
  *  spill into each other's beds. Below this, a bed whose owners have all been away past PLANTER_TIDY_MIN_AWAY_MS is released. */
+/** Under pressure (someone is here, wants to plant, and every bed is owned) a bed whose owners are ALL offline for this long is released
+ *  straight away, longest-away first. Owners who are connected are never touched. */
+export const PLANTER_TIDY_MIN_AWAY_PRESSURE_MS = 30 * 60 * 1000  // TUNING
 export const BED_RESERVE_FREE = 2   // TUNING
 /** Keepsake collection size — a TECHNICAL backstop, not a gameplay limit (KJ 2026-09-19:
  *  "players can be hoarders"; was 20). The whole collection is stored and sent as one JSON
@@ -1140,7 +1149,7 @@ export const AVENUE_PLAQUE_OUT        = 0.98   // on the star panel: 0.96 m out 
 export const AVENUE_PLAQUE_DROP       = 0.31   // panel centre is 0.33 m below the soil top, +0.02 proud
 /** Species models are normalised to ~0.55 m (PLANT_SPECIES) for a 1.1 m planter; the
  *  Avenue cubes are 0.54 m wide, so shrink a touch. TUNING. */
-export const AVENUE_FLOWER_SCALE = 1.3   // stands are 1.6 m wide (the old wall cubes were 0.54) — TUNING
+export const AVENUE_FLOWER_SCALE = 1.8   // stands are 1.6 m wide (the old wall cubes were 0.54) — TUNING
 /** Empty-slot filler: a floating gold "?" over the soil (avenueSystem.ts setWildBloom). */
 /** How far out from a slot the onboarding marker arrow floats. Deliberately SHORT: at the
  *  tutorial trail's 1.2 m the arrow hung a metre in front of a 0.54 m cube, so a click

@@ -15,20 +15,11 @@
 // =============================================================
 
 import {
-  RARITY_TIERS, BOX_CAP_DEFAULT, growMsForTier, formatGrowTime,
-  GUARANTEED_RARE_AT_CONTRIBUTORS, DECAY_FULL_GARDENERS,
-  AVENUE_MIN_TIER, rarityTierById, WEEKLY_RESET_MS,
+  RARITY_TIERS, BOX_CAP_DEFAULT, GUARANTEED_RARE_AT_CONTRIBUTORS,
+  AVENUE_MIN_TIER, rarityTierById,
 } from './config'
 
 export const DISCORD_URL = 'https://discord.gg/gn8hTCYVPJ'
-
-/** The ladder's two ends, so the copy states the RANGE rather than one number — and
- *  still never types a value (KJ's rule for this file). */
-function growTime(): string {
-  const lo = formatGrowTime(growMsForTier(0))
-  const hi = formatGrowTime(growMsForTier(RARITY_TIERS.length - 1))
-  return lo === hi ? lo : `${lo} for a ${RARITY_TIERS[0].name}, up to ${hi} for a ${RARITY_TIERS[RARITY_TIERS.length - 1].name}`
-}
 
 export interface InfoSection { title: string; lines: string[] }
 
@@ -36,9 +27,9 @@ export const INFO_SECTIONS: ReadonlyArray<InfoSection> = [
   {
     title: 'Watering',
     lines: [
-      'Hold on a thirsty plant and let go in the green. Too much and it fails.',
+      'Hold on a plant with a water drop and let go in the green. Too much and it fails.',
       'Perfect pours build your streak and keep plants fresh longer.',
-      `Plants dry out. Keep enough of them watered and the garden blooms - ${DECAY_FULL_GARDENERS} gardeners for a full bloom.`,
+      'Plants dry out. Keep enough of them watered and the garden blooms, whether you are solo or with other gardeners.',
     ],
   },
   {
@@ -46,23 +37,22 @@ export const INFO_SECTIONS: ReadonlyArray<InfoSection> = [
     lines: [
       'Seeds fall during a bloom. Walk through them to catch them.',
       `More gardeners means better odds. From ${GUARANTEED_RARE_AT_CONTRIBUTORS} you are guaranteed a Rare or better.`,
-      `Plant one in a free planter. It opens in ${growTime()}. Water it to speed it up.`,
-      `You get ${BOX_CAP_DEFAULT} planters. Harvest your flower, or leave it on show.`,
+      'Plant one in a free planter. Rarer seeds take longer to open. Water it to speed it up.',
+      `You start with ${BOX_CAP_DEFAULT} planters, and collecting more species unlocks extra ones. Harvest your flower, or leave it on show.`,
     ],
   },
   {
     title: 'Flowers and the Gallery',
     lines: [
-      `${RARITY_TIERS.map(t => t.name).join(' → ')}. Mythic and Unique are extremely rare.`,
-      'Almanac: find every plant at every rarity for stamps and titles.',
+      `${RARITY_TIERS.map(t => t.name).join(' → ')}`,
+      'Collection: find every plant at every rarity for stamps and titles.',
       `Gallery: put a ${rarityTierById(AVENUE_MIN_TIER).name}+ flower on show to make every bloom's seeds rarer.`,
     ],
   },
   {
-    title: 'Boards',
+    title: 'Leaderboards',
     lines: [
-      `All-time never resets. This week resets every ${Math.round(WEEKLY_RESET_MS / 86_400_000)} days.`,
-      'Tap the health ring for details.',
+      'All-time never resets. This week starts fresh every week.',
     ],
   },
   {

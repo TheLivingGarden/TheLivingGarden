@@ -15,7 +15,20 @@ export interface Bed { id: number; boxIds: string[]; cx: number; cz: number }
 export interface BoxOwnerInfo { owner: string; ownerName: string; plantedAt: number }
 export type BoxInfoFn = (boxId: string) => BoxOwnerInfo | undefined
 
-export const BED_SIZE = 4
+/** KJ 2026-09-30: beds of TWO, not four. A gardener holds 2-6 planters (default 2), so a bed of four left half of every default
+ *  gardener's bed empty and unusable by anyone else; pairs fit the default exactly, and a bigger gardener simply takes more beds. */
+export const BED_SIZE = 2
+
+/** Split one baked row/block into adjacent beds of BED_SIZE: order its planters along the axis it is longest on, then cut. */
+function splitGroup<T extends { x: number; z: number }>(ps: T[]): T[][] {
+  if (ps.length <= BED_SIZE) return [ps]
+  const xs = ps.map(p => p.x), zs = ps.map(p => p.z)
+  const alongX = Math.max(...xs) - Math.min(...xs) >= Math.max(...zs) - Math.min(...zs)
+  const sorted = [...ps].sort((a, b) => alongX ? a.x - b.x || a.z - b.z : a.z - b.z || a.x - b.x)
+  const out: T[][] = []
+  for (let i = 0; i < sorted.length; i += BED_SIZE) out.push(sorted.slice(i, i + BED_SIZE))
+  return out
+}
 
 /** Group planters into beds, numbered from `origin` outward (bed 1 is nearest — the potting shed's door in
  *  the new plaza). Greedy and deterministic: take the nearest unassigned planter, add its nearest unassigned
@@ -65,7 +78,9 @@ export function makeBeds(
     const ps = g.map(id => byId.get(id)).filter((p): p is { id: string; x: number; z: number } => !!p && !used.has(p.id))
     if (ps.length === 0) continue
     ps.forEach(p => used.add(p.id))
-    beds.push({ id: beds.length + 1, boxIds: ps.map(p => p.id), cx: ps.reduce((a, p) => a + p.x, 0) / ps.length, cz: ps.reduce((a, p) => a + p.z, 0) / ps.length })
+    for (const part of splitGroup(ps)) {
+      beds.push({ id: beds.length + 1, boxIds: part.map(p => p.id), cx: part.reduce((a, p) => a + p.x, 0) / part.length, cz: part.reduce((a, p) => a + p.z, 0) / part.length })
+    }
   }
   const rest = planters.filter(p => !used.has(p.id))
   for (const b of deriveBeds(rest, origin)) beds.push({ ...b, id: beds.length + 1 })
@@ -84,24 +99,20 @@ export function bedOwner(bed: Bed, info: BoxInfoFn): BoxOwnerInfo | null {
 
 export type PlantVerdict =
   | { ok: true }
-  | { ok: false; reason: 'plot_taken'; ownerName: string; bed: number }
+  | { ok: false; reason: 'plot_taken'; ownerName: string; bed: number; full: boolean }   // full = no unowned bed anywhere
   | { ok: false; reason: 'own_bed_first'; bed: number }
 
 /** May `player` plant in planter `boxId`? Rules (KJ 2026-09-25):
  *   - a free bed: fine, unless you already own a bed that still has a free planter (own bed first);
  *   - your own bed: fine;
- *   - someone else's bed: protected while ANY free bed exists, allowed once none is left (spill).
+ *   - someone else's bed: always refused (KJ 2026-09-30: no spill; free beds come from the away-owner release).
  *  Nothing here blocks a player who has somewhere to plant: a refusal always names where to go. */
-export function checkPlant(beds: ReadonlyArray<Bed>, info: BoxInfoFn, player: string, boxId: string): PlantVerdict & { ok: boolean; reason?: string; ownerName?: string; bed?: number } {
+export function checkPlant(beds: ReadonlyArray<Bed>, info: BoxInfoFn, player: string, boxId: string): PlantVerdict & { ok: boolean; reason?: string; ownerName?: string; bed?: number; full?: boolean } {
   const target = beds.find(b => b.boxIds.includes(boxId))
   if (!target) return { ok: true }   // a planter outside every bed (e.g. added by the editor): no rule applies
   const owner = bedOwner(target, info)
   if (owner && owner.owner === player) return { ok: true }
-  const freeBed = beds.some(b => bedOwner(b, info) === null)
-  if (owner) {
-    if (freeBed) return { ok: false, reason: 'plot_taken', ownerName: owner.ownerName, bed: target.id }
-    return { ok: true }   // every bed is taken: spill into the shared field
-  }
+  if (owner) return { ok: false, reason: 'plot_taken', ownerName: owner.ownerName, bed: target.id, full: !beds.some(b => bedOwner(b, info) === null) }   // never spill (KJ 2026-09-30): one owner per bed
   const mine = beds.find(b => bedOwner(b, info)?.owner === player && b.boxIds.some(id => !info(id)?.owner))
   if (mine) return { ok: false, reason: 'own_bed_first', bed: mine.id }
   return { ok: true }

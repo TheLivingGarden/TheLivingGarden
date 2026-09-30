@@ -76,14 +76,13 @@ export function InfoPanelUi(props: {
         />
       ))}
 
-      {/* Discord lives on the last page — back in the experience after being hidden in
-          index.ts, and reachable from the UI as well as the two buttons in the scene. */}
+      {/* Discord lives on the last page — the only Discord link now that the scene buttons are hidden again. */}
       <UiEntity
         uiTransform={{ display: last ? 'flex' : 'none', width: '100%', height: px(40), alignItems: 'center', justifyContent: 'center', margin: { top: px(6), bottom: px(6) }, borderRadius: px(20) }}
         uiBackground={{ color: MOSS }}
         onMouseDown={() => { void openExternalUrl({ url: DISCORD_URL }) }}
       >
-        <Label value="Join the Discord" fontSize={fs(16)} color={CREAM} textAlign="middle-center" />
+        <Label value="Join the Discord" fontSize={fs(16)} color={CREAM} textAlign="middle-center" textWrap="nowrap" uiTransform={{ height: '100%' }} />
       </UiEntity>
 
       <UiEntity uiTransform={{ width: '100%', flexDirection: 'row', alignItems: 'center', margin: { top: px(6) } }}>
@@ -92,7 +91,7 @@ export function InfoPanelUi(props: {
           uiBackground={{ color: RAISED }}
           onMouseDown={() => { if (page > 0) page-- }}
         >
-          <Label value="Prev" fontSize={fs(15)} color={page > 0 ? CREAM : DIM} textAlign="middle-center" />
+          <Label value="Prev" fontSize={fs(15)} color={page > 0 ? CREAM : DIM} textAlign="middle-center" textWrap="nowrap" uiTransform={{ height: '100%' }} />
         </UiEntity>
         <Label value={`${page + 1} / ${pages}`} fontSize={fs(15)} color={DIM} textAlign="middle-center" uiTransform={{ flexGrow: 1, height: px(38) }} />
         <UiEntity
@@ -100,7 +99,7 @@ export function InfoPanelUi(props: {
           uiBackground={{ color: RAISED }}
           onMouseDown={() => { if (page < pages - 1) page++ }}
         >
-          <Label value="Next" fontSize={fs(15)} color={!last ? CREAM : DIM} textAlign="middle-center" />
+          <Label value="Next" fontSize={fs(15)} color={!last ? CREAM : DIM} textAlign="middle-center" textWrap="nowrap" uiTransform={{ height: '100%' }} />
         </UiEntity>
       </UiEntity>
     </UiEntity>

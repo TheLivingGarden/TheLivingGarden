@@ -296,9 +296,9 @@ function setupAlmanacWall(): void {
   box(root, { x: 0, y: (0.2 + panelTop) / 2, z: 0.05 }, { x: panelW, y: panelTop - 0.2, z: 0.08 }, PANEL, 0.4)       // wall (light, faintly self-lit)
   ;[-1, 1].forEach(sd => box(root, { x: sd * (panelW / 2 + 0.06), y: panelTop / 2, z: 0.05 }, { x: 0.14, y: panelTop, z: 0.14 }, WOOD_D, 0.3))
   box(root, { x: 0, y: panelTop - 0.6, z: 0.0 }, { x: panelW, y: 1.2, z: 0.05 }, PLATE, 0.3)                          // title bar
-  label(root, { x: -panelW / 2 + 1.9, y: panelTop - 0.6, z: -0.06 }, 'ALMANAC', 1.7, GOLD, 3.4, 0.7)
+  label(root, { x: -panelW / 2 + 1.9, y: panelTop - 0.6, z: -0.06 }, 'COLLECTION', 1.7, GOLD, 3.4, 0.7)
   aTotal = label(root, { x: panelW / 2 - 2.3, y: panelTop - 0.6, z: -0.06 }, '', 1.1, CREAM, 4.3, 0.5)
-  tapArea(root, { x: panelW / 2 - 2.3, y: panelTop - 0.6, z: -0.05 }, { x: 4.3, y: 1.0, z: 0.1 }, 'Open the full Almanac', () => openSeedMenuFlowers())
+  tapArea(root, { x: panelW / 2 - 2.3, y: panelTop - 0.6, z: -0.05 }, { x: 4.3, y: 1.0, z: 0.1 }, 'Open your Collection', () => openSeedMenuFlowers())
 
   // rarity tabs: 2 rows x 4
   tabs = []

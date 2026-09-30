@@ -129,7 +129,7 @@ interface BoxView {
 const views  = new Map<string, BoxView>()
 
 // ---------------------------------------------------------------
-// Beds (shared/beds.ts): four planters that belong to whoever planted in them. Derived from the baked layout
+// Beds (shared/beds.ts): two planters that belong to whoever planted in them. Derived from the baked layout
 // (BOX_POSITIONS) so the client and the server compute the same beds; owners come from the planters themselves.
 // ---------------------------------------------------------------
 const beds: Bed[] = makeBeds(BOX_POSITIONS, BED_FILL_ORIGIN, BEDS_EXPLICIT)
@@ -149,7 +149,11 @@ function steeredFreeBoxes(): Set<string> | null {
   const free = (id: string) => { const v = views.get(id); return !!v && !v.owner && !deleted.has(id) }
   const mine = beds.filter(b => bedOwner(b, bedInfo)?.owner === me).flatMap(b => b.boxIds).filter(free)
   if (mine.length > 0) return new Set(mine)
-  const freeBed = beds.find(b => bedOwner(b, bedInfo) === null && b.boxIds.some(free))
+  // Nothing spare in my beds: the free bed nearest my existing ones (a bigger gardener's planters stay together), else the lowest-numbered.
+  const myBeds = beds.filter(b => bedOwner(b, bedInfo)?.owner === me)
+  const freeBeds = beds.filter(b => bedOwner(b, bedInfo) === null && b.boxIds.some(free))
+  const near = (b: Bed) => myBeds.length === 0 ? 0 : Math.min(...myBeds.map(m => Math.hypot(m.cx - b.cx, m.cz - b.cz)))
+  const freeBed = freeBeds.reduce<Bed | null>((best, b) => best === null || near(b) < near(best) ? b : best, null)
   return freeBed ? new Set(freeBed.boxIds.filter(free)) : null
 }
 /** Live planter layout: BOX_POSITIONS, as edited in preview by the planter editor
@@ -538,7 +542,7 @@ function tryPlant(v: BoxView): void {
     const verdict = checkPlant(beds, bedInfo, localId(), v.boxId)
     if (!verdict.ok) {
       showToast(verdict.reason === 'plot_taken'
-        ? `That is ${verdict.ownerName}'s plot - plant in a free bed (any planter without a name sign)`
+        ? (verdict.full ? 'The garden is full right now - every plot is taken. Try again soon' : `That is ${verdict.ownerName}'s plot - plant in a bed of your own`)
         : `You have a bed with room - plant in Bed ${verdict.bed} first`, TOAST_MS, false)
       return
     }
@@ -762,6 +766,7 @@ const bedSigns: BedSign[] = []
 // 3.2, was 2.2 (KJ 2026-09-27): the 1.3 m plaque spanned 1.55–2.85 m and sat on the balloons (up to ~1.9 m).
 const BED_SIGN_Y     = 3.2
 const BED_SIGN_RANGE = 20
+const BED_SIGN_SCALE = 0.65   // TUNING — pair-beds sit 3.0 m apart and the plaque is 4.3 m wide at scale 1, so neighbours would overlap
 const BED_TEXT_FREE  = { r: 0.83, g: 0.82, b: 0.78, a: 1 }
 const BED_TEXT_MINE  = { r: 0.98, g: 0.78, b: 0.3, a: 1 }
 const BED_TEXT_OTHER = { r: 0.957, g: 0.918, b: 0.824, a: 1 }
@@ -855,13 +860,13 @@ function updateBeds(): void {
     }
     // Only POPULATED beds get a sign (KJ 2026-09-25: hide the name tags of empty beds)
     const near = !!owner && !!pos && Math.hypot(pos.x - bs.bed.cx, pos.z - bs.bed.cz) <= BED_SIGN_RANGE
-    if (near !== bs.near) { bs.near = near; Transform.getMutable(bs.root).scale = near ? { x: 1, y: 1, z: 1 } : { x: 0, y: 0, z: 0 } }
+    if (near !== bs.near) { bs.near = near; Transform.getMutable(bs.root).scale = near ? { x: BED_SIGN_SCALE, y: BED_SIGN_SCALE, z: BED_SIGN_SCALE } : { x: 0, y: 0, z: 0 } }
     // Hover on each FREE planter in this bed says whose plot it is, so the protection is not a surprise on tap
     for (const id of bs.bed.boxIds) {
       const v = views.get(id)
       if (!v || v.owner) continue
       const verdict = checkPlant(beds, bedInfo, me, id)
-      setHoverText(v, verdict.ok ? 'Plant seed' : verdict.reason === 'plot_taken' ? `${verdict.ownerName}'s plot` : `Plant in Bed ${verdict.bed}`)
+      setHoverText(v, verdict.ok ? 'Plant seed' : verdict.reason === 'plot_taken' ? (verdict.full ? 'Garden full' : `${verdict.ownerName}'s plot`) : `Plant in Bed ${verdict.bed}`)
     }
   }
 }

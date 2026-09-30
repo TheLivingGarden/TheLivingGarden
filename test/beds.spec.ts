@@ -65,11 +65,13 @@ describe('bedOwner and checkPlant', () => {
     expect(r.ok).toBe(false)
     expect(r.reason).toBe('plot_taken')
     expect(r.ownerName).toBe(A)
+    expect(r.full).toBe(false)
   })
-  it("...but spills into someone else's bed once no free bed is left", () => {
+  it("...and stays protected even when no free bed is left (no spill)", () => {
     const m: Record<string, BoxOwnerInfo> = {}
     beds.forEach((b, i) => { m[b.boxIds[0]] = planted(`p${i}`, i + 1) })   // every bed owned by someone
-    expect(checkPlant(beds, info(m), B, beds[0].boxIds[1]).ok).toBe(true)
+    expect(checkPlant(beds, info(m), B, beds[0].boxIds[1]).reason).toBe('plot_taken')
+    expect(checkPlant(beds, info(m), B, beds[0].boxIds[1]).full).toBe(true)
   })
   it('own bed first: with room in your bed you cannot start a second one', () => {
     const m = { [beds[0].boxIds[0]]: planted(A, 1) }
@@ -95,9 +97,9 @@ describe("the baked layout from KJ's scene.glb (re-baked 2026-09-29)", () => {
     expect(BOX_POSITIONS).toHaveLength(96)
     expect(new Set(BOX_POSITIONS.map(p => p.id)).size).toBe(96)
   })
-  it('groups into 24 beds of exactly four', () => {
-    expect(beds).toHaveLength(24)
-    for (const b of beds) expect(b.boxIds).toHaveLength(4)
+  it('groups into 48 beds of exactly two', () => {
+    expect(beds).toHaveLength(48)
+    for (const b of beds) expect(b.boxIds).toHaveLength(2)
   })
   it('every bed is a tidy row: its planters span at most 4.5 m and share a facing', () => {
     for (const b of beds) {
@@ -107,8 +109,8 @@ describe("the baked layout from KJ's scene.glb (re-baked 2026-09-29)", () => {
       expect(new Set(ps.map(p => p.rot)).size).toBe(1)
     }
   })
-  it("bed 1 holds KJ's four planted test planters, so they keep their plot", () => {
-    expect([...beds[0].boxIds].sort()).toEqual(['box_100', 'box_4', 'box_6', 'box_99'])
+  it("beds 1 and 2 together hold KJ's four planted test planters", () => {
+    expect([...beds[0].boxIds, ...beds[1].boxIds].sort()).toEqual(['box_100', 'box_4', 'box_6', 'box_99'])
   })
 })
 
@@ -117,7 +119,8 @@ describe('makeBeds with explicit groups', () => {
   it('uses the given groups, numbered in order, with centroids', () => {
     const beds = makeBeds(ps, origin, [['box_1', 'box_2'], ['box_5', 'box_6', 'box_7']])
     expect(beds.slice(0, 2).map(b => b.id)).toEqual([1, 2])      // the two given groups come first, in order
-    expect(beds[1].boxIds).toEqual(['box_5', 'box_6', 'box_7'])
+    expect(beds[1].boxIds).toEqual(['box_5', 'box_6'])   // a group longer than a bed is cut into adjacent pairs, in order
+    expect(beds[2].boxIds).toEqual(['box_7'])
     expect(beds[0].boxIds).toEqual(['box_1', 'box_2'])
     expect(beds[0].cx).toBeCloseTo(0.75)
   })

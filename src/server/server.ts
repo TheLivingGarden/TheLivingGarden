@@ -21,7 +21,7 @@ import { loadScene, loadPlayer, createSceneWriter, createPlayerWriter, KeyWriter
 import { lastSeenToStore } from './lastSeen'
 import { reachVerdict } from './reach'
 import { chooseHandSeed } from './hand'
-import { makeBeds, checkPlant, bedOwner, pickBedToRelease } from '../shared/beds'
+import { makeBeds, checkPlant, bedOwner, pickBedToRelease, Bed } from '../shared/beds'
 import { slimKeepsake, chunkCollection, MAX_SAFE_MESSAGE_BYTES } from '../shared/collection'
 import { PlantSync }          from '../shared/schemas'
 import { room }               from '../shared/messages'
@@ -50,7 +50,7 @@ import {
   WEEKLY_RESET_MS,
   rollBloomVariant,
   bloomVariantById,
-  ADMIN_ADDRESSES,
+  ADMIN_ADDRESSES, WATER_GRANTS,
   seedSpawnCount,
   seedRareChance,
   SEED_RARE_AT_SOLO,
@@ -80,7 +80,7 @@ import {
   PLANTER_RESERVE_TTL_MS,
   FINALE_RARE_TIER,
   PLANTER_RESERVE_FREE,
-  BED_RESERVE_FREE,
+  BED_RESERVE_FREE, PLANTER_TIDY_MIN_AWAY_PRESSURE_MS,
   PLANTER_TIDY_MIN_AWAY_MS,
   FLOWER_COLLECTION_CAP,
   BOX_WATER_MAX,
@@ -200,6 +200,8 @@ interface LeaderboardEntry {
    *  board still shows the right flair for a gardener who is offline and outside the
    *  lifetime top-N, whose lifetime total the server therefore does not hold. */
   tier?: number
+  /** Ids of WATER_GRANTS already paid to this gardener (lifetime records only). */
+  granted?: string[]
 }
 // Keyed LOWERCASE, like playerRecords/heldFlowers/heldSeeds — join hands over
 // `identity.address`, messages `context.from` (mixed case; see the note at recordKey
@@ -433,11 +435,22 @@ async function loadLifetimeRecord(address: string): Promise<LeaderboardEntry> {
     if (stored && typeof stored === 'object' && !Array.isArray(stored)) {
       const r = stored as Partial<LeaderboardEntry>
       // The legacy blob is a floor: an older record must never lower a known total.
-      return { displayName: String(r.displayName ?? seeded?.displayName ?? ''), total: Math.max(Number(r.total) || 0, seeded?.total ?? 0) }
+      const granted = Array.isArray(r.granted) ? r.granted.filter((g): g is string => typeof g === 'string') : undefined
+      return { displayName: String(r.displayName ?? seeded?.displayName ?? ''), total: Math.max(Number(r.total) || 0, seeded?.total ?? 0), ...(granted ? { granted } : {}) }
     }
     return { displayName: seeded?.displayName ?? '', total: seeded?.total ?? 0 }
   })
   boardSet(lifetime, address, rec)
+  const pending = WATER_GRANTS.filter(g => g.address === address.toLowerCase() && !rec.granted?.includes(g.id))
+  if (pending.length > 0) {
+    for (const g of pending) {
+      rec.total += g.amount
+      rec.granted = [...(rec.granted ?? []), g.id]
+      console.log(`[Server] Grant ${g.id}: +${g.amount} lifetime waters to ${address} → ${rec.total}`)
+    }
+    savePlayerJson(address, 'lifetime')
+    refreshLifetimeTop()
+  }
   return rec
 }
 
@@ -1067,12 +1080,15 @@ async function sendOnboarding(address: string): Promise<void> {
 // avatar positions); the server only decides whether it may be held.
 const planterReservations = new Map<string, { boxId: string; expiresAt: number }>()   // address →
 
-/** The address holding this planter, or null. Expired holds are dropped on read. */
+/** The address holding this planter, or null. A hold covers the whole BED of the planter it names (KJ 2026-09-30: a
+ *  newcomer's bed is theirs from the moment the tutorial points them at it, so two newcomers are never sent to the same one).
+ *  Expired holds are dropped on read. */
 function reservationHolder(boxId: string): string | null {
   const now = Date.now()
+  const bed = beds.find(b => b.boxIds.includes(boxId))
   for (const [address, r] of planterReservations) {
     if (r.expiresAt <= now) { planterReservations.delete(address); continue }
-    if (r.boxId === boxId) return address
+    if (r.boxId === boxId || (bed && bed.boxIds.includes(r.boxId))) return address
   }
   return null
 }
@@ -1485,13 +1501,20 @@ async function ensureFreePlanters(): Promise<void> {
     // Then keep a few free BEDS too, not just free planters (a bed stays "owned" while any planter in it is planted).
     const skip = new Set<number>()
     while (beds.filter(b => bedOwner(b, bedInfo) === null).length < BED_RESERVE_FREE) {
-      const bed = pickBedToRelease(beds, bedInfo, isConnected, o => lastSeen.get(o.toLowerCase()) ?? 0, Date.now(), PLANTER_TIDY_MIN_AWAY_MS, skip)
-      if (!bed) break
-      skip.add(bed.id)
-      console.log(`[Server] Releasing Bed ${bed.id} — every owner has been away ${Math.round(PLANTER_TIDY_MIN_AWAY_MS / 3_600_000)}h+ and free beds were low`)
-      for (const id of bed.boxIds) { const b = boxes.get(id); if (b && b.owner) await tidyPlanter(b) }
+      if (!await releaseOneBed(PLANTER_TIDY_MIN_AWAY_MS, skip)) break
     }
   } finally { ensuringFree = false }
+}
+
+/** Free the bed whose owners have all been offline longest (at least `minAwayMs`), returning their contents. False = none qualifies.
+ *  Connected owners are never touched. */
+async function releaseOneBed(minAwayMs: number, skip: Set<number> = new Set()): Promise<boolean> {
+  const bed = pickBedToRelease(beds, bedInfo, isConnected, o => lastSeen.get(o.toLowerCase()) ?? 0, Date.now(), minAwayMs, skip)
+  if (!bed) return false
+  skip.add(bed.id)
+  console.log(`[Server] Releasing Bed ${bed.id} — every owner offline ${Math.round(minAwayMs / 60_000)}min+ and free beds were low`)
+  for (const id of bed.boxIds) { const b = boxes.get(id); if (b && b.owner) await tidyPlanter(b) }
+  return true
 }
 
 
@@ -2101,9 +2124,15 @@ export async function server(): Promise<void> {
     // Admin "unlimited" is a test tool and plants anywhere.
     if (!unlimitedPlanters.has(playerAddress)) {
       const verdict = checkPlant(beds, bedInfo, playerAddress, b.boxId)
+      // Someone is here and wants to plant but every bed is owned: make room from owners who are NOT here (KJ 2026-09-30).
+      if (!verdict.ok && verdict.full && await releaseOneBed(PLANTER_TIDY_MIN_AWAY_PRESSURE_MS)) {
+        sendNotice(playerAddress, 'A plot just opened up - tap a planter in a free bed')
+        sendBox(b, [playerAddress])
+        return
+      }
       if (!verdict.ok) {
         sendNotice(playerAddress, verdict.reason === 'plot_taken'
-          ? `That is ${verdict.ownerName}'s plot - plant in a free bed (any planter without a name sign)`
+          ? (verdict.full ? 'The garden is full right now - every plot is taken. Try again soon' : `That is ${verdict.ownerName}'s plot - plant in a bed of your own`)
           : `You have a bed with room - plant in Bed ${verdict.bed} first`)
         sendBox(b, [playerAddress])
         return
@@ -2144,18 +2173,26 @@ export async function server(): Promise<void> {
     const refuse = () => room.send('boxReserved', { boxId: '', expiresAt: 0 }, { to: [playerAddress] })
     const o = await loadOnboarding(playerAddress)
     if (o.planted) { refuse(); return }                       // tutorial is over for them
-    const b = boxes.get(data.boxId)
-    if (!b || b.owner) { refuse(); return }
-    const holder = reservationHolder(data.boxId)
-    if (holder && holder !== playerAddress) { refuse(); return }
-    // Never hold the last free planter: with a full garden that would block a real
-    // gardener outright, and the crowding rule only frees one once someone plants.
-    const free = [...boxes.values()].filter(x => !x.owner && !reservationHolder(x.boxId)).length
-    if (free <= 1 && holder !== playerAddress) { refuse(); return }
+    // The client asks for the planter it was steered to; the server holds that planter's whole bed if it is
+    // unowned and not held by someone else, and otherwise offers the lowest-numbered bed that is (a second
+    // newcomer arriving at the same time is moved along instead of waiting for the first to plant).
+    const usable = (bed: Bed): boolean => {
+      const h = bed.boxIds.map(reservationHolder).find(x => x)
+      return bedOwner(bed, bedInfo) === null && (!h || h === playerAddress) && bed.boxIds.some(id => !boxes.get(id)?.owner)
+    }
+    const asked = beds.find(x => x.boxIds.includes(data.boxId))
+    let bed = asked && usable(asked) ? asked : beds.find(usable)
+    if (!bed && await releaseOneBed(PLANTER_TIDY_MIN_AWAY_PRESSURE_MS)) bed = beds.find(usable)
+    if (!bed) { refuse(); return }
+    const boxId = bed.boxIds.includes(data.boxId) && !boxes.get(data.boxId)?.owner ? data.boxId : bed.boxIds.find(id => !boxes.get(id)?.owner)!
+    // Never hold the last free bed: with a full garden that would block a real gardener outright.
+    const holder = bed.boxIds.map(reservationHolder).find(x => x)
+    const freeBeds = beds.filter(x => bedOwner(x, bedInfo) === null && !x.boxIds.some(id => reservationHolder(id))).length
+    if (freeBeds <= 1 && holder !== playerAddress) { refuse(); return }
     const expiresAt = Date.now() + PLANTER_RESERVE_TTL_MS
-    planterReservations.set(playerAddress, { boxId: data.boxId, expiresAt })
-    room.send('boxReserved', { boxId: data.boxId, expiresAt }, { to: [playerAddress] })
-    console.log(`[Server] ${data.boxId} held for ${playerAddress.slice(0, 8)}… (tutorial)`)
+    planterReservations.set(playerAddress, { boxId, expiresAt })
+    room.send('boxReserved', { boxId, expiresAt }, { to: [playerAddress] })
+    console.log(`[Server] Bed ${bed.id} (${boxId}) held for ${playerAddress.slice(0, 8)}… (tutorial)`)
   })
 
   // ── Message: harvestBox (Phase 4) ───────────────────────────

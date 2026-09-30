@@ -1,4 +1,5 @@
 import { isServer } from '@dcl/sdk/network'
+import { engine, VisibilityComponent } from '@dcl/sdk/ecs'
 import { setupNotifications } from './notifications'
 import { setupWateringSystem } from './wateringSystem'
 import { setupOnboarding } from './onboarding'
@@ -43,7 +44,10 @@ export async function main() {
   setupGalleryThreads()   // Gallery flowers fly to the Bloom when it triggers — after room.clear() like the rest
   setupWaterStreakBadges()   // nametag: name + current water streak, after room.clear() like the rest
 
-  // Discord buttons are BACK (KJ 2026-09-20) — they carry their own link from the
-  // composite, and the info panel's last page links to the same server.
+  // Discord buttons hidden again (KJ 2026-09-30): the info panel's last page has the link. Hidden, not deleted, so they can come back.
+  for (const name of ['Discord Button', 'Discord Button_2']) {
+    const e = engine.getEntityOrNullByName(name)
+    if (e) VisibilityComponent.createOrReplace(e, { visible: false })
+  }
 
 }
