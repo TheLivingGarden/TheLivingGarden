@@ -27,7 +27,7 @@ import { room } from './shared/messages'
 const PLATE_Y      = 0.10
 const NAME_FONT    = 0.95
 const STREAK_FONT  = 0.8
-const PILL_H       = 0.30
+const PILL_H       = 0.32
 // The pill texture is a white stadium drawn in the middle 25% band of a square
 // PNG (the rest transparent), so the quad is scaled 4× the visible height and
 // the shape supplies the rounded corners. White on purpose: albedoColor tints
@@ -138,6 +138,10 @@ function renderPlate(p: Plate, info: StreakInfo): void {
   const nt = TextShape.getMutable(p.nameT)
   nt.text = info.name
   const label = info.streak > 0 ? `${info.streak} STREAK` : ''
+  // KJ 2026-09-30: the name sat too high and poked out of its pill. Name-only: dead centre. With a streak: name a little
+  // lower than before and the streak line tucked under it, inside the taller pill.
+  Transform.getMutable(p.nameT).position   = { x: 0, y: label ? 0.05 : -0.004, z: -0.012 }
+  Transform.getMutable(p.streakT).position = { x: 0, y: -0.085, z: -0.012 }
   const st = TextShape.getMutable(p.streakT)
   st.text = label
   st.textColor = STREAK_COLOR

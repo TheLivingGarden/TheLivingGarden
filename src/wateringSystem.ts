@@ -13,7 +13,6 @@ import {
   Entity,
   Schemas,
   Animator,
-  AudioSource,
   GltfContainer,
   GltfNodeModifiers,
   TextShape,
@@ -58,6 +57,8 @@ import { applyPropLayout } from './propLayoutTool'
 import { showToast, showDailyLimit, hideDailyLimit, showPersistent, hidePersistent, showBannerIdle, showBannerCountdown, updateBannerCountdown, showBannerBloom, updateBannerHealth, updatePlayerCount, updateBloomRemaining, formatBloomCountdown, setNextBloomLocalTime, updateLuckPercent } from './notifications'
 import { clockSync } from './shared/clockSync'
 import { triggerSceneEmote }  from '~system/RestrictedActions'
+import { playClip } from './sounds'
+import { isMobile } from '@dcl/sdk/platform'
 import { room }                             from './shared/messages'
 import { TOTAL_PLANTS, BLOOM_THRESHOLD, BLOOM_CENTER, DAILY_WATER_LIMIT, PLANT_NAMES, FAST_PLANT_NAMES, FAST_PLANT_EXPIRY_MS, BLOOM_RESET_DELAY_MS, DROP_RANGE, DROP_RANGE_OUT, BLOOM_TRIGGER_COOLDOWN_MS, EXPIRY_TELL_MS, WATER_DROP_MODEL_SRC, BLOOM_MODEL_OFFSET_X } from './shared/config'
 import { setupPlayerTrailSystem, startPlayerTrail, stopPlayerTrail } from './playerTrailSystem'
@@ -221,12 +222,6 @@ export const PlantData = engine.defineComponent('plant-data', {
 
 const bloomCountdownLabels: Entity[] = []   // BloomCountdown, _2, _3, _4 — 60s sustain countdown
 const bloomResetLabels:     Entity[] = []   // BloomResetTime, _2, _3, _4 — bloom reset countdown
-let hoverSoundEntity:    Entity
-let clickSoundEntity:    Entity
-let wateringSoundEntity: Entity
-let wiltSoundEntity:     Entity
-const magicSoundEntities: Entity[] = []
-let magicSoundIdx = 0
 
 let waterRemaining          = DAILY_WATER_LIMIT
 let lastBlockedClickMs      = 0         // throttle for blocked-click feedback (wiggle / toast)
@@ -376,8 +371,10 @@ const isShown = (e: Entity): boolean => VisibilityComponent.getOrNull(e)?.visibl
 // multiplies that, so idles now only run within ANIM_RANGE of the player.
 // Hysteresis (ANIM_RANGE_OUT > ANIM_RANGE) stops a plant thrashing on the boundary while
 // you stand next to it; the sweep is throttled because it is O(plants).
-const ANIM_RANGE      = 18      // m — start playing
-const ANIM_RANGE_OUT  = 22      // m — stop playing
+// Phone (KJ 2026-09-30: lag from ~60-70% of the plants watered, i.e. as more healthy skinned plants come alive): a much tighter
+// band there — you only see a handful of plants at a time on a small screen anyway. UNPROFILED: a mitigation, not a measured fix.
+const animRange    = (): number => isMobile() ? 9 : 18    // m — start playing (read lazily: the platform is not known at module load)
+const animRangeOut = (): number => isMobile() ? 11 : 22   // m — stop playing
 const ANIM_SWEEP_S    = 0.5     // s between sweeps
 const nearPlants = new Set<Entity>()   // plant / rose / drop entities currently animating
 let animSweepIn = 0
@@ -400,7 +397,7 @@ function animBudgetSystem(dt: number): void {
   animSweepIn = ANIM_SWEEP_S
   const me = Transform.getOrNull(engine.PlayerEntity)?.position
   if (!me) return
-  const inSq = ANIM_RANGE * ANIM_RANGE, outSq = ANIM_RANGE_OUT * ANIM_RANGE_OUT
+  const inSq = animRange() * animRange(), outSq = animRangeOut() * animRangeOut()
   const dInSq = DROP_RANGE * DROP_RANGE, dOutSq = DROP_RANGE_OUT * DROP_RANGE_OUT
   for (const [entity] of engine.getEntitiesWith(PlantData)) {
     const p = Transform.getOrNull(entity)?.position
@@ -870,6 +867,7 @@ export function plantMovePair(name: string): { plant: Entity; anchor: Entity } |
 function enablePlantClick(entity: Entity) {
   const info = plantRegistry.get(entity)
   if (!info) return
+  PointerEvents.deleteFrom(info.clickTarget)   // drop the hover-only "Watered…" entry disablePlantClick leaves, so the two never stack
   pointerEventsSystem.onPointerDown(
     { entity: info.clickTarget, opts: { button: InputAction.IA_POINTER, hoverText: HOLD_WATERING_ENABLED ? 'Hold to water' : 'Water', maxDistance: POINTER_MAX_DIST } },
     () => {
@@ -903,6 +901,8 @@ function disablePlantClick(entity: Entity) {
   pointerEventsSystem.removeOnPointerDown(info.clickTarget)
   pointerEventsSystem.removeOnPointerHoverEnter(info.clickTarget)
   PointerEvents.deleteFrom(info.clickTarget)
+  // Hover-only "Watered…" so a watered plant answers the pointer instead of going dead (KJ 2026-09-30). No handler: a tap does nothing.
+  PointerEvents.create(info.clickTarget, { pointerEvents: [{ eventType: PointerEventType.PET_DOWN, eventInfo: { button: InputAction.IA_POINTER, hoverText: 'Watered…', maxDistance: POINTER_MAX_DIST } }] })
 }
 
 export function resetDailyLimit(): void {
@@ -915,39 +915,14 @@ export function resetDailyLimit(): void {
 // Interaction sounds & emote
 // ---------------------------------------------------------------
 
-function playAtPlayer(soundEntity: Entity) {
-  const pos = Transform.getOrNull(engine.PlayerEntity)?.position ?? { x: 8, y: 1, z: 8 }
-  Transform.getMutable(soundEntity).position = pos
-  // Reuse the existing AudioSource component — no recreation, just retrigger
-  AudioSource.getMutable(soundEntity).playing = false
-  timers.setTimeout(() => { AudioSource.getMutable(soundEntity).playing = true }, 0)
-}
-
-function playHoverSound()    { playAtPlayer(hoverSoundEntity)    }
+function playHoverSound()    { playClip(SND_HOVER, VOL_HOVER) }
 function playWiltSound(plantEntity: Entity) {
-  const pos = Transform.getOrNull(plantEntity)?.position ?? SND_INIT_POS
-  Transform.getMutable(wiltSoundEntity).position = pos
-  AudioSource.getMutable(wiltSoundEntity).playing = false
-  timers.setTimeout(() => { AudioSource.getMutable(wiltSoundEntity).playing = true }, 0)
+  playClip(SND_WILT, VOL_WILT, Transform.getOrNull(plantEntity)?.position ?? SND_INIT_POS)
 }
-function playClickSound()    { playAtPlayer(clickSoundEntity)    }
-function playWateringSound() { playAtPlayer(wateringSoundEntity) }
-
-function playMagicFXSound() {
-  // Alternate between two entities — each call lands on a different one so DCL
-  // always sees a fresh AudioSource component, avoiding the alternating-skip bug.
-  magicSoundIdx = (magicSoundIdx + 1) % 2
-  const ent = magicSoundEntities[magicSoundIdx]
-  const pos = Transform.getOrNull(engine.PlayerEntity)?.position ?? { x: 8, y: 1, z: 8 }
-  Transform.getMutable(ent).position = pos
-  AudioSource.createOrReplace(ent, {
-    audioClipUrl: SND_MAGIC,
-    playing:      true,
-    loop:         false,
-    volume:       VOL_MAGIC,
-    pitch:        1,
-  })
-}
+function playClickSound()    { playClip(SND_CLICK, VOL_CLICK) }
+function playWateringSound() { playClip(SND_WATERING, VOL_WATERING) }
+/** Pooled (sounds.ts): the old two-entity alternation still dropped sounds under rapid repeats. */
+function playMagicFXSound() { playClip(SND_MAGIC, VOL_MAGIC) }
 
 export function isWateringEmoteActive(): boolean { return emoteActive }
 
@@ -1466,26 +1441,6 @@ export function setupWateringSystem(): void {
     },
   })
 
-  // Sound entities
-  hoverSoundEntity    = engine.addEntity()
-  Transform.create(hoverSoundEntity,    { position: SND_INIT_POS })
-  AudioSource.create(hoverSoundEntity,  { audioClipUrl: SND_HOVER,    playing: false, loop: false, volume: VOL_HOVER,    pitch: 1 })
-  clickSoundEntity    = engine.addEntity()
-  Transform.create(clickSoundEntity,    { position: SND_INIT_POS })
-  AudioSource.create(clickSoundEntity,  { audioClipUrl: SND_CLICK,    playing: false, loop: false, volume: VOL_CLICK,    pitch: 1 })
-  wateringSoundEntity = engine.addEntity()
-  Transform.create(wateringSoundEntity, { position: SND_INIT_POS })
-  AudioSource.create(wateringSoundEntity, { audioClipUrl: SND_WATERING, playing: false, loop: false, volume: VOL_WATERING, pitch: 1 })
-  wiltSoundEntity = engine.addEntity()
-  Transform.create(wiltSoundEntity,     { position: SND_INIT_POS })
-  AudioSource.create(wiltSoundEntity,   { audioClipUrl: SND_WILT,     playing: false, loop: false, volume: VOL_WILT,     pitch: 1 })
-  for (let i = 0; i < 2; i++) {
-    const ent = engine.addEntity()
-    Transform.create(ent, { position: SND_INIT_POS })
-    AudioSource.create(ent, { audioClipUrl: SND_MAGIC, playing: false, loop: false, volume: VOL_MAGIC, pitch: 1 })
-    magicSoundEntities.push(ent)
-  }
-
   applyPlantLayout()
   applyPropLayout()
   for (const name of PLANT_NAMES) setupPlant(name)
@@ -1630,6 +1585,10 @@ export function setupWateringSystem(): void {
             // plantStateUpdate arrived first and already resolved the pending correctly.
             if (data.reason === 'already_watered') {
               showToast('Someone else just watered that!', TOAST_WATERED_MS, false)
+            } else if (data.reason === 'too_far') {
+              showToast('Step a little closer to water this plant', TOAST_WATERED_MS, false)   // a rollback used to be silent
+            } else if (data.reason === 'too_soon') {
+              showToast('One plant at a time - give it a second', TOAST_WATERED_MS, false)
             }
           }
         }
@@ -1803,8 +1762,7 @@ export function setupWateringSystem(): void {
           Animator.playSingleAnimation(entity, ANIM_TO_HEALTHY)
           triggerGroundLightBurst()
           if (plantPos) {
-            Transform.getMutable(wateringSoundEntity).position = plantPos
-            AudioSource.getMutable(wateringSoundEntity).playing = true
+            playClip(SND_WATERING, VOL_WATERING, plantPos)
             triggerGroundRipple(plantPos)
           }
           timers.setTimeout(() => {

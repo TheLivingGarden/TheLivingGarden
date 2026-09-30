@@ -17,7 +17,7 @@
 // =============================================================
 
 import {
-  engine, Entity, Transform, MeshRenderer, MeshCollider, Material, MaterialTransparencyMode, TextShape,
+  engine, Entity, Transform, MeshRenderer, MeshCollider, Material, TextShape,
   GltfContainer, ColliderLayer, Name, pointerEventsSystem, InputAction,
 } from '@dcl/sdk/ecs'
 import { Color4, Quaternion } from '@dcl/sdk/math'
@@ -29,9 +29,10 @@ import { getDiscovered, getFlowers, holdFlower, stampsFound, gardenersHere } fro
 import { groupFlowers, Group, openSeedMenuFlowers } from './seedMenu'
 import { showToast } from './notifications'
 import { playSfx } from './sounds'
+import { registerStreamedTree } from './streaming'
 import {
   box, label, setScale, tapArea, setHover, buildShelfFrame, ZERO, LEDGE_LO, LEDGE_HI,
-  WOOD_D, PANEL, PLATE, CREAM, GOLD, FONT_SIGN, REFRESH_MS, TOAST_MS,
+  WOOD_D, PLATE, CREAM, GOLD, FONT_SIGN, REFRESH_MS, TOAST_MS,
 } from './pouchRack'
 
 const N = RARITY_TIERS.length
@@ -98,6 +99,7 @@ function setupFlowerShelf(): void {
   const root = engine.addEntity()
   Transform.create(root, { position: pos, rotation: Quaternion.fromEulerDegrees(0, o?.rotY ?? YAW, 0) })
   Name.create(root, { value: 'FlowerShelf' })
+  registerStreamedTree('flowerShelf', root)   // hidden while you are across the garden (streaming.ts)
 
   const w = F_PER_ROW * F_PITCH + 0.3
   buildShelfFrame(root, w)
@@ -289,11 +291,17 @@ function setupAlmanacWall(): void {
   const root = engine.addEntity()
   Transform.create(root, { position: pos, rotation: Quaternion.fromEulerDegrees(0, o?.rotY ?? YAW, 0) })
   Name.create(root, { value: 'AlmanacWall' })
+  registerStreamedTree('collectionWall', root)   // 76 textured tiles: hidden while you are across the garden (streaming.ts)
 
   const panelW = GRID_W + 0.6
   const tabsTop = GRID_TOP + 0.15 + 2 * (TAB_H + 0.08)
   const panelTop = tabsTop + 1.3
-  box(root, { x: 0, y: (0.2 + panelTop) / 2, z: 0.05 }, { x: panelW, y: panelTop - 0.2, z: 0.08 }, PANEL, 0.4)       // wall (light, faintly self-lit)
+  // The wall backdrop is UNLIT and one fixed colour (KJ 2026-09-30): lit, it went mauve at golden hour and near-black under the
+  // night sky, so the (transparent) plant thumbnails sat on a different colour depending on the time of day.
+  const wall = engine.addEntity()
+  Transform.create(wall, { parent: root, position: { x: 0, y: (0.2 + panelTop) / 2, z: 0.05 }, scale: { x: panelW, y: panelTop - 0.2, z: 0.08 } })
+  MeshRenderer.setBox(wall)
+  Material.setBasicMaterial(wall, { diffuseColor: Color4.create(0.82, 0.76, 0.64, 1) })
   ;[-1, 1].forEach(sd => box(root, { x: sd * (panelW / 2 + 0.06), y: panelTop / 2, z: 0.05 }, { x: 0.14, y: panelTop, z: 0.14 }, WOOD_D, 0.3))
   box(root, { x: 0, y: panelTop - 0.6, z: 0.0 }, { x: panelW, y: 1.2, z: 0.05 }, PLATE, 0.3)                          // title bar
   label(root, { x: -panelW / 2 + 1.9, y: panelTop - 0.6, z: -0.06 }, 'COLLECTION', 1.7, GOLD, 3.4, 0.7)
@@ -383,13 +391,9 @@ function refreshAlmanac(): void {
       // emissive or specular can lift it off black.
       const tex = Material.Texture.Common({ src: `assets/images/plantThumbs/${sp.id}.png` })
       if (found) {
-        Material.setPbrMaterial(tile.e, {
-          texture: tex, emissiveTexture: tex,
-          albedoColor: Color4.White(),
-          emissiveColor: Color4.White(), emissiveIntensity: 1.0,
-          transparencyMode: MaterialTransparencyMode.MTM_ALPHA_TEST, alphaTest: 0.5,
-          metallic: 0, roughness: 1,
-        })
+        // UNLIT, like the silhouettes (KJ 2026-09-30: thumbnails looked washed out and pink). The old lit albedo + emissive of the
+        // same texture double-counted the golden-hour light and pushed every colour to pastel; a basic material shows the PNG as drawn.
+        Material.setBasicMaterial(tile.e, { texture: tex, alphaTest: 0.5 })
       } else {
         Material.setBasicMaterial(tile.e, { texture: tex, diffuseColor: Color4.Black(), alphaTest: 0.5 })
       }

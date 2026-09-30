@@ -19,7 +19,7 @@
 
 import {
   engine, Transform, AvatarShape, GltfContainer, MeshCollider, ColliderLayer,
-  VisibilityComponent, pointerEventsSystem, InputAction, Entity, TextShape, TextAlignMode,
+  pointerEventsSystem, InputAction, Entity, TextShape, TextAlignMode,
 } from '@dcl/sdk/ecs'
 import { Quaternion, Vector3, Color4 } from '@dcl/sdk/math'
 import { room } from './shared/messages'
@@ -40,7 +40,11 @@ interface BoardEntry { displayName: string; count: number; tier: number; address
  *  AvatarShape.name still gives each figure the platform's own floating nametag; how big
  *  that renders at a distance is native explorer behaviour with no scene-side control
  *  (PBAvatarShape has no size/distance field to tune — checked the schema). */
-interface Slot { avatar: Entity; rank: Entity; waters: Entity }
+interface Slot {
+  avatar: Entity; rank: Entity; waters: Entity
+  /** What the avatar entity currently shows — a NEW entity is made whenever the person changes (see render). */
+  shownAddress: string; sig: string
+}
 
 // "TOP GARDENERS" display (KJ 2026-09-29: the all-time LIST moved to the side-by-side boards on the far
 // wall; the podium keeps the people). A title on the stand's dark screen, and over each avatar a big
@@ -159,14 +163,19 @@ function makePageButton(dir: -1 | 1): void {
   )
 }
 
+function newAvatarEntity(at: Vector3): Entity {
+  const e = engine.addEntity()
+  Transform.create(e, { position: at, rotation: podiumRotation() })
+  return e
+}
+
 function build(): void {
   if (built || PODIUM_COUNT <= 0) return
   built = true
   for (let i = 0; i < PODIUM_COUNT; i++) {
     const at = slotOffset(i)
 
-    const avatar = engine.addEntity()
-    Transform.create(avatar, { position: at, rotation: podiumRotation() })
+    const avatar = newAvatarEntity(at)
 
     const caption = (y: number, text: string, font: number, color: Color4): Entity => {
       const e = engine.addEntity()
@@ -174,7 +183,7 @@ function build(): void {
       TextShape.create(e, { text, fontSize: font, textColor: color, textAlign: TextAlignMode.TAM_MIDDLE_CENTER })
       return e
     }
-    slots.push({ avatar, rank: caption(CAP_RANK_Y, '', 3.2, CAP_GOLD), waters: caption(CAP_WATERS_Y, '', 1.7, CAP_GREEN) })
+    slots.push({ avatar, rank: caption(CAP_RANK_Y, '', 3.2, CAP_GOLD), waters: caption(CAP_WATERS_Y, '', 1.7, CAP_GREEN), shownAddress: '', sig: '' })
   }
   const title = engine.addEntity()
   Transform.create(title, { position: TITLE_AT, rotation: Quaternion.fromEulerDegrees(0, 180, 0) })
@@ -199,19 +208,26 @@ function render(): void {
   for (let i = 0; i < slots.length; i++) {
     const slot = slots[i]
     const e = entries[start + i]
-    const show = !!e
-    VisibilityComponent.createOrReplace(slot.avatar, { visible: show })
+    const address = (e?.address ?? '').toLowerCase()
+    const p = address ? profiles.get(address) : undefined
+    if (near && address && p === undefined) void fetchProfile(address)   // renders default until it lands (and never while nobody is close)
+    // Skip a slot that would render exactly what it already shows: leaderboardUpdate arrives on EVERY water, and
+    // re-issuing four AvatarShapes each time made the explorer reload the figures (KJ 2026-09-30).
+    const sig = e ? `${address}|${e.displayName}|${e.count}|${p === undefined ? 'p?' : p === null ? 'p0' : 'p1'}|${near ? 'n' : 'f'}` : ''
+    if (sig === slot.sig) continue
+    slot.sig = sig
     TextShape.getMutable(slot.rank).text   = e ? `#${start + i + 1}` : ''
     TextShape.getMutable(slot.waters).text = e ? `${e.count} waters` : ''
-    if (!show) {
-      AvatarShape.deleteFrom(slot.avatar)          // an empty pod holds nobody
-      continue
+    // A different person = a different ENTITY. Re-pointing one AvatarShape at another wallet left the explorer showing the
+    // previous gardener's name plate (and sometimes a half-swapped body): it treats the entity's avatar as already loaded.
+    const want = near && address ? address : ''
+    if (want !== slot.shownAddress) {
+      const at = Transform.get(slot.avatar).position
+      engine.removeEntity(slot.avatar)
+      slot.avatar = newAvatarEntity(at)
+      slot.shownAddress = want
     }
-
-    const address = (e.address ?? '').toLowerCase()
-    if (!address) { AvatarShape.deleteFrom(slot.avatar); continue }
-    const p = profiles.get(address)
-    if (p === undefined) { void fetchProfile(address) }   // renders default until it lands
+    if (!e || !want) continue   // far away (or an empty pod): the figure is not built at all — see `near`
     AvatarShape.createOrReplace(slot.avatar, {
       id: address,
       name: e.displayName,
@@ -225,12 +241,51 @@ function render(): void {
   }
 }
 
+// The gardeners wave when you walk up (KJ 2026-09-30). AvatarShape plays a stock emote when expressionTriggerId is set with a
+// FRESH timestamp; the same id + timestamp again is ignored, so each wave stamps Date.now().
+const WAVE_EMOTE     = 'wave'
+const WAVE_RANGE_M   = 8
+const WAVE_REPEAT_MS = 20_000
+const WAVE_SCAN_S    = 0.5
+// Lazy avatars (KJ 2026-09-30): four full skinned avatars plus their wearable downloads and catalyst lookups are only worth it when
+// someone is standing near the podium. Built inside NEAR_IN_M, removed beyond NEAR_OUT_M.
+const NEAR_IN_M  = 26
+const NEAR_OUT_M = 34
+let near = false
+let waveScanIn = 0
+const lastWaveAt = new Map<Entity, number>()
+function podiumWaveSystem(dt: number): void {
+  waveScanIn -= dt
+  if (waveScanIn > 0) return
+  waveScanIn = WAVE_SCAN_S
+  const me = Transform.getOrNull(engine.PlayerEntity)?.position
+  if (!me) return
+  const now = Date.now()
+  let nearest = Infinity
+  for (const slot of slots) { const at = Transform.getOrNull(slot.avatar)?.position; if (at) nearest = Math.min(nearest, Math.hypot(at.x - me.x, at.z - me.z)) }
+  const wasNear = near
+  near = wasNear ? nearest < NEAR_OUT_M : nearest < NEAR_IN_M
+  if (near !== wasNear) { console.log(`[Podium] avatars ${near ? 'built' : 'removed'} (nearest ${nearest.toFixed(0)} m)`); for (const s of slots) s.sig = ''; render() }
+  for (const slot of slots) {
+    if (!slot.shownAddress || !AvatarShape.has(slot.avatar)) continue
+    const at = Transform.getOrNull(slot.avatar)?.position
+    if (!at) continue
+    if (Math.hypot(at.x - me.x, at.z - me.z) > WAVE_RANGE_M) { lastWaveAt.delete(slot.avatar); continue }   // walk off and back = a fresh wave
+    if (now - (lastWaveAt.get(slot.avatar) ?? 0) < WAVE_REPEAT_MS) continue
+    lastWaveAt.set(slot.avatar, now)
+    const shape = AvatarShape.getMutable(slot.avatar)
+    shape.expressionTriggerId = WAVE_EMOTE
+    shape.expressionTriggerTimestamp = now
+  }
+}
+
 export function setupPodium(): void {
   if (PODIUM_COUNT <= 0) { console.log('[Podium] disabled (PODIUM_COUNT = 0)'); return }
   build()
+  engine.addSystem(podiumWaveSystem, 0, 'podiumWaveSystem')
   room.onMessage('leaderboardUpdate', (data) => {
     try { entries = JSON.parse(data.allTimeJson) as BoardEntry[] } catch { return }
-    page = 0
+    page = Math.min(page, Math.max(0, Math.ceil(entries.length / PODIUM_COUNT) - 1))   // a water elsewhere must not flip the page back
     render()
   })
   console.log(`[Podium] ready · leaderboardUpdate listeners=${room.listenerCount('leaderboardUpdate')}`)

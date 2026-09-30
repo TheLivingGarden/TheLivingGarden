@@ -28,6 +28,7 @@ import { DiscoveryCardUi, MilestoneCardUi, isDiscoveryShowing } from './discover
 import { HoldMeterUi } from './skillCheck'
 import { InfoPanelUi, toggleInfo, isInfoOpen } from './infoPanel'
 import { AvenueCardUi, isAvenueCardOpen } from './avenueCard'
+import { DigitLabUi } from './digitLab'
 import { TOTAL_PLANTS, BLOOM_THRESHOLD, WATERED_EXPIRY_MS, BLOOM_RESET_DELAY_MS, decayFactor, SHOW_DEV_OVERLAY } from './shared/config'
 
 // ---------------------------------------------------------------
@@ -422,6 +423,7 @@ function uiComponent() {
 
       {/* ── Test Panel — MOUNTED for v2 dev; comment out before production deploys ── */}
       <TestPanelUi />
+      <DigitLabUi px={px} fs={fs} />
       {/* Dev calibration line — SHOW_DEV_OVERLAY, off by default (KJ 2026-09-21) */}
       <Label
         value={`${getFps()} fps${getTestPotCount() > 0 ? ` with ${getTestPotCount()} test planters` : ''} | ${getCanvasCalibration()}`}

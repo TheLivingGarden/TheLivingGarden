@@ -5,13 +5,10 @@
 // players hear it from the planter. The sfx/*.mp3 chimes were synthesized for Bloom
 // Garden (2026-09-19, no third-party licence) — replace any file freely, same name.
 //
-// Replaying: flipping `playing` false→true in ONE tick never reaches the renderer (only
-// the final state is sent), so we stop now and start on the next tick, alternating two
-// entities per sound so a quick repeat doesn't cut the previous one off (same fix as
-// wateringSystem's playMagicFXSound).
+// Replaying: see the voice-pool note below.
 // =============================================================
 
-import { engine, Entity, Transform, AudioSource, timers } from '@dcl/sdk/ecs'
+import { engine, Entity, Transform, AudioSource } from '@dcl/sdk/ecs'
 
 const SFX = {
   seedCatch:  { src: 'assets/scene/Sounds/sfx/seedCatch.mp3',  volume: 0.6 },
@@ -29,25 +26,33 @@ const SFX = {
 } as const   // TUNING — volumes
 export type SfxName = keyof typeof SFX
 
-const pools = new Map<SfxName, { ents: Entity[]; next: number }>()
+// Voice pools. A single AudioSource entity retriggered by "playing=false then true next tick" DROPS sounds when repeats
+// land inside one frame's worth of updates (the renderer only sees the final state) — on a phone, where several
+// waters land in quick succession, that lost sounds (KJ 2026-09-30). So every clip gets a ring of VOICES entities,
+// and each play REPLACES the component on the next voice with playing:true, which the renderer always sees as a new start.
+const VOICES = 6
+const pools = new Map<string, { ents: Entity[]; next: number }>()
 
-export function playSfx(name: SfxName, at?: { x: number; y: number; z: number }): void {
+/** Play any clip once from a free voice, at `at` (default: the player). */
+export function playClip(src: string, volume: number, at?: { x: number; y: number; z: number }): void {
   const pos = at ?? Transform.getOrNull(engine.PlayerEntity)?.position
   if (!pos) return
-  let pool = pools.get(name)
+  let pool = pools.get(src)
   if (!pool) {
     pool = { ents: [], next: 0 }
-    for (let i = 0; i < 2; i++) {
+    for (let i = 0; i < VOICES; i++) {
       const e = engine.addEntity()
       Transform.create(e, { position: pos })
-      AudioSource.create(e, { audioClipUrl: SFX[name].src, playing: false, loop: false, volume: SFX[name].volume })
       pool.ents.push(e)
     }
-    pools.set(name, pool)
+    pools.set(src, pool)
   }
   const e = pool.ents[pool.next]
   pool.next = (pool.next + 1) % pool.ents.length
   Transform.getMutable(e).position = pos
-  AudioSource.getMutable(e).playing = false
-  timers.setTimeout(() => { AudioSource.getMutable(e).playing = true }, 0)
+  AudioSource.createOrReplace(e, { audioClipUrl: src, playing: true, loop: false, volume, pitch: 1 })
+}
+
+export function playSfx(name: SfxName, at?: { x: number; y: number; z: number }): void {
+  playClip(SFX[name].src, SFX[name].volume, at)
 }

@@ -70,7 +70,7 @@ import {
   stampMilestoneTarget,
   stampCount,
   SEED_LIFETIME_MS,
-  GARDEN_BOUNDS,
+  BLOOM_CENTER, SEED_LAND_BOUNDS, SEED_LAND_BLOOM_KEEPOUT_M,
   BOX_POSITIONS,
   BOX_GROW_MS,
   growMsForTier,
@@ -85,7 +85,7 @@ import {
   FLOWER_COLLECTION_CAP,
   BOX_WATER_MAX,
   BLOOM_TRIGGER_COOLDOWN_MS, EXPIRY_TELL_MS,
-  WATER_COOLDOWN_MS, WATER_REACH_M,
+  WATER_COOLDOWN_MS, TEND_COOLDOWN_MS, WATER_REACH_M, WATER_REACH_SLACK_M,
   plantSpeciesById,
   LEGEND_PLANTS,
   rarityTierById,
@@ -107,6 +107,7 @@ const syncRateLimits  = new Map<string, number>()    // address → last request
 const unverifiedReach  = new Set<string>()             // lowercase addresses the server holds no position for (log once)
 const lastWaterAt     = new Map<string, number>()    // lowercase address → last ACCEPTED waterPlant ms
 const lastTendAt      = new Map<string, number>()    // lowercase address → last ACCEPTED tendBox ms
+const lastTendBoxAt   = new Map<string, number>()    // boxId → last ACCEPTED tendBox ms (TEND_COOLDOWN_MS: one seedling, not spammed)
 
 /** A plant's true position: setupWateringSystem() (client-only, index.ts never runs it on
  *  the server) is what applies shared/layout.ts PLANT_LAYOUT, so the server's own plant
@@ -813,20 +814,26 @@ function cancelSeedWaves(): void {
  *  seed, jittered inside it, so a wave visibly covers the garden regardless of its size.
  *  Cells are shuffled so which part of an uneven grid goes unused is random too. */
 function stratifiedSeedSpots(count: number): Array<{ x: number; z: number }> {
+  const B     = SEED_LAND_BOUNDS
   const cols  = Math.ceil(Math.sqrt(count))
   const rows  = Math.ceil(count / cols)
-  const cellW = (GARDEN_BOUNDS.xMax - GARDEN_BOUNDS.xMin) / cols
-  const cellH = (GARDEN_BOUNDS.zMax - GARDEN_BOUNDS.zMin) / rows
+  const cellW = (B.xMax - B.xMin) / cols
+  const cellH = (B.zMax - B.zMin) / rows
   const cells: Array<{ c: number; r: number }> = []
   for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) cells.push({ c, r })
   for (let i = cells.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1))
     ;[cells[i], cells[j]] = [cells[j], cells[i]]
   }
-  return cells.slice(0, count).map(({ c, r }) => ({
-    x: GARDEN_BOUNDS.xMin + (c + Math.random()) * cellW,
-    z: GARDEN_BOUNDS.zMin + (r + Math.random()) * cellH,
-  }))
+  return cells.slice(0, count).map(({ c, r }) => {
+    let x = 0, z = 0
+    for (let t = 0; t < 12; t++) {   // re-jitter inside the cell until it clears the Bloom's keep-out disc
+      x = B.xMin + (c + Math.random()) * cellW
+      z = B.zMin + (r + Math.random()) * cellH
+      if (Math.hypot(x - BLOOM_CENTER.x, z - BLOOM_CENTER.z) >= SEED_LAND_BLOOM_KEEPOUT_M) break
+    }
+    return { x, z }
+  })
 }
 
 /** Roll and broadcast one wave of seeds — rarity scales with contributors.
@@ -987,7 +994,7 @@ function emptyBox(boxId: string): BoxRecord {
 }
 
 /** "12 s" at the playtest base, "24 minutes" at the production one. */
-function shaveText(ms: number): string { return ms < 90_000 ? `${Math.round(ms / 1000)} s` : formatGrowTime(ms) }
+function shaveText(ms: number): string { return ms < 90_000 ? `${Math.round(ms / 1000)}s` : formatGrowTime(ms) }
 
 function sendBox(b: BoxRecord, to?: string[]): void {
   const payload = {
@@ -1486,6 +1493,42 @@ function tidyCandidate(force: boolean): BoxRecord | null {
   return best
 }
 
+/** Boot-time tidy (KJ 2026-09-30): pairs of two split some gardeners' planters over several beds (they were planted under the
+ *  old beds of four, or before beds existed). Move each straggler into an EMPTY planter of the gardener's fullest bed — their
+ *  planter just stands in the neighbouring slot, nothing about it changes. Only ever moves a planter INTO a bed the same
+ *  gardener already owns, never into someone else's or a held one, and never touches an opened flower's provenance. */
+async function consolidateBeds(): Promise<void> {
+  const byOwner = new Map<string, BoxRecord[]>()
+  for (const b of boxes.values()) if (b.owner) byOwner.set(b.owner, [...(byOwner.get(b.owner) ?? []), b])
+  let moved = 0
+  for (const [owner, owned] of byOwner) {
+    if (isConnected(owner)) continue   // never shuffle planters under someone's hands
+    const bedOf = (boxId: string) => beds.find(x => x.boxIds.includes(boxId))
+    const count = (bed: Bed) => bed.boxIds.filter(id => boxes.get(id)?.owner === owner).length
+    for (const straggler of owned) {
+      const home = bedOf(straggler.boxId)
+      if (!home) continue
+      const mine = beds.filter(x => count(x) > 0)
+      // the fullest bed of theirs that is theirs alone and still has a free slot
+      const target = mine
+        .filter(x => x !== home && bedOwner(x, bedInfo)?.owner === owner && x.boxIds.some(id => !boxes.get(id)?.owner && !reservationHolder(id)))
+        .sort((a, b) => count(b) - count(a))[0]
+      if (!target || count(target) < count(home)) continue   // only ever merge INTO the fuller (or equal, lower-numbered) bed
+      if (count(target) === count(home) && target.id > home.id) continue
+      const slot = target.boxIds.find(id => !boxes.get(id)?.owner && !reservationHolder(id))!
+      const timer = boxTimers.get(straggler.boxId)
+      if (timer) { timers.clearTimeout(timer); boxTimers.delete(straggler.boxId) }
+      const moving: BoxRecord = { ...straggler, boxId: slot }
+      boxes.set(slot, moving)
+      boxes.set(straggler.boxId, emptyBox(straggler.boxId))
+      scheduleOpen(moving)
+      moved++
+      console.log(`[Server] Consolidated ${straggler.ownerName}'s planter ${straggler.boxId} → ${slot} (Bed ${home.id} → Bed ${target.id})`)
+    }
+  }
+  if (moved > 0) { void saveBoxes(); for (const b of boxes.values()) sendBox(b) }
+}
+
 let ensuringFree = false
 async function ensureFreePlanters(): Promise<void> {
   if (ensuringFree) return
@@ -1922,6 +1965,7 @@ export async function server(): Promise<void> {
   ]
   const outcomes = await Promise.all(loads.map(([, load]) => load()))
   loads.forEach(([label, load], i) => { if (!outcomes[i]) scheduleReload(label, load) })
+  await consolidateBeds()
   await ensureFreePlanters()
   timers.setInterval(() => executeTask(ensureFreePlanters), 60 * 60 * 1000)   // owners age past the min-away while nobody joins
   const restoredCount = getWateredCount()
@@ -1975,7 +2019,8 @@ export async function server(): Promise<void> {
         unverifiedReach.add(addrKey)
         console.log(`[Server] no server-side position for ${playerAddress} — reach check skipped for them this session`)
       }
-      const reach = reachVerdict(plantPos, playerPos, WATER_REACH_M)
+      const flat = (v: { x: number; y: number; z: number } | null | undefined) => v ? { x: v.x, y: 0, z: v.z } : v
+      const reach = reachVerdict(flat(plantPos), flat(playerPos), WATER_REACH_M + WATER_REACH_SLACK_M)
       if (reach === 'no_plant' || reach === 'too_far') {
         breakStreak(playerAddress)
         // Logged with both positions: a mobile client whose Transform never reaches the server reads as
@@ -2251,7 +2296,7 @@ export async function server(): Promise<void> {
     // cooldown closed. A genuine hold takes over a second regardless of outcome, so this
     // never catches a real pour, only a bypass. WATER_COOLDOWN_MS is shared with waterPlant.
     const addrKey = playerAddress.toLowerCase()
-    if (now - (lastTendAt.get(addrKey) ?? 0) < WATER_COOLDOWN_MS) { sendBox(b, [playerAddress]); return }
+    if (now - (lastTendAt.get(addrKey) ?? 0) < WATER_COOLDOWN_MS || now - (lastTendBoxAt.get(b.boxId) ?? 0) < TEND_COOLDOWN_MS - 500)   // 0.5 s of latency slack { sendBox(b, [playerAddress]); return }
     if (tendsAvailable(b.opensAt, now, b.rarityTier, b.tends) <= 0) {
       // Re-sync (2026-09-28: "the drop should always show when tending is actually
       // available"): onTap increments v.tends and hides the drop optimistically before
@@ -2266,6 +2311,7 @@ export async function server(): Promise<void> {
       return
     }
     lastTendAt.set(addrKey, now)
+    lastTendBoxAt.set(b.boxId, now)
     const shave = Math.round(growMsForTier(b.rarityTier) * TEND_SHAVE_FRACTION)
     b.tends += 1
     b.opensAt = Math.max(now, b.opensAt - shave)

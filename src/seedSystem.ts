@@ -48,7 +48,7 @@ import {
   SEED_HOP_ARC_H,
   SEED_HOP_COOLDOWN_MS,
   SEED_NO_DODGE_LAST_MS,
-  GARDEN_BOUNDS,
+  SEED_LAND_BOUNDS,
   SEED_ARC_H,
   BLOOM_SEED_ORIGIN,
   SEED_ORIGIN_SPREAD_M,
@@ -71,8 +71,8 @@ import { playSfx } from './sounds'
 // ---------------------------------------------------------------
 
 // `let` — live-tunable from the test panel admin controls (adminScaleSeeds / adminShiftSeedHeight)
-let SEED_SCALE_MIN = 0.45             // world HEIGHT (m) of a Common seed — sized for visibility
-let SEED_SCALE_MAX = 0.62             // world height at the top of the range (tier 7, Unique)
+let SEED_SCALE_MIN = 0.7              // world HEIGHT (m) of a Common seed — sized for visibility
+let SEED_SCALE_MAX = 0.95             // world height at the top of the range (tier 7, Unique)
 let SEED_REST_Y       = 1.1           // rest at ~chest height so plants/decor don't hide seeds
 const SEED_BOB_SPEED    = 2.0         // idle bob speed (rad/s)
 const SEED_SWAY_AMPL    = 0.35        // horizontal sway while falling (m)
@@ -360,8 +360,8 @@ function startHop(seed: Seed, sx: number, sz: number, px: number, pz: number, no
   const m = 0.5
   for (const off of [0, 0.7, -0.7, 1.4, -1.4]) {
     const a = away + off + (Math.random() - 0.5) * 0.5
-    const tx = Math.max(GARDEN_BOUNDS.xMin + m, Math.min(GARDEN_BOUNDS.xMax - m, sx + Math.cos(a) * dist))
-    const tz = Math.max(GARDEN_BOUNDS.zMin + m, Math.min(GARDEN_BOUNDS.zMax - m, sz + Math.sin(a) * dist))
+    const tx = Math.max(SEED_LAND_BOUNDS.xMin + m, Math.min(SEED_LAND_BOUNDS.xMax - m, sx + Math.cos(a) * dist))
+    const tz = Math.max(SEED_LAND_BOUNDS.zMin + m, Math.min(SEED_LAND_BOUNDS.zMax - m, sz + Math.sin(a) * dist))
     if (Math.hypot(tx - sx, tz - sz) < 1.5) continue   // squeezed by the bounds — try another angle
     seed.hop = { fromX: sx, fromZ: sz, toX: tx, toZ: tz, startMs: now }
     seed.dodgesLeft--

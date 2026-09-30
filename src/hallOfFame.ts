@@ -11,6 +11,8 @@
 import { engine, Transform, GltfContainer, Name, Entity } from '@dcl/sdk/ecs'
 import { Quaternion } from '@dcl/sdk/math'
 import { HOF_MODULES } from './shared/hallOfFame'
+import { registerStreamSource } from './streaming'
+import { avenueStreamItems } from './avenueSystem'
 
 const HOF_SRC = 'assets/scene/Models/hallOfFameStand/hallOfFameStand.glb'
 
@@ -24,5 +26,10 @@ export function setupHallOfFame(): void {
     Name.create(e, { value: `HallOfFame_${i + 1}` })
     hofStands.push(e)
   })
+  // Far stands (and the flowers standing on them) are hidden on approach-based streaming — see streaming.ts
+  registerStreamSource('gallery', () => [
+    ...hofStands.map((e, i) => ({ key: `stand${i}`, x: HOF_MODULES[i].x, z: HOF_MODULES[i].z, entities: [e] })),
+    ...avenueStreamItems(),
+  ])
   console.log(`[HallOfFame] ${hofStands.length} stands placed`)
 }

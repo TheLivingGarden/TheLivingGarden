@@ -20,6 +20,7 @@ import { PROP_LAYOUT } from './shared/layout'
 import { getHeld, getFlowers, heldFlowerIndex, Keepsake } from './playerInventory'
 import { box, label, tapArea, setHover, WOOD, WOOD_D, PLATE, CREAM } from './pouchRack'
 import { playSfx } from './sounds'
+import { registerStreamedTree } from './streaming'
 
 // In front of the flower shelf (PROP_LAYOUT FlowerShelf -24.3, 1.5, 53.4 — the shed floor is
 // raised, hence y 1.5). TUNING — drag it with the Prop editor.
@@ -109,6 +110,7 @@ export function setupExamTable(): void {
   root = engine.addEntity()
   Transform.create(root, { position: pos, rotation: Quaternion.fromEulerDegrees(0, yaw, 0) })
   Name.create(root, { value: 'ExamTable' })
+  registerStreamedTree('examTable', root)   // hidden while you are across the garden (streaming.ts)
 
   // Table: top, apron and four legs, in the shelf's woods.
   box(root, { x: 0, y: TOP_Y - 0.03, z: 0 }, { x: TOP_W, y: 0.06, z: TOP_D }, WOOD, 0.35)

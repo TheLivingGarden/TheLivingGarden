@@ -17,17 +17,19 @@
 // soil top at y 1.25 spanning X -0.15..+0.8, the front face a plain vertical wall (y 0.04-0.67).
 // =============================================================
 
-// 2026-09-30: stands raised 0.5 m again (KJ) — back to the 2026-09-29 re-bake heights (0 / 0.049).
+// 2026-09-30 RE-CALCULATED from the current scene.glb (each 313-vertex module block of the five placeholder meshes, world = (8 - x, y, z + 24)):
+// x / z / rot were already exact; y is now each placeholder's own floor, so a stand is coincident with its placeholder (the earlier
+// "floor minus 0.5" convention left every stand half a metre under it). Floors: single stand 0.5, .002 and .008 rows 0.549, .003 and .004 rows 0.049.
 export const HOF_MODULES: ReadonlyArray<{ x: number; y: number; z: number; rot: number }> = [
   // HallOfFame_Module
-  { x: 54.207, y: 0.0, z: 6.642, rot: 0 },
+  { x: 54.207, y: 0.5, z: 6.642, rot: 0 },
   // HallOfFame_Module.002
-  { x: 33.178, y: 0.049, z: 3.885, rot: 180 },
-  { x: 33.178, y: 0.049, z: 9.011, rot: 180 },
-  { x: 33.178, y: 0.049, z: 14.137, rot: 180 },
-  { x: 33.178, y: 0.049, z: 44.115, rot: 180 },
-  { x: 33.178, y: 0.049, z: 38.989, rot: 180 },
-  { x: 33.178, y: 0.049, z: 33.863, rot: 180 },
+  { x: 33.178, y: 0.549, z: 3.885, rot: 180 },
+  { x: 33.178, y: 0.549, z: 9.011, rot: 180 },
+  { x: 33.178, y: 0.549, z: 14.137, rot: 180 },
+  { x: 33.178, y: 0.549, z: 44.115, rot: 180 },
+  { x: 33.178, y: 0.549, z: 38.989, rot: 180 },
+  { x: 33.178, y: 0.549, z: 33.863, rot: 180 },
   // HallOfFame_Module.003
   { x: 46.699, y: 0.049, z: 10, rot: 180 },
   { x: 46.699, y: 0.049, z: 15.126, rot: 180 },
@@ -45,9 +47,9 @@ export const HOF_MODULES: ReadonlyArray<{ x: number; y: number; z: number; rot: 
   { x: 54.263, y: 0.049, z: 16.981, rot: 0 },
   { x: 54.263, y: 0.049, z: 11.855, rot: 0 },
   // HallOfFame_Module.008
-  { x: 49.175, y: 0.049, z: -6.95, rot: 90 },
-  { x: 44.05, y: 0.049, z: -6.95, rot: 90 },
-  { x: 38.924, y: 0.049, z: -6.95, rot: 90 },
+  { x: 49.175, y: 0.549, z: -6.95, rot: 90 },
+  { x: 44.05, y: 0.549, z: -6.95, rot: 90 },
+  { x: 38.924, y: 0.549, z: -6.95, rot: 90 },
 ]
 
 /** Soil top: height above the module origin, and how far BEHIND the origin its centre is. */

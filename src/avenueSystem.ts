@@ -119,6 +119,13 @@ function slotPoint(pos: SlotPos, lx: number, lz: number): { x: number; z: number
   return { x: pos.x + lx * Math.cos(r) + lz * Math.sin(r), z: pos.z - lx * Math.sin(r) + lz * Math.cos(r) }
 }
 
+/** Streaming (streaming.ts): each slot's flower, for the distance sweep. */
+export function avenueStreamItems(): Array<{ key: string; x: number; z: number; entities: Entity[] }> {
+  const out: Array<{ key: string; x: number; z: number; entities: Entity[] }> = []
+  for (const v of views.values()) if (v.plant !== null) out.push({ key: v.slotId, x: v.pos.x, z: v.pos.z, entities: [v.plant] })
+  return out
+}
+
 /** Public read for the inspect card (Phase 3) and the test panel. */
 export function getAvenueSlot(slotId: string): Readonly<SlotView> | undefined { return views.get(slotId) }
 export function avenueSlotIds(): string[] { return [...views.keys()] }

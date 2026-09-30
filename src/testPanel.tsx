@@ -180,6 +180,15 @@ export function TestPanelUi() {
       {panelOpen && (
         <Label value={dropDiagnostics()} fontSize={11} color={WHITE} uiTransform={{ width: '100%', height: 18, margin: { left: 14 } }} />
       )}
+      {/* TEMP (2026-09-30): digit glyph test — 2, 3 and 4 render small and grey in the Explorer UI. Which font (if any) draws all ten properly? */}
+      {panelOpen && (
+        <UiEntity uiTransform={{ width: '100%', flexDirection: 'column', margin: { left: 14 } }}>
+          <Label value="0123456789  default" fontSize={16} color={WHITE} uiTransform={{ width: '100%', height: 22 }} />
+          <Label value="0123456789  sans-serif" font="sans-serif" fontSize={16} color={WHITE} uiTransform={{ width: '100%', height: 22 }} />
+          <Label value="0123456789  serif" font="serif" fontSize={16} color={WHITE} uiTransform={{ width: '100%', height: 22 }} />
+          <Label value="0123456789  monospace" font="monospace" fontSize={16} color={WHITE} uiTransform={{ width: '100%', height: 22 }} />
+        </UiEntity>
+      )}
       {/* TEMP (2026-09-27): what is in MY right hand, while "seed and flower at once" is diagnosed */}
       {panelOpen && (
         <Label value={handDiagnostics()} fontSize={11} color={WHITE} uiTransform={{ width: '100%', height: 18, margin: { left: 14 } }} />

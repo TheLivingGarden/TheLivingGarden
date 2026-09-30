@@ -29,6 +29,7 @@ import { PROP_LAYOUT } from './shared/layout'
 import { getPouch, setPreferredTier, nextSeedTier, holdSeed } from './playerInventory'
 import { openSeedMenu } from './seedMenu'
 import { showToast } from './notifications'
+import { registerStreamedTree } from './streaming'
 import { playSfx } from './sounds'
 
 // Default spot: just south of the spawn area (x 10.5..12.5, z 19..22), clear of the bush at
@@ -144,6 +145,7 @@ export function setupPouchRack(): void {
   const root = engine.addEntity()
   Transform.create(root, { position: pos, rotation: Quaternion.fromEulerDegrees(0, yaw, 0) })
   Name.create(root, { value: 'PouchRack' })
+  registerStreamedTree('pouchRack', root)   // hidden while you are across the garden (streaming.ts)
 
   const w = PER_ROW * PITCH + 0.3
   buildShelfFrame(root, w)

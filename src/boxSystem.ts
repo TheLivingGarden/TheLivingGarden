@@ -50,12 +50,13 @@ import { isMobile } from '@dcl/sdk/platform'
 import { BALLOON_TEXT_TRACK } from './balloonTextTrack'
 import { getPlayer } from '@dcl/sdk/players'
 import { room } from './shared/messages'
-import { BOX_POSITIONS, BOX_WATER_MAX, WATER_DROP_MODEL_SRC, BOX_MODEL_SRC, BOX_MODEL_SCALE, BOX_MODEL_RIM_Y, BED_FILL_ORIGIN, BEDS_EXPLICIT, growMsForTier, growStageOf, tendsAvailable, BALLOON_MODEL_SRC, BALLOON_ANIMATED_SRC, BALLOON_ANIM_CLIPS, SEED_MODEL_HEIGHT, seedModelSrc, SEEDLING_MODEL_SRC_NORMAL, SEEDLING_MODEL_SRC_RARE, rarityTierById, plantSpeciesById, withArticle } from './shared/config'
+import { BOX_POSITIONS, TEND_COOLDOWN_MS, BOX_WATER_MAX, WATER_DROP_MODEL_SRC, BOX_MODEL_SRC, BOX_MODEL_SCALE, BOX_MODEL_RIM_Y, BED_FILL_ORIGIN, BEDS_EXPLICIT, growMsForTier, growStageOf, tendsAvailable, BALLOON_MODEL_SRC, BALLOON_ANIMATED_SRC, BALLOON_ANIM_CLIPS, SEED_MODEL_HEIGHT, seedModelSrc, SEEDLING_MODEL_SRC_NORMAL, SEEDLING_MODEL_SRC_RARE, rarityTierById, plantSpeciesById, withArticle } from './shared/config'
 import { showToast } from './notifications'
 import { makeBeds, bedOwner, checkPlant, Bed } from './shared/beds'
 import { attachPlantVfx, attachSeedlingVfx, detachPlantVfx, setupPlantVfx } from './plantVfx'
 import { setupGiftSystem } from './giftSystem'
 import { showDiscovery } from './discoveryCard'
+import { registerStreamSource } from './streaming'
 import { triggerSparkle } from './sparkleSystem'
 import { setPouch, getBoxCap, isBoxCapKnown, nextSeedTier } from './playerInventory'
 import { createSign, moveSign, setupSignSystem, Sign } from './signs'
@@ -302,9 +303,9 @@ function balloonTextFor(v: BoxView, now: number): string {
 /** Hover prompt for the one tap the box currently offers. */
 function hoverFor(v: BoxView): string {
   if (!v.owner) return 'Plant seed'
-  if (isMine(v)) return v.opened ? 'Harvest' : tendReady(v, Date.now()) ? 'Water' : 'Growing…'
+  if (isMine(v)) return v.opened ? 'Harvest' : tendReady(v, Date.now()) ? 'Hold to water' : tendCooling(v, Date.now()) ? 'Watered…' : 'Growing…'
   if (v.opened) return `${v.ownerName}'s flower`
-  return v.waters >= BOX_WATER_MAX ? 'Fully watered' : 'Water'
+  return v.waters >= BOX_WATER_MAX ? 'Fully watered' : wateredByMe.has(v.boxId) ? 'Watered…' : 'Water'
 }
 
 /** A pulsing flower carries a GltfNodeModifiers material override. Removing the entity
@@ -476,7 +477,7 @@ function playRevealBeat(v: BoxView): void {
   const pos = layout.get(v.boxId)
   if (!pos) return
   held.add(v.boxId)
-  if (isMine(v)) showDiscovery(v.flower, v.rarityTier, SWELL_MS + CARD_AFTER_MS)   // state snapshotted now, shown after the beat
+  if (isMine(v)) showDiscovery(v.flower, v.rarityTier, SWELL_MS + CARD_AFTER_MS, v.boxId)   // state snapshotted now, shown after the beat
   if (v.plant !== null && Transform.has(v.plant)) {
     const k = Transform.get(v.plant).scale.x
     Tween.setScale(v.plant, { x: k, y: k, z: k }, { x: k * SWELL_MULT, y: k * SWELL_MULT, z: k * SWELL_MULT }, SWELL_MS, EasingFunction.EF_EASEINSINE)
@@ -497,8 +498,10 @@ const wateredByMe = new Set<string>()   // boxIds I watered this session, client
 const SEEDLING_DROP_Y = 0.8             // above the rim, like WATER_DROP_Y over a garden plant
 
 /** My own seedling has reached a stage I have not yet tended (tending = the owner's water, once per stage). */
+const lastTendLocal = new Map<string, number>()   // boxId → when I last tended it (TEND_COOLDOWN_MS)
+function tendCooling(v: BoxView, now: number): boolean { return now - (lastTendLocal.get(v.boxId) ?? 0) < TEND_COOLDOWN_MS }
 function tendReady(v: BoxView, now: number): boolean {
-  return isMine(v) && !!v.owner && !v.opened && tendsAvailable(v.opensLocalAt, now, v.rarityTier, v.tends) > 0
+  return isMine(v) && !!v.owner && !v.opened && !tendCooling(v, now) && tendsAvailable(v.opensLocalAt, now, v.rarityTier, v.tends) > 0
 }
 function wantsDrop(v: BoxView): boolean {
   if (!v.owner || v.opened) return false
@@ -575,6 +578,7 @@ function tendOnto(v: BoxView): void {
     console.log(`[Boxes] tending ${v.boxId}`)
     playWateringBeat()
     room.send('tendBox', { boxId: v.boxId })
+    lastTendLocal.set(v.boxId, Date.now())
     v.tends += 1          // optimistic; the next boxState carries the server's count
     removeSeedlingDrop(v)
   }, at)
@@ -585,6 +589,7 @@ function onTap(v: BoxView): void {
   if (isMine(v)) {
     if (v.opened) { console.log(`[Boxes] harvesting ${v.boxId}`); room.send('harvestBox', { boxId: v.boxId }); return }
     if (tendReady(v, Date.now())) { tendOnto(v); return }
+    if (tendCooling(v, Date.now()) && tendsAvailable(v.opensLocalAt, Date.now(), v.rarityTier, v.tends) > 0) { showToast('Give it a few seconds, then water it again', TOAST_MS, false); return }
     showToast(`Still growing — ready in ${countdown(v, Date.now())}. Water it again when it grows`, TOAST_MS, false)
     return
   }
@@ -766,7 +771,7 @@ const bedSigns: BedSign[] = []
 // 3.2, was 2.2 (KJ 2026-09-27): the 1.3 m plaque spanned 1.55–2.85 m and sat on the balloons (up to ~1.9 m).
 const BED_SIGN_Y     = 3.2
 const BED_SIGN_RANGE = 20
-const BED_SIGN_SCALE = 0.65   // TUNING — pair-beds sit 3.0 m apart and the plaque is 4.3 m wide at scale 1, so neighbours would overlap
+const BED_SIGN_SCALE = 0.75   // TUNING — pair-beds' centres are 3.5 m apart (pairs are pushed 0.5 m apart in BOX_POSITIONS) and the plaque is 4.3 m wide at scale 1, so neighbours would overlap
 const BED_TEXT_FREE  = { r: 0.83, g: 0.82, b: 0.78, a: 1 }
 const BED_TEXT_MINE  = { r: 0.98, g: 0.78, b: 0.3, a: 1 }
 const BED_TEXT_OTHER = { r: 0.957, g: 0.918, b: 0.824, a: 1 }
@@ -847,9 +852,12 @@ function updateBeds(): void {
       ts.text = text
       ts.textColor = mine ? BED_TEXT_MINE : owner ? BED_TEXT_OTHER : BED_TEXT_FREE
     }
-    // Profile picture in a circle (the owner's avatar face); a green disc when the plot is free
+    // Only POPULATED beds get a sign (KJ 2026-09-25: hide the name tags of empty beds)
+    const near = !!owner && !!pos && Math.hypot(pos.x - bs.bed.cx, pos.z - bs.bed.cz) <= BED_SIGN_RANGE
+    // Profile picture in a circle (the owner's avatar face); a green disc when the plot is free. Lazy (KJ 2026-09-30): the avatar
+    // TEXTURE is only requested once the sign is in range — up to 48 owners' faces were being fetched at join for signs nobody could see.
     const who = owner ? owner.owner : ''
-    if (who !== bs.faceOwner) {
+    if (who !== bs.faceOwner && (near || !who)) {
       bs.faceOwner = who
       const tex = who ? Material.Texture.Avatar({ userId: who }) : null
       Material.setPbrMaterial(bs.face, tex
@@ -858,8 +866,6 @@ function updateBeds(): void {
       Transform.getMutable(bs.face).scale = { x: 1.04, y: 1.04, z: 1.04 }
       setBedRing(bs.ring, mine ? RING_MINE : owner ? RING_OTHER : RING_FREE)
     }
-    // Only POPULATED beds get a sign (KJ 2026-09-25: hide the name tags of empty beds)
-    const near = !!owner && !!pos && Math.hypot(pos.x - bs.bed.cx, pos.z - bs.bed.cz) <= BED_SIGN_RANGE
     if (near !== bs.near) { bs.near = near; Transform.getMutable(bs.root).scale = near ? { x: BED_SIGN_SCALE, y: BED_SIGN_SCALE, z: BED_SIGN_SCALE } : { x: 0, y: 0, z: 0 } }
     // Hover on each FREE planter in this bed says whose plot it is, so the protection is not a surprise on tap
     for (const id of bs.bed.boxIds) {
@@ -945,7 +951,7 @@ function setBalloonText(v: BoxView, now: number): void {
 // ---------------------------------------------------------------
 interface BalloonSlot { balloon: Entity; mover: Entity; pivot: Entity; text: Entity; boxId: string | null }
 const balloonPool: BalloonSlot[] = []
-const BALLOON_ANIM_M    = 14      // TUNING — m
+const BALLOON_ANIM_M    = 8      // TUNING — m
 const BALLOON_SCAN_MS   = 500
 let balloonScanAccum = 0
 
@@ -1105,6 +1111,18 @@ export function setupBoxSystem(): void {
   for (let i = 0; i < PLAQUE_POOL; i++) plaques.push({ sign: createSign({ x: 0, y: -50, z: 0 }, 0, PLAQUE_SIZE, PLAQUE_FONT, false), boxId: null })
   for (const p of BOX_POSITIONS) { layout.set(p.id, { x: p.x, z: p.z, rot: p.rot }); views.set(p.id, createBox(p)) }
   createBedSigns()
+  // Distance streaming (streaming.ts): far planters + their balloon / plant / drop are hidden. Never mine, and never the ones the
+  // tutorial or bed steering is pointing at (their shell + arrow would float over an invisible planter).
+  registerStreamSource('planters', () => {
+    const steer = steeredFreeBoxes()
+    const out: Array<{ key: string; x: number; z: number; entities: Array<Entity | null>; keep: boolean }> = []
+    for (const v of views.values()) {
+      const p = layout.get(v.boxId)
+      if (!p || deleted.has(v.boxId)) continue
+      out.push({ key: v.boxId, x: p.x, z: p.z, entities: [v.base, v.balloon, v.balloonText, v.plant, v.drop], keep: isMine(v) || !!steer?.has(v.boxId) })
+    }
+    return out
+  })
 
   room.onMessage('boxState', (data) => {
     const v = views.get(data.boxId)

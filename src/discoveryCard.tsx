@@ -21,15 +21,57 @@
 
 import ReactEcs, { UiEntity, Label } from '@dcl/sdk/react-ecs'
 import { timers } from '@dcl/sdk/ecs'
-import { PLANT_SPECIES, LEGEND_PLANTS, legendTier, stampTotal, rarityTierById, plantSpeciesById, DISCOVERY_CARD_MS, MILESTONE_CARD_MS, nextMilestone, milestoneTarget, nextStampMilestone, stampMilestoneTarget } from './shared/config'
+import { PLANT_SPECIES, LEGEND_PLANTS, legendTier, stampTotal, rarityTierById, plantSpeciesById, withArticle, DISCOVERY_CARD_MS, MILESTONE_CARD_MS, nextMilestone, milestoneTarget, nextStampMilestone, stampMilestoneTarget } from './shared/config'
 import { getDiscovered, stampsFound } from './playerInventory'
 import { room } from './shared/messages'
+import { playSfx } from './sounds'
 
-interface Discovery { flower: string; tier: number; isNew: boolean; newTier: boolean; found: number; stamps: number }
+interface Item { flower: string; tier: number; isNew: boolean; newTier: boolean; boxId: string }
+/** One card = one BATCH of openings. tier = the best tier in it; flower / boxId = that best one (a single opening is a batch of one). */
+interface Discovery { flower: string; tier: number; isNew: boolean; newTier: boolean; found: number; stamps: number; boxId: string; items: Item[]; newSpecies: number; newStamps: number }
 
 let card: Discovery | null = null
 let shownAt = 0
 let cardDueAt = 0   // a delayed card is on its way — milestones wait for it
+
+// Reveal beats (KJ 2026-09-30: "no build up tension, just an immediate random reveal — lacks dopamine").
+//   0 OPEN   a black silhouette pulses under "Something is opening…"
+//   1 ROLL   the rarity pill spins through the tier colours and DECELERATES onto the real one (a slot-machine settle: the
+//            near-misses are part of the payoff). The higher the tier, the longer the spin.
+//   2 LOCK   it lands: a flash in the rarity colour, the header names it, a stinger plays
+//   3 REVEAL the species picture and name, the collection counters tick up, and two buttons ask what to do with it
+// Common skips ROLL and LOCK. A tap during 0-2 skips to the reveal instead of closing the card.
+const BEAT_OPEN_MS = 1_300
+const BEAT_LOCK_MS = 550
+const rollMs = (tier: number): number => tier > 0 ? 1_000 + 300 * tier : 0
+let revealSkipped = false
+let beatSounded   = 0   // 0 none, 1 roll started, 2 locked, 3 revealed
+let lastRollTick  = -1
+function beatEnds(tier: number): { open: number; roll: number; lock: number } {
+  const open = BEAT_OPEN_MS, roll = open + rollMs(tier)
+  return { open, roll, lock: roll + (tier > 0 ? BEAT_LOCK_MS : 0) }
+}
+function cardStage(now: number, tier: number): 0 | 1 | 2 | 3 {
+  const e = beatEnds(tier)
+  const age = revealSkipped ? e.lock : now - shownAt
+  return age < e.open ? 0 : age < e.roll ? 1 : age < e.lock ? 2 : 3
+}
+/** Which tier the spinning pill shows `ageInRoll` ms into the roll: an ease-out walk over the tiers that ends ON `tier`. */
+function rollTier(ageInRoll: number, tier: number): { shown: number; tick: number } {
+  const u = Math.min(1, Math.max(0, ageInRoll / rollMs(tier)))
+  const n = 12 + 2 * tier
+  const tick = Math.floor(n * (1 - Math.pow(1 - u, 3)))
+  const count = 8
+  return { shown: (((tier - (n - tick)) % count) + count) % count, tick }
+}
+function onCardTap(): void {
+  if (card && cardStage(Date.now(), card.tier) < 3) { revealSkipped = true; return }
+  dismissDiscovery()
+}
+function harvestFromCard(): void {
+  if (card) for (const it of card.items) if (it.boxId) room.send('harvestBox', { boxId: it.boxId })
+  dismissDiscovery()
+}
 
 const FADE_MS = 400
 const DARK  = { r: 0.07, g: 0.063, b: 0.055, a: 0.94 }
@@ -38,6 +80,7 @@ const DIM   = { r: 0.83,  g: 0.82,  b: 0.78 }
 const INK   = { r: 0.07,  g: 0.065, b: 0.06 }
 const PLATE = { r: 1, g: 1, b: 1, a: 0.12 }
 const NEW   = { r: 0.98, g: 0.78, b: 0.46 }
+const MOSS  = { r: 0.18, g: 0.49, b: 0.34 }
 
 // Week-2 playtest: "new discovery UI needs an X". Both cards were fire-and-forget with
 // no input at all. Dismissing skips the fade-out; a queued milestone pumps in as usual.
@@ -61,14 +104,46 @@ function closeButton(px: (n: number) => number, fs: (n: number) => number, a: nu
  *  was a moment ago — which is exactly the question being asked. If the push wins the
  *  race the card simply reads "You discovered" instead of "New species!"; the Almanac
  *  is right either way, because the server owns the set. */
-export function showDiscovery(flower: string, tier: number, delayMs = 0): void {
+export function showDiscovery(flower: string, tier: number, delayMs = 0, boxId = ''): void {
   const seen = getDiscovered()   // snapshotted NOW, even when the card is delayed for the reveal beat
-  // Two different "new": a species never seen at all, and a species seen but never at
-  // THIS rarity. The headline count is species, so only the former says "New species!".
-  const c = { flower, tier, isNew: !seen.has(flower), newTier: !seen.get(flower)?.has(tier), found: [...seen.keys()].filter(id => legendTier(id) < 0).length, stamps: stampsFound() }
-  const show = () => { card = c; shownAt = Date.now(); cardDueAt = 0 }
-  if (delayMs > 0) { cardDueAt = Date.now() + delayMs; timers.setTimeout(show, delayMs) } else show()
-  console.log(`[Discovery] ${flower} tier=${tier} new=${c.isNew} newTier=${c.newTier} found=${c.found}/${PLANT_SPECIES.length}`)
+  if (batchItems.length === 0) { batchFound = [...seen.keys()].filter(id => legendTier(id) < 0).length; batchStamps = stampsFound(); batchSeenSpecies.clear(); batchSeenStamps.clear() }
+  // Two different "new": a species never seen at all, and a species seen but never at THIS rarity. The headline count is
+  // species, so only the former says "New species!". Openings in the same batch count once each (two of one new species = one new).
+  const key = `${flower}|${tier}`
+  const item: Item = { flower, tier, isNew: !seen.has(flower) && !batchSeenSpecies.has(flower), newTier: !seen.get(flower)?.has(tier) && !batchSeenStamps.has(key), boxId }
+  batchSeenSpecies.add(flower); batchSeenStamps.add(key)
+  batchItems.push(item)
+  if (!batchScheduled) {
+    // Everything that opens within BATCH_WINDOW_MS of the first one joins ONE card (KJ plants six of a rarity together and they open together).
+    batchScheduled = true
+    cardDueAt = Date.now() + delayMs + BATCH_WINDOW_MS
+    timers.setTimeout(flushBatch, delayMs + BATCH_WINDOW_MS)
+  }
+  console.log(`[Discovery] ${flower} tier=${tier} new=${item.isNew} newTier=${item.newTier} batch=${batchItems.length}`)
+}
+
+const BATCH_WINDOW_MS = 500
+const ITEM_STAGGER_MS = 260   // reveal beat between the species of a batch
+let batchItems: Item[] = []
+let batchScheduled = false
+let batchFound = 0
+let batchStamps = 0
+const batchSeenSpecies = new Set<string>()
+const batchSeenStamps  = new Set<string>()
+
+function flushBatch(): void {
+  batchScheduled = false
+  const items = batchItems
+  batchItems = []
+  if (items.length === 0) return
+  const best = items.reduce((m, it) => it.tier > m.tier ? it : m, items[0])
+  card = {
+    flower: best.flower, tier: best.tier, boxId: items.length === 1 ? best.boxId : '',
+    isNew: items.some(i => i.isNew), newTier: items.some(i => i.newTier),
+    found: batchFound, stamps: batchStamps,
+    items, newSpecies: items.filter(i => i.isNew).length, newStamps: items.filter(i => i.newTier).length,
+  }
+  shownAt = Date.now(); cardDueAt = 0; revealSkipped = false; beatSounded = 0; lastRollTick = -1
 }
 
 // ── Almanac milestone — the bigger, rarer beat that sits on top of a discovery.
@@ -128,7 +203,7 @@ export function MilestoneCardUi(props: { px: (n: number) => number; fs: (n: numb
   const isStamp = m.stamps > 0
   const next = isStamp ? null : nextMilestone(m.species)
   const nextStamp = isStamp ? nextStampMilestone(m.stamps) : null
-  const reward = `A ${tier.name} seed${m.planters > 0 ? ` and ${m.planters === 1 ? 'an extra planter' : `${m.planters} extra planters`}` : ''}`
+  const reward = `${withArticle(tier.name, true)} seed${m.planters > 0 ? ` and ${m.planters === 1 ? 'an extra planter' : `${m.planters} extra planters`}` : ''}`
 
   return (
     <UiEntity uiTransform={{ positionType: 'absolute', position: { top: '34%', left: 0 }, width: '100%', flexDirection: 'row', justifyContent: 'center' }}>
@@ -161,32 +236,89 @@ export function DiscoveryCardUi(props: { px: (n: number) => number; fs: (n: numb
   const c = card
   const tier = rarityTierById(c.tier)
   const name = plantSpeciesById(c.flower)?.name ?? c.flower
-  // Same colour language as the menu tiles: rarity colours itself, Common stays neutral,
-  // so the pill only shouts when there is something to shout about.
-  const pillBg = c.tier > 0 ? { ...tier.seedColor, a } : { ...PLATE, a: PLATE.a * a }
-  const pillInk = c.tier > 0 ? INK : CREAM
+  const now = Date.now()
+  const stage = cardStage(now, c.tier)
+  const ends = beatEnds(c.tier)
+  const age = revealSkipped ? ends.lock : now - shownAt
+  // Sounds ride the stages: a tick per rolled tier, a stinger on the lock-on, the chime on the reveal.
+  if (stage === 1) {
+    const { tick } = rollTier(age - ends.open, c.tier)
+    if (tick !== lastRollTick) { lastRollTick = tick; playSfx('tutorialTap') }
+  }
+  if (stage >= 2 && beatSounded < 2 && c.tier > 0) { beatSounded = 2; playSfx(c.tier >= 4 ? 'golden' : 'seedCatch') }
+  if (stage === 3 && beatSounded < 3) { beatSounded = 3; playSfx('flowerOpen') }
+  const rolling  = stage === 1
+  const shownTierId = rolling ? rollTier(age - ends.open, c.tier).shown : c.tier
+  const shownTier = rarityTierById(shownTierId)
+  const pillOn = c.tier > 0 ? stage >= 1 : stage === 3
+  const pa = pillOn ? a : 0                                  // rarity pill + its label
+  const ra = stage === 3 ? a : 0                             // everything the reveal unlocks
+  const sinceReveal = stage === 3 ? age - ends.lock : 0
+  const batch = c.items.length > 1
+  const lastItemAt = (c.items.length - 1) * ITEM_STAGGER_MS   // when the last species of a batch is revealed
+  const pulse = stage === 3 ? 1 : 0.55 + 0.35 * Math.sin(now / 170)
+  const dots = '.'.repeat(1 + Math.floor(now / 350) % 3)
+  const pillBg = shownTierId > 0 ? { ...shownTier.seedColor, a: pa } : { ...PLATE, a: PLATE.a * pa }
+  const pillInk = shownTierId > 0 ? INK : CREAM
+  const header = stage === 0 ? `Something is opening${dots}`
+    : stage === 1 ? 'Its rarity is…'
+    : stage === 2 ? `${withArticle(tier.name, true)} one!`
+    : batch ? `${c.items.length} flowers opened!`
+    : c.isNew ? 'New species!' : c.newTier ? 'A rarity you have never seen!' : 'You discovered'
+  const headerColor = stage === 2 && c.tier > 0 ? tier.seedColor : stage === 3 && (c.isNew || c.newTier) ? NEW : DIM
+  const thumbTint = stage === 3 ? { r: 1, g: 1, b: 1, a } : { r: 0, g: 0, b: 0, a: a * pulse }   // black silhouette until the reveal
+  // Lock-on flash: the card washes in the rarity colour and fades over the lock beat.
+  const flashA = stage === 2 && c.tier > 0 ? 0.42 * (1 - (age - ends.roll) / BEAT_LOCK_MS) * a : 0
+  // Counters tick: the old number, then (a beat after the reveal) the new one in gold.
+  const ticked = sinceReveal > 450 + lastItemAt
+  const speciesShown = c.found + (ticked ? c.newSpecies : 0)
+  const stampsShown  = c.stamps + (ticked ? c.newStamps : 0)
+  const btnA = stage === 3 && c.items.some(i => i.boxId) ? a * Math.min(1, Math.max(0, (sinceReveal - 700 - lastItemAt) / 300)) : 0   // the choice arrives last
 
   return (
-    <UiEntity uiTransform={{ positionType: 'absolute', position: { top: '34%', left: 0 }, width: '100%', flexDirection: 'row', justifyContent: 'center' }}>
+    <UiEntity uiTransform={{ positionType: 'absolute', position: { top: batch ? '18%' : '34%', left: 0 }, width: '100%', flexDirection: 'row', justifyContent: 'center' }}>
       <UiEntity
         uiTransform={{ width: px(props.mobile ? 420 : 340), flexDirection: 'column', alignItems: 'center', padding: { left: px(24), right: px(24), top: px(18), bottom: px(20) }, borderRadius: px(22) }}
         uiBackground={{ color: { ...DARK, a: DARK.a * a } }}
-        onMouseDown={dismissDiscovery}
+        onMouseDown={onCardTap}
       >
+        <UiEntity uiTransform={{ positionType: 'absolute', position: { top: 0, left: 0 }, width: '100%', height: '100%', borderRadius: px(22) }} uiBackground={{ color: { ...tier.seedColor, a: flashA } }} />
         {closeButton(px, fs, a, dismissDiscovery)}
-        <Label value={c.isNew ? 'New species!' : c.newTier ? 'A rarity you have never seen!' : 'You discovered'} fontSize={fs(17)} color={{ ...(c.isNew || c.newTier ? NEW : DIM), a }} textAlign="middle-center" textWrap="nowrap" uiTransform={{ height: fs(24) }} />
+        <Label value={header} fontSize={fs(17)} color={{ ...headerColor, a }} textAlign="middle-center" textWrap="nowrap" uiTransform={{ height: fs(24) }} />
 
-        {plantSpeciesById(c.flower)
-          ? <UiEntity uiTransform={{ width: px(132), height: px(132), margin: { top: px(6) } }} uiBackground={{ textureMode: 'stretch', texture: { src: `assets/images/plantThumbs/${c.flower}.png` }, color: { r: 1, g: 1, b: 1, a } }} />
+        {batch ? null : plantSpeciesById(c.flower)
+          ? <UiEntity uiTransform={{ width: px(132), height: px(132), margin: { top: px(6) } }} uiBackground={{ textureMode: 'stretch', texture: { src: `assets/images/plantThumbs/${c.flower}.png` }, color: thumbTint }} />
           : /* pre-catalog flower (the old Tulip/Poppy/Daisy list): no species, so no thumbnail */
             <UiEntity uiTransform={{ width: px(132), height: px(132), margin: { top: px(6) }, alignItems: 'center', justifyContent: 'center' }}>
               <UiEntity uiTransform={{ width: px(64), height: px(64), borderRadius: px(32) }} uiBackground={{ color: { ...tier.seedColor, a } }} />
             </UiEntity>}
 
-        <Label value={name} fontSize={fs(26)} color={{ ...CREAM, a }} textAlign="middle-center" textWrap="wrap" uiTransform={{ width: '100%', height: fs(36), margin: { top: px(4) } }} />
+        <Label value={stage === 3 ? name : '???'} fontSize={fs(26)} color={{ ...CREAM, a: stage === 3 ? a : a * 0.5 }} textAlign="middle-center" textWrap="wrap" uiTransform={{ display: batch ? 'none' : 'flex', width: '100%', height: fs(36), margin: { top: px(4) } }} />
 
-        <UiEntity uiTransform={{ height: px(32), padding: { left: px(16), right: px(16) }, margin: { top: px(8) }, alignItems: 'center', justifyContent: 'center', borderRadius: px(16) }} uiBackground={{ color: pillBg }}>
-          <Label value={tier.name} fontSize={fs(15)} color={{ ...pillInk, a }} textAlign="middle-center" textWrap="nowrap" uiTransform={{ height: '100%' }} />
+        {/* A batch: one tile per opening, revealed left to right — silhouette first, then colour, name and a NEW badge. */}
+        {batch ? (
+          <UiEntity uiTransform={{ width: '100%', flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', margin: { top: px(6) } }}>
+            {c.items.map((it, i) => {
+              const shown = stage === 3 && sinceReveal >= i * ITEM_STAGGER_MS
+              const sp = plantSpeciesById(it.flower)
+              return (
+                <UiEntity key={`${it.boxId}_${i}`} uiTransform={{ width: px(88), margin: px(4), flexDirection: 'column', alignItems: 'center' }}>
+                  <UiEntity
+                    uiTransform={{ width: px(72), height: px(72), borderRadius: sp ? 0 : px(36) }}
+                    uiBackground={sp
+                      ? { textureMode: 'stretch', texture: { src: `assets/images/plantThumbs/${it.flower}.png` }, color: shown ? { r: 1, g: 1, b: 1, a } : { r: 0, g: 0, b: 0, a: a * pulse } }
+                      : { color: shown ? { ...rarityTierById(it.tier).seedColor, a } : { r: 0, g: 0, b: 0, a: a * pulse } }}
+                  />
+                  <Label value={shown ? (sp?.name ?? it.flower) : '???'} fontSize={fs(11)} color={{ ...CREAM, a: shown ? a : a * 0.5 }} textAlign="top-center" textWrap="wrap" uiTransform={{ width: '100%', height: fs(30) }} />
+                  <Label value={shown && it.isNew ? 'NEW' : ''} fontSize={fs(11)} color={{ ...NEW, a }} textAlign="middle-center" textWrap="nowrap" uiTransform={{ height: fs(14) }} />
+                </UiEntity>
+              )
+            })}
+          </UiEntity>
+        ) : null}
+
+        <UiEntity uiTransform={{ width: px(140), height: px(32), margin: { top: px(8) }, alignItems: 'center', justifyContent: 'center', borderRadius: px(16) }} uiBackground={{ color: pillBg }}>
+          <Label value={shownTier.name} fontSize={fs(15)} color={{ ...pillInk, a: pa }} textAlign="middle-center" textWrap="nowrap" uiTransform={{ height: '100%' }} />
         </UiEntity>
 
         {/* Discovery is recorded server-side the moment the planter opens, so this counts
@@ -194,21 +326,30 @@ export function DiscoveryCardUi(props: { px: (n: number) => number; fs: (n: numb
         <Label
           value={legendTier(c.flower) >= 0
             ? `${LEGEND_PLANTS.filter(s => getDiscovered().has(s.id)).length} of ${LEGEND_PLANTS.length} legends discovered`
-            : `${c.found + (c.isNew ? 1 : 0)} of ${PLANT_SPECIES.length} species discovered`}
+            : `${speciesShown} of ${PLANT_SPECIES.length} species discovered`}
           fontSize={fs(14)}
-          color={{ ...DIM, a: a * 0.85 }}
+          color={{ ...(c.newSpecies > 0 && ticked ? NEW : DIM), a: ra * 0.85 }}
           textAlign="middle-center"
           textWrap="wrap"
           uiTransform={{ width: '100%', height: fs(20), margin: { top: px(10) } }}
         />
         <Label
-          value={`${c.stamps + (c.newTier ? 1 : 0)} of ${stampTotal()} rarity stamps${c.newTier ? '  (+1 new)' : ''}`}
+          value={`${stampsShown} of ${stampTotal()} rarity stamps${c.newStamps > 0 && ticked ? `  (+${c.newStamps} new)` : ''}`}
           fontSize={fs(13)}
-          color={{ ...(c.newTier ? NEW : DIM), a: a * 0.85 }}
+          color={{ ...(c.newStamps > 0 && ticked ? NEW : DIM), a: ra * 0.85 }}
           textAlign="middle-center"
           textWrap="wrap"
           uiTransform={{ width: '100%', height: fs(20), margin: { top: px(2) } }}
         />
+        {/* What now? The reveal ends on a decision (GDD 3.1: harvest it, or leave it standing on show). */}
+        <UiEntity uiTransform={{ display: btnA > 0.02 ? 'flex' : 'none', width: '100%', flexDirection: 'row', justifyContent: 'center', margin: { top: px(14) } }}>
+          <UiEntity uiTransform={{ height: px(38), padding: { left: px(20), right: px(20) }, margin: { right: px(10) }, alignItems: 'center', justifyContent: 'center', borderRadius: px(19) }} uiBackground={{ color: { ...MOSS, a: btnA } }} onMouseDown={harvestFromCard}>
+            <Label value={batch ? 'Harvest all' : 'Harvest'} fontSize={fs(15)} color={{ ...CREAM, a: btnA }} textAlign="middle-center" textWrap="nowrap" uiTransform={{ height: '100%' }} />
+          </UiEntity>
+          <UiEntity uiTransform={{ height: px(38), padding: { left: px(20), right: px(20) }, alignItems: 'center', justifyContent: 'center', borderRadius: px(19) }} uiBackground={{ color: { ...PLATE, a: PLATE.a * btnA * 1.6 } }} onMouseDown={dismissDiscovery}>
+            <Label value="Leave on show" fontSize={fs(15)} color={{ ...CREAM, a: btnA }} textAlign="middle-center" textWrap="nowrap" uiTransform={{ height: '100%' }} />
+          </UiEntity>
+        </UiEntity>
       </UiEntity>
     </UiEntity>
   )
