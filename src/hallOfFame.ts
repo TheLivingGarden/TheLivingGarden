@@ -8,7 +8,7 @@
 // Blender once the stands look right in-world.
 // =============================================================
 
-import { engine, Transform, GltfContainer, Name, Entity } from '@dcl/sdk/ecs'
+import { engine, Transform, GltfContainer, GltfNodeModifiers, Name, Entity } from '@dcl/sdk/ecs'
 import { Quaternion } from '@dcl/sdk/math'
 import { HOF_MODULES } from './shared/hallOfFame'
 import { registerStreamSource } from './streaming'
@@ -23,6 +23,7 @@ export function setupHallOfFame(): void {
     const e = engine.addEntity()
     Transform.create(e, { position: { x: m.x, y: m.y, z: m.z }, rotation: Quaternion.fromEulerDegrees(0, m.rot, 0) })
     GltfContainer.create(e, { src: HOF_SRC })
+    GltfNodeModifiers.create(e, { modifiers: [{ path: '', castShadows: false }] })   // 24 stands: no shadow pass (perf pass 2026-10-01)
     Name.create(e, { value: `HallOfFame_${i + 1}` })
     hofStands.push(e)
   })

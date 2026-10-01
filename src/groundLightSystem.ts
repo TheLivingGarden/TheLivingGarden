@@ -27,12 +27,19 @@
 // =============================================================
 
 import { engine, Entity, VisibilityComponent, timers } from '@dcl/sdk/ecs'
+import { Glow, makeGlow, setGlowTarget, snapGlow } from './emissiveGlow'
 import { TOTAL_PLANTS } from './shared/config'
 
 // ── Health thresholds ─────────────────────────────────────────
 const THR_LOW  = 0.20
 const THR_MID  = 0.50
 const THR_HIGH = 0.80
+
+// KJ 2026-09-30: the bloom flicker is OFF. It made the floor strobe under the falling seeds (hard to track), flipped visibility on
+// several large models many times a second (a suspect for the stutter on phones), and carried no information the health circles don't.
+// During a bloom every group simply holds its bright level (setGroundLightsBloom: High; lamppost: its bloom intensity). Set true for the
+// old random twinkle.
+const BLOOM_FLICKER = false
 
 // ── Flicker timing (ms) ───────────────────────────────────────
 const NORMAL_MIN_MS     = 500
@@ -57,17 +64,21 @@ const W_BLOOM_LOW: readonly [number, number, number] = [0.50, 0.40, 0.10]  // in
 //             (Lampposts have 4 sets that stay in sync)
 // startLevel: -1=Off, 0=Low, 1=Mid, 2=High
 
+// single:     true = ONE model (the High export) whose emission is tweened to each level, instead of a Low / Mid / High model per level
+//             (KJ 2026-10-01). The Low / Mid names are then ignored (and hidden if the composite still has them).
 const GROUP_DEFS: {
   id:         string
   offName:    string | null
   sets:       Array<[string, string, string]>
   startLevel: number
+  single?:    boolean
 }[] = [
   {
     id:         'ground',
     offName:    'GroundLights_Off',
     sets:       [['GroundLights_Low', 'GroundLights_Mid', 'GroundLights_High']],
     startLevel: -1,   // Off until first watering
+    single:     true,
   },
   {
     id:         'lamppost',
@@ -85,18 +96,21 @@ const GROUP_DEFS: {
     offName:    'Circle1_Off',
     sets:       [['Circle1_Low', 'Circle1_Mid', 'Circle1_High']],
     startLevel: -1,   // Off until > 20%
+    single:     true,
   },
   {
     id:         'circle2',
     offName:    'Circle2_Off',
     sets:       [['Circle2_Low', 'Circle2_Mid', 'Circle2_High']],
     startLevel: -1,   // Off until > 50%
+    single:     true,
   },
   {
     id:         'circle3',
     offName:    'Circle3_Off',
     sets:       [['Circle3_Low', 'Circle3_Mid', 'Circle3_High']],
     startLevel: -1,   // Off until > 80%
+    single:     true,
   },
 ]
 
@@ -113,6 +127,7 @@ interface GroupSet {
 
 interface Group {
   id:          string
+  glow:        Glow | null
   sets:        GroupSet[]
   baseLevel:   number      // -1=Off, 0=Low, 1=Mid, 2=High
   preBloomLevel: number    // baseLevel to restore once the bloom ends — see setGroundLightsBloom
@@ -165,10 +180,33 @@ function timingFor(g: Group): [number, number] {
   return [NORMAL_MIN_MS, NORMAL_MAX_MS]
 }
 
+// ── Emission levels (single-model groups, emissiveGlow.ts) ────
+// The model's emissive look as exported — the override re-supplies it at a scaled strength (values read from the High GLBs: base 0.8 grey,
+// metallic 0, roughness 0.5, emissive orange, no glTF emissive strength).
+// `off`: the unlit look the old Off models had (base 0.31/0.35/0.40) — the High model itself now plays the off state, so there is no Off model to go out of date.
+const GLOW_LOOK    = { color: { r: 1, g: 0.5647, b: 0.0056 }, albedo: { r: 0.8, g: 0.8, b: 0.8 }, metallic: 0, roughness: 0.5, unit: 1, off: { albedo: { r: 0.308, g: 0.348, b: 0.403 }, roughness: 0.8 } }   // unit: TUNING
+const GLOW_LOW     = 0.25    // fraction of full emission per level — exactly what the old Low / Mid exports had (emissive 0.25 / 0.5 of High)
+const GLOW_MID     = 0.5
+const GLOW_TAU_S   = 0.25    // ease time constant: ~0.75 s to settle
+
+function glowTargetFor(level: number): number { return level < 0 ? 0 : level === 0 ? GLOW_LOW : level === 1 ? GLOW_MID : 1 }
+
 /** Show exactly one variant across all sets. level: -1=Off, 0=Low, 1=Mid, 2=High */
 function applyLevel(g: Group, level: number): void {
   if (g.current === level) return   // nothing changed — skip all component writes
+  const was = g.current
   g.current = level
+  if (g.glow) {
+    // Single-model group: ONE model plays every state — unlit grey while off, then its emission eases to the level (emissiveGlow.ts).
+    for (const s of g.sets) {
+      if (s.off)  setVisible(s.off, false)   // (any leftover Off model stays hidden: the High model plays the off state itself)
+      if (s.low)  setVisible(s.low, false)
+      if (s.mid)  setVisible(s.mid, false)
+    }
+    if (was < 0 && level >= 0) snapGlow(g.glow, 0)   // lighting up from off: start dark and ease in
+    setGlowTarget(g.glow, glowTargetFor(level))
+    return
+  }
   for (const s of g.sets) {
     if (s.off)  setVisible(s.off,  level === -1)
     if (s.low)  setVisible(s.low,  level ===  0)
@@ -189,7 +227,7 @@ function scheduleNext(g: Group, delayMs: number): void {
     if (g.gen !== myGen) return   // cancelled — a newer chain is running
 
     // No flicker outside bloom — idle reschedule
-    if (g.flickerMode !== 'bloom') {
+    if (g.flickerMode !== 'bloom' || !BLOOM_FLICKER) {
       scheduleNext(g, rnd(NORMAL_MIN_MS, NORMAL_MAX_MS))
       return
     }
@@ -214,6 +252,7 @@ function scheduleNext(g: Group, delayMs: number): void {
 export function setupGroundLights(): void {
   for (const def of GROUP_DEFS) {
     const resolvedSets: GroupSet[] = []
+    let glowEntity: Entity | null = null
 
     // Resolve Off entity (shared across all sets in this group)
     const offEntity = def.offName ? engine.getEntityOrNullByName(def.offName) : null
@@ -227,17 +266,19 @@ export function setupGroundLights(): void {
         break
       }
       resolvedSets.push({ off: offEntity, low, mid, high })
+      if (def.single) { glowEntity = glowEntity ?? high }
     }
 
     if (resolvedSets.length === 0) continue
 
     const g: Group = {
+      glow:        def.single && glowEntity ? makeGlow(glowEntity, GLOW_LOOK, 0, GLOW_TAU_S) : null,
       id:          def.id,
       sets:        resolvedSets,
       baseLevel:   def.startLevel,
       preBloomLevel: def.startLevel,
       minLevel:    -1,   // no floor yet — Off is allowed
-      current:     def.startLevel,
+      current:     def.single ? -99 : def.startLevel,   // a single-model group has nothing applied yet: its first applyLevel must not be skipped
       flickerMode: 'static',
       burstUntil:  0,
       gen:         0,

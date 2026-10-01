@@ -58,6 +58,7 @@ import { showToast, showDailyLimit, hideDailyLimit, showPersistent, hidePersiste
 import { clockSync } from './shared/clockSync'
 import { triggerSceneEmote }  from '~system/RestrictedActions'
 import { playClip } from './sounds'
+import { hasReceivedPouch } from './playerInventory'
 import { isMobile } from '@dcl/sdk/platform'
 import { room }                             from './shared/messages'
 import { TOTAL_PLANTS, BLOOM_THRESHOLD, BLOOM_CENTER, DAILY_WATER_LIMIT, PLANT_NAMES, FAST_PLANT_NAMES, FAST_PLANT_EXPIRY_MS, BLOOM_RESET_DELAY_MS, DROP_RANGE, DROP_RANGE_OUT, BLOOM_TRIGGER_COOLDOWN_MS, EXPIRY_TELL_MS, WATER_DROP_MODEL_SRC, BLOOM_MODEL_OFFSET_X } from './shared/config'
@@ -246,6 +247,7 @@ let preBloomEffectsActive = false  // true once startPreBloomEffects has been ca
 let bloomActive           = false  // true from startBloomPhases() until end of startBloomCooldown()
 let emoteActive          = false
 let lastSyncRequestMs    = 0
+let readyAtMs = 0   // when the room last reported ready (0 = not yet)
 const SYNC_REQUEST_MIN_MS = 5_000   // don't flood server with requestFullSync on rapid reloads
 let lastDailyStateMs      = 0       // last playerDailyState (the head of every full sync) — see room.onReady
 
@@ -588,11 +590,13 @@ let _centerTextProgress:     Entity | null = null
 let _centerTextInstructions: Entity | null = null
 
 /** Nudge a composite-baked entity's position by BLOOM_MODEL_OFFSET_X (see its comment). */
-function offsetBloomText(e: Entity | null): void {
+function offsetBloomText(e: Entity | null, extraX = 0): void {
   if (!e) return
   const tf = Transform.getMutableOrNull(e)
-  if (tf) tf.position = { x: tf.position.x + BLOOM_MODEL_OFFSET_X, y: tf.position.y, z: tf.position.z }
+  if (tf) tf.position = { x: tf.position.x + BLOOM_MODEL_OFFSET_X + extraX, y: tf.position.y, z: tf.position.z }
 }
+/** KJ 2026-10-01: the idle ("the Bloom is resting") text sits 0.36 m further back (0.25, 0.15 more, 0.05 back, 0.01 more) — away from the spawn, which is at higher X, so -X. TUNING. */
+const INSTRUCTIONS_TEXT_NUDGE_X = -0.36
 
 function resolveSceneAssets() {
   if (_sceneAssetsResolved) return
@@ -605,7 +609,7 @@ function resolveSceneAssets() {
   if (!_centerTextBloom)        console.log('[WateringSystem] centerTextBloom entity not found')
   offsetBloomText(_centerTextBloom)
   offsetBloomText(_centerTextProgress)
-  offsetBloomText(_centerTextInstructions)
+  offsetBloomText(_centerTextInstructions, INSTRUCTIONS_TEXT_NUDGE_X)
 }
 
 function setVisible(entity: Entity | null, visible: boolean) {
@@ -1322,6 +1326,7 @@ function setupPlant(plantName: string) {
     // only BLOCK taps meant for a smaller neighbour behind it.
     GltfContainer.getMutable(entity).visibleMeshesCollisionMask =
       useClickbox ? ColliderLayer.CL_PHYSICS : ColliderLayer.CL_PHYSICS | ColliderLayer.CL_POINTER
+    GltfNodeModifiers.createOrReplace(entity, { modifiers: [{ path: '', castShadows: false }] })   // 38 plants: no shadow pass (perf pass 2026-10-01)
   }
 
   // Neutral anchor mirroring the plant's transform. Runtime children (rose, drop,
@@ -1343,6 +1348,7 @@ function setupPlant(plantName: string) {
   const roseEntity = engine.addEntity()
   Transform.create(roseEntity, { parent: anchor })
   GltfContainer.create(roseEntity, { src: UNHEALTHY_ROSE_SRC })
+  GltfNodeModifiers.create(roseEntity, { modifiers: [{ path: '', castShadows: false }] })   // 38 roses: no shadow pass (perf pass 2026-10-01)
   roseMap.set(entity, roseEntity)
 
   // Fail-open: show the unwatered rose immediately so plants are visible and
@@ -1472,7 +1478,8 @@ export function setupWateringSystem(): void {
         const pos = Transform.getOrNull(entity)?.position
         if (pos) positions.push(pos)
       }
-      triggerBloomSparkles(positions)
+      // A beat after the lights and the shockwave (the bloom opening is spread over ~0.6 s — see startBloomPhases)
+      timers.setTimeout(() => { if (isBloomActive()) triggerBloomSparkles(positions) }, 500)
 
       // All VFX, audio, petals, and lights driven by intensity system —
       // budget from bloom scale (solo = quiet bloom), flavour from the variant,
@@ -1532,12 +1539,29 @@ export function setupWateringSystem(): void {
     refreshWateredByLabels()
   })
 
+  // Safeguard (KJ 2026-10-01): once, a launch came up with an EMPTY shed and seed menu — the server's join push lands before the client is
+  // listening, and the one thing that repairs it (the full-sync request below) is skipped when the join sync "just arrived". The server
+  // always sends the pouch, so if none has landed a few seconds after the room is ready, ask again (up to 3 times, 6 s apart — the server
+  // rate-limits to one sync per 5 s).
+  let inventoryWait = 0, inventoryRetries = 0
+  engine.addSystem((dt: number) => {
+    if (readyAtMs === 0 || hasReceivedPouch() || inventoryRetries >= 3) return
+    inventoryWait += dt
+    if (inventoryWait < 6) return
+    inventoryWait = 0
+    inventoryRetries++
+    lastSyncRequestMs = Date.now()
+    console.log(`[Client] no pouch yet ${Math.round((Date.now() - readyAtMs) / 1000)}s after room ready — requesting a full sync again (${inventoryRetries}/3)`)
+    room.send('requestFullSync', {})
+  })
+
   // On every room connection (including reloads) request a full state dump from the server.
   // This ensures the client re-syncs even when the server's playerJoinSystem doesn't detect
   // a new entity (e.g. quick reloads where the ECS entity version doesn't change).
   room.onReady((isReady) => {
     console.log(`[Client] room.onReady fired: isReady=${isReady}`)
     if (!isReady) return
+    readyAtMs = Date.now()
     const now = Date.now()
     if (now - lastSyncRequestMs < SYNC_REQUEST_MIN_MS) {
       console.log('[Client] requestFullSync skipped — rate limited')

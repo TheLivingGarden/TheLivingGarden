@@ -23,6 +23,9 @@ import {
 } from '@dcl/sdk/ecs'
 import { Color4, Quaternion } from '@dcl/sdk/math'
 import { BLOOM_CENTER, SPARKLE_SRC } from './shared/config'
+import { fx } from './perfTier'
+
+const BLOOM_PLANTS = 6   // plants that burst sparkles at bloom (the pool is this many x BLOOM_BURST_COUNT)
 
 // ---------------------------------------------------------------
 // Shared helper — create one sparkle entity (plane + material)
@@ -59,9 +62,9 @@ export const waterFxFlags = { ripple: true, burst: true, tribute: true }
 // isn't a reliable "play again" signal, and one entity per watering is nothing.
 // =============================================================
 
-const BURST_COUNT     = 6    // sparkles per watering — few and big (KJ 2026-09-19: "too small and heavy")
-const BURST_EMIT_MS   = 120  // emit window — maxParticles caps it at BURST_COUNT
-const SPARKLE_SIZE    = 0.4  // world-space diameter at peak (m)
+const BURST_COUNT = () => fx(4, 3)    // sparkles per watering — few and big (KJ 2026-09-19: "too small and heavy")
+const BURST_EMIT_MS   = 120  // emit window — maxParticles caps it at BURST_COUNT()
+const SPARKLE_SIZE = () => fx(0.5, 0.55)  // world-space diameter at peak (m)
 const SPEED_MIN       = 1.8  // m/s
 const SPEED_MAX       = 4.2  // m/s
 const GRAVITY_MOD     = 0.5  // × 9.81 m/s² (was 5 m/s²)
@@ -76,9 +79,9 @@ let burstEmissive: { r: number; g: number; b: number } = { r: 1.0, g: 0.88, b: 0
 
 /** Call once at scene startup — builds the bloom and tribute pools. */
 export function setupSparkleSystem(): void {
-  bloomPool   = createPool(BLOOM_POOL_SIZE,   'bloom',   2.0, TRAVEL_DUR_BASE,  1.5, RISE_DUR_MS)
-  tributePool = createPool(TRIBUTE_POOL_SIZE, 'tribute', 1.8, TRIBUTE_DUR_BASE, 0.4, TRIBUTE_DISSOLVE_MS)
-  console.log(`[Sparkles] Burst: particles  Bloom pool: ${BLOOM_POOL_SIZE}  Tribute pool: ${TRIBUTE_POOL_SIZE}`)
+  bloomPool   = createPool(BLOOM_POOL_SIZE(),   'bloom',   2.0, TRAVEL_DUR_BASE,  1.5, RISE_DUR_MS)
+  tributePool = createPool(TRIBUTE_POOL_SIZE(), 'tribute', 1.8, TRIBUTE_DUR_BASE, 0.4, TRIBUTE_DISSOLVE_MS)
+  console.log(`[Sparkles] Burst: particles  Bloom pool: ${BLOOM_POOL_SIZE()}  Tribute pool: ${TRIBUTE_POOL_SIZE()}`)
 }
 
 /** Emit a burst of sparkles centred on `pos` (world position of the plant). */
@@ -89,10 +92,10 @@ export function triggerSparkle(pos: { x: number; y: number; z: number }): void {
   Transform.create(e, { position: { x: pos.x, y: pos.y + SPAWN_Y, z: pos.z }, rotation: Quaternion.fromEulerDegrees(-90, 0, 0) })
   ParticleSystem.create(e, {
     shape: ParticleSystem.Shape.Cone({ angle: CONE_HALF_ANGLE, radius: 0.05 }),
-    rate: BURST_COUNT / (BURST_EMIT_MS / 1000), maxParticles: BURST_COUNT, lifetime: LIFE_S,
+    rate: BURST_COUNT() / (BURST_EMIT_MS / 1000), maxParticles: BURST_COUNT(), lifetime: LIFE_S,
     gravity: GRAVITY_MOD,
     initialVelocitySpeed: { start: SPEED_MIN, end: SPEED_MAX },
-    initialSize: { start: SPARKLE_SIZE, end: SPARKLE_SIZE }, sizeOverTime: { start: 1, end: 0 },
+    initialSize: { start: SPARKLE_SIZE(), end: SPARKLE_SIZE() }, sizeOverTime: { start: 1, end: 0 },
     initialColor: { start: Color4.create(burstAlbedo.r, burstAlbedo.g, burstAlbedo.b, 1), end: Color4.create(burstEmissive.r, burstEmissive.g, burstEmissive.b, 1) },
     texture: { src: SPARKLE_SRC }, billboard: true, blendMode: PSB_ALPHA,
     simulationSpace: PSS_WORLD,
@@ -106,9 +109,9 @@ export function triggerSparkle(pos: { x: number; y: number; z: number }): void {
 // SECTION 2 — Bloom orbit sparkles
 // =============================================================
 
-const BLOOM_POOL_SIZE    = 72   // 6 plants × 12 sparkles
-const BLOOM_BURST_COUNT  = 12   // sparkles per plant at bloom
-const BLOOM_SPARKLE_SIZE = 0.28
+const BLOOM_POOL_SIZE = () => BLOOM_PLANTS * BLOOM_BURST_COUNT()   // 6 plants x a few big sparkles each (was 6 x 12 small ones: every one is moved by this script every frame)
+const BLOOM_BURST_COUNT = () => fx(4, 3)   // sparkles per plant at bloom
+const BLOOM_SPARKLE_SIZE = () => fx(0.45, 0.5)
 
 // Travel from plant to orbit entry point
 const TRAVEL_DUR_BASE    = 1_600  // ms base travel duration
@@ -226,11 +229,11 @@ export function setBloomSparklePalette(p: { albedo: { r: number; g: number; b: n
 }
 
 // ── Tribute pool — per-watering travel-to-centre effect ──────────
-const TRIBUTE_POOL_SIZE   = 48    // 6 sparkles × 8 possible in-flight
-const TRIBUTE_COUNT       = 6     // sparkles per watering
+const TRIBUTE_POOL_SIZE = () => TRIBUTE_COUNT() * 6    // 6 waterings in flight at a time
+const TRIBUTE_COUNT = () => fx(3, 2)     // sparkles per watering
 const TRIBUTE_DUR_BASE    = 1_200 // ms
 const TRIBUTE_DUR_VARY    = 500
-const TRIBUTE_SPARKLE_SIZE = 0.18
+const TRIBUTE_SPARKLE_SIZE = () => fx(0.3, 0.34)
 const TRIBUTE_DISSOLVE_MS  = 450  // fade at centre after arriving
 
 let tributePool: BloomSparkleState[] = []
@@ -252,7 +255,7 @@ export function triggerBloomSparkles(
   let poolIdx = 0
 
   for (const plantPos of plantPositions) {
-    for (let b = 0; b < BLOOM_BURST_COUNT; b++) {
+    for (let b = 0; b < BLOOM_BURST_COUNT(); b++) {
       // Find next idle slot
       while (poolIdx < bloomPool.length && bloomPool[poolIdx].phase !== 'idle') poolIdx++
       if (poolIdx >= bloomPool.length) break
@@ -315,7 +318,7 @@ export function triggerWateringTribute(
   if (!waterFxFlags.tribute) return
   let activated = 0
   for (const s of tributePool) {
-    if (s.phase !== 'idle' || activated >= TRIBUTE_COUNT) continue
+    if (s.phase !== 'idle' || activated >= TRIBUTE_COUNT()) continue
 
     // Arrive at a random point close to the bloom centre
     s.orbitAngle  = Math.random() * Math.PI * 2
@@ -398,7 +401,7 @@ function tickBloomPool(pool: BloomSparkleState[], dtMs: number, dt: number): voi
       const x   = s.startPos.x + (s.travelTarget.x - s.startPos.x) * t
       const y   = s.startPos.y + (s.travelTarget.y - s.startPos.y) * t + arc
       const z   = s.startPos.z + (s.travelTarget.z - s.startPos.z) * t
-      s.scale   = BLOOM_SPARKLE_SIZE * Math.min(rawT / TRAVEL_POP_IN_FRAC, 1)  // pop in over first 25%
+      s.scale   = BLOOM_SPARKLE_SIZE() * Math.min(rawT / TRAVEL_POP_IN_FRAC, 1)  // pop in over first 25%
 
       s.pos       = { x, y, z }
       tf.position = { x, y, z }
@@ -426,7 +429,7 @@ function tickBloomPool(pool: BloomSparkleState[], dtMs: number, dt: number): voi
       const x = BLOOM_CENTER.x + Math.cos(s.orbitAngle) * s.orbitRadius
       const y = s.orbitBaseY   + Math.sin(s.bobPhase)   * s.bobAmp
       const z = BLOOM_CENTER.z + Math.sin(s.orbitAngle) * s.orbitRadius
-      s.scale = BLOOM_SPARKLE_SIZE
+      s.scale = BLOOM_SPARKLE_SIZE()
       s.pos   = { x, y, z }
 
       tf.position = { x, y, z }
@@ -445,7 +448,7 @@ function tickBloomPool(pool: BloomSparkleState[], dtMs: number, dt: number): voi
 
       const y  = s.riseStartPos.y + riseT * RISE_HEIGHT
       const fade = 1 - riseT
-      s.scale  = BLOOM_SPARKLE_SIZE * fade * fade * fade  // cubic — lingers then melts
+      s.scale  = BLOOM_SPARKLE_SIZE() * fade * fade * fade  // cubic — lingers then melts
 
       tf.position = { x: s.riseStartPos.x, y, z: s.riseStartPos.z }
       tf.scale    = { x: s.scale, y: s.scale, z: s.scale }
@@ -462,7 +465,7 @@ function tickBloomPool(pool: BloomSparkleState[], dtMs: number, dt: number): voi
     if (s.phase === 'dissolve') {
       s.riseMs += dtMs
       const t  = Math.min(s.riseMs / s.riseDurMs, 1)
-      const sc = TRIBUTE_SPARKLE_SIZE * (1 - t) * (1 - t)   // quadratic fade
+      const sc = TRIBUTE_SPARKLE_SIZE() * (1 - t) * (1 - t)   // quadratic fade
 
       tf.position = s.riseStartPos
       tf.scale    = { x: sc, y: sc, z: sc }

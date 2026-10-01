@@ -19,6 +19,7 @@ import {
 import { Color4, Quaternion } from '@dcl/sdk/math'
 import { BLOOM_CENTER, SPARKLE_SRC, GARDEN_BOUNDS } from './shared/config'
 import { waterFxFlags } from './sparkleSystem'
+import { fx } from './perfTier'
 
 function rnd(min: number, max: number) { return min + Math.random() * (max - min) }
 
@@ -26,7 +27,7 @@ function rnd(min: number, max: number) { return min + Math.random() * (max - min
 // SECTION 1 — Dust motes
 // =============================================================
 
-const MOTE_COUNT  = 20
+const MOTE_COUNT  = () => fx(8, 5)   // KJ 2026-10-01: fewer and bigger (was 20 at 0.04-0.10 m)
 const MOTE_Y_MIN  = 0.3
 const MOTE_LIFE_S = 40     // slow rise: ~2.4 m over a lifetime (MOTE_RISE)
 const MOTE_RISE   = 0.003  // m/s² upward — gentle, slightly accelerating drift
@@ -42,10 +43,10 @@ function setupMotes() {
   Transform.create(ent, { position: { x: GARDEN_BOUNDS.xMin + w / 2, y: MOTE_Y_MIN + 0.5, z: GARDEN_BOUNDS.zMin + d / 2 } })
   ParticleSystem.create(ent, {
     shape: ParticleSystem.Shape.Box({ size: { x: w, y: 1, z: d } }),
-    rate: MOTE_COUNT / MOTE_LIFE_S, maxParticles: MOTE_COUNT, lifetime: MOTE_LIFE_S,
+    rate: MOTE_COUNT() / MOTE_LIFE_S, maxParticles: MOTE_COUNT(), lifetime: MOTE_LIFE_S,
     gravity: 0, additionalForce: { x: 0, y: MOTE_RISE, z: 0 },
     initialVelocitySpeed: { start: 0.01, end: 0.04 },
-    initialSize: { start: 0.04, end: 0.10 }, sizeOverTime: { start: 1, end: 1 },
+    initialSize: { start: 0.10, end: 0.26 }, sizeOverTime: { start: 1, end: 1 },
     initialColor: { start: Color4.create(1.0, 0.90, 0.70, 0.25), end: Color4.create(1.0, 0.82, 0.45, 0.50) },   // warm amber
     colorOverTime: { start: Color4.create(1, 1, 1, 1), end: Color4.create(1, 1, 1, 0) },
     texture: { src: SPARKLE_SRC }, billboard: true, blendMode: PSB_ADD,
@@ -140,8 +141,8 @@ export function triggerBloomShockwave(): void {
 // SECTION 3 — Fireflies
 // =============================================================
 
-const FF_COUNT = 10
-const FF_SCALE = 0.07
+const FF_COUNT = () => fx(5, 3)      // KJ 2026-10-01: fewer and bigger (was 10 at 0.07)
+const FF_SCALE = () => fx(0.14, 0.17)
 
 interface Firefly {
   entity: Entity
@@ -156,12 +157,12 @@ const fireflies: Firefly[] = []
 let firefliesActive = false
 
 function setupFireflies() {
-  for (let i = 0; i < FF_COUNT; i++) {
+  for (let i = 0; i < FF_COUNT(); i++) {
     const ent  = engine.addEntity()
     const warm = rnd(0, 1)
     Transform.create(ent, {
       position: { x: rnd(GARDEN_BOUNDS.xMin, GARDEN_BOUNDS.xMax), y: -100, z: rnd(GARDEN_BOUNDS.zMin, GARDEN_BOUNDS.zMax) },  // hidden until bloom
-      scale:    { x: FF_SCALE, y: FF_SCALE, z: FF_SCALE },
+      scale:    { x: FF_SCALE(), y: FF_SCALE(), z: FF_SCALE() },
     })
     MeshRenderer.setSphere(ent)
     Material.setPbrMaterial(ent, {

@@ -33,6 +33,7 @@ import { vfxFlags, setVfxFlag } from './plantVfx'
 import { waterFxFlags } from './sparkleSystem'
 import { isLayoutToolOn, setLayoutTool, layoutCount, layoutSelectedInfo, layoutIsCarrying, layoutSelectNearest, layoutPickUpOrDrop, layoutNudge, layoutRotateLeft, layoutRotateRight, layoutSnap90, layoutAddHere, layoutDelete, layoutExport } from './planterLayoutTool'
 import { isPerfOff, setPerfOff, perfLabel, getFpsAvg, resetFpsAvg, PerfToggle } from './potStressTest'
+import { isHitchHudOn, setHitchHud, resetHitchHud } from './hitchHud'
 import { isPropToolOn, setPropTool, propToolCount, propSelectedInfo, propIsCarrying, propSelectNearest, propPickUpOrDrop, propNudge, propRotateLeft, propRotateRight, propSnap90, propExport } from './propLayoutTool'
 import { isPlantToolOn, setPlantTool, plantToolCount, plantSelectedInfo, plantIsCarrying, plantSelectNearest, plantPickUpOrDrop, plantNudge, plantRotateLeft, plantRotateRight, plantSnap90, plantExport } from './plantLayoutTool'
 import {
@@ -398,7 +399,12 @@ export function TestPanelUi() {
           <Label value={`${getFpsAvg()} fps avg`} fontSize={12} color={MUTED} />
         </UiEntity>
         <UiEntity uiTransform={{ width: '100%', flexDirection: 'row', margin: { bottom: 4 } }}>
-          <SeedBtn label="Reset average" color={BTN_OFF} onClick={resetFpsAvg} last />
+          <SeedBtn label="Reset average" color={BTN_OFF} onClick={() => { resetFpsAvg(); resetHitchHud() }} last />
+        </UiEntity>
+        {/* Hitch HUD (bottom-left): tick gap vs script time + what arrived just before each hitch. Off until switched on. */}
+        <UiEntity uiTransform={{ width: '100%', height: 30, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', margin: { bottom: 4 } }}>
+          <Label value="Hitch HUD (gap vs script ms)" fontSize={11} color={isHitchHudOn() ? WHITE : MUTED} uiTransform={{ flexGrow: 1 }} />
+          <ToggleButton value={isHitchHudOn()} onChange={setHitchHud} />
         </UiEntity>
         {(['env', 'envShadows', 'envColliders', 'plants', 'planters', 'drops'] as PerfToggle[]).map(t => (
           <UiEntity key={`perf-${t}`} uiTransform={{ width: '100%', height: 30, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', margin: { bottom: 2 } }}>

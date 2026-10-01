@@ -28,6 +28,7 @@ import {
 } from '@dcl/sdk/ecs'
 import { Color4 } from '@dcl/sdk/math'
 import { SPARKLE_SRC } from './shared/config'
+import { fx } from './perfTier'
 
 // const enums in @dcl/ecs internals, not re-exported (same as plantVfx)
 const PSB_ALPHA = 0, PS_PLAYING = 0, PSS_WORLD = 1   // alpha, not additive: additive vanishes on the bright garden
@@ -39,11 +40,18 @@ const PSB_ALPHA = 0, PS_PLAYING = 0, PSS_WORLD = 1   // alpha, not additive: add
 /** Total duration of the trail effect after bloom closes (ms). */
 const TRAIL_DURATION_MS  = 10 * 60_000
 
-/** Sparkles per second per player (was 2 every 350 ms). */
-const TRAIL_RATE         = 3    // few and big (KJ 2026-09-19)
+/** Sparkles per second: MY trail, and each OTHER player's (fewer — nobody is watching a stranger's trail closely). Few and big (KJ 2026-09-19, 2026-10-01). */
+const TRAIL_RATE_SELF    = () => fx(3, 2)
+const TRAIL_RATE_OTHER   = () => fx(2, 1.5)
 
 /** World-space sparkle diameter at peak (m). */
-const TRAIL_SPARKLE_SIZE = 0.4
+const TRAIL_SPARKLE_SIZE = () => fx(0.5, 0.55)
+
+/** Other players' trails only exist for the nearest few, within range (a hysteresis band so a trail does not flicker at the edge):
+ *  every trail is an avatar attachment plus a particle system for the whole 10 minutes, for people you cannot see. */
+const TRAIL_OTHERS_MAX   = () => fx(6, 3)
+const TRAIL_RANGE_IN_M   = 25
+const TRAIL_RANGE_OUT_M  = 30
 
 /** Sparkle lifetime (s). */
 const TRAIL_LIFE_S       = 1.6
@@ -72,6 +80,7 @@ let trailGen   = 0
 // ---------------------------------------------------------------
 
 function addEmitter(address: string): void {
+  const rate = address === '' ? TRAIL_RATE_SELF() : TRAIL_RATE_OTHER()
   const parent = engine.addEntity()
   AvatarAttach.create(parent, address === ''
     ? { anchorPointId: AvatarAnchorPointType.AAPT_POSITION }
@@ -80,10 +89,10 @@ function addEmitter(address: string): void {
   Transform.create(emitter, { parent, position: { x: 0, y: TRAIL_SPAWN_Y, z: 0 } })
   ParticleSystem.create(emitter, {
     shape: ParticleSystem.Shape.Sphere({ radius: TRAIL_JITTER_R }),
-    rate: TRAIL_RATE, maxParticles: Math.ceil(TRAIL_RATE * TRAIL_LIFE_S) + 2, lifetime: TRAIL_LIFE_S,
+    rate: rate, maxParticles: Math.ceil(rate * TRAIL_LIFE_S) + 2, lifetime: TRAIL_LIFE_S,
     gravity: 0, additionalForce: { x: 0, y: TRAIL_DRIFT_Y, z: 0 },
     initialVelocitySpeed: { start: 0.05, end: 0.2 },
-    initialSize: { start: TRAIL_SPARKLE_SIZE, end: TRAIL_SPARKLE_SIZE }, sizeOverTime: { start: 1, end: 0 },
+    initialSize: { start: TRAIL_SPARKLE_SIZE(), end: TRAIL_SPARKLE_SIZE() }, sizeOverTime: { start: 1, end: 0 },
     initialColor: { start: Color4.create(1.0, 0.95, 0.78, 1), end: Color4.create(1.0, 0.88, 0.52, 1) },   // warm cream → gold
     colorOverTime: { start: Color4.create(1, 1, 1, 1), end: Color4.create(1, 1, 1, 0) },
     texture: { src: SPARKLE_SRC }, billboard: true, blendMode: PSB_ALPHA,
@@ -114,11 +123,19 @@ function retireAllEmitters(): void {
 
 function syncRoster(gen: number): void {
   if (trailGen !== gen) return
-  const present = new Set<string>([''])
+  const me = Transform.getOrNull(engine.PlayerEntity)?.position
+  // Others, nearest first, inside the range (wider for a trail that already exists), capped.
+  const near: Array<{ address: string; d: number }> = []
   for (const [entity, id] of engine.getEntitiesWith(PlayerIdentityData)) {
     if (entity === engine.PlayerEntity) continue
-    present.add(id.address.toLowerCase())
+    const address = id.address.toLowerCase()
+    const p = Transform.getOrNull(entity)?.position
+    const d = me && p ? Math.hypot(p.x - me.x, p.z - me.z) : 0
+    if (d <= (emitters.has(address) ? TRAIL_RANGE_OUT_M : TRAIL_RANGE_IN_M)) near.push({ address, d })
   }
+  near.sort((a, b) => a.d - b.d)
+  const present = new Set<string>([''])
+  for (const n of near.slice(0, TRAIL_OTHERS_MAX())) present.add(n.address)
   for (const [address, e] of emitters) {
     if (!present.has(address)) { removeAnchor(e.parent); emitters.delete(address) }
   }

@@ -18,9 +18,12 @@ import { Color4, Quaternion } from '@dcl/sdk/math'
 import { plantSpeciesById, rarityTierById } from './shared/config'
 import { PROP_LAYOUT } from './shared/layout'
 import { getHeld, getFlowers, heldFlowerIndex, Keepsake } from './playerInventory'
-import { box, label, tapArea, setHover, WOOD, WOOD_D, PLATE, CREAM } from './pouchRack'
+import { box, label, tapArea, setHover, PLATE, CREAM } from './pouchRack'
 import { playSfx } from './sounds'
 import { registerStreamedTree } from './streaming'
+import { openFlowerInspector } from './flowerInspector'
+import { attachPlantVfx, detachPlantVfx } from './plantVfx'
+import { retirePlant } from './boxSystem'
 
 // In front of the flower shelf (PROP_LAYOUT FlowerShelf -24.3, 1.5, 53.4 — the shed floor is
 // raised, hence y 1.5). TUNING — drag it with the Prop editor.
@@ -41,8 +44,9 @@ let root: Entity | null = null
 let yawNow = 0
 let shownKey = ''
 
-const HOVER_EMPTY = 'Hold a flower to examine it here'
-const HOVER_HELD  = 'Examine the flower you are holding'
+const HOVER_EMPTY = 'Pick a flower from the shelf to examine it here'
+const HOVER_HELD  = 'Inspect this flower'
+const PLAQUE_EMPTY = 'Pick a flower from the shelf'
 
 function fmtDate(ms?: number): string {
   if (!ms) return ''
@@ -59,33 +63,75 @@ function heldKeepsake(): Keepsake | null {
   return k ?? { flower: h.flower, rarityTier: h.rarityTier, at: 0 }
 }
 
+const SPECIMEN_VFX_KEY = 'exam:specimen'
+
+/** Where the turntable's centre is in the world (the table's origin plus its small rotated offset). */
+function turntableWorld(): { x: number; y: number; z: number } {
+  const t = root ? Transform.getOrNull(root) : null
+  if (!t) return { x: 0, y: 0, z: 0 }
+  const yawRad = (yaw_of(t.rotation) * Math.PI) / 180
+  const off = 0.05
+  return { x: t.position.x + Math.sin(yawRad) * off, y: t.position.y + TOP_Y + 0.06, z: t.position.z + Math.cos(yawRad) * off }
+}
+function yaw_of(q: { x: number; y: number; z: number; w: number }): number {
+  return (Math.atan2(2 * (q.w * q.y + q.x * q.z), 1 - 2 * (q.y * q.y + q.x * q.x)) * 180) / Math.PI
+}
+
+/** Remove the specimen the safe way: its effects first, then a retired entity (a bare removeEntity on a model carrying the pulse override
+ *  made the Unity explorer throw — see retirePlant). */
+function clearSpecimen(): void {
+  detachPlantVfx(SPECIMEN_VFX_KEY)
+  if (specimen !== null) { retirePlant(specimen); specimen = null }
+}
+
+/** Put the held flower on the turntable (or clear it). The shelf's click is what holds it — KJ 2026-09-30: click a flower on the shelf and it goes
+ *  into your hand AND onto this table; click it again and it goes back. Runs twice a second; only rebuilds when the flower changes. */
+function syncSpecimen(): void {
+  if (!spinner || !plaque) return
+  const k = heldKeepsake()
+  const sp = k ? plantSpeciesById(k.flower) : undefined
+  if (!k || !sp) {
+    clearSpecimen()
+    if (shownKey !== '') {
+      shownKey = ''
+      const ts = TextShape.getMutable(plaque)
+      ts.text = PLAQUE_EMPTY
+      ts.textColor = CREAM
+    }
+    return
+  }
+  const key = `${k.flower}:${k.rarityTier}:${k.at}`
+  if (key === shownKey) return
+  shownKey = key
+  clearSpecimen()
+  specimen = engine.addEntity()
+  const K = (SPECIMEN_M / 0.55) * sp.scale
+  const f = SPECIMEN_M / 0.55
+  Transform.create(specimen, {
+    parent: spinner,
+    position: { x: sp.offsetX * f, y: sp.baseYOffset * f, z: sp.offsetZ * f },
+    scale: { x: K, y: K, z: K },
+  })
+  GltfContainer.create(specimen, { src: sp.modelSrc, visibleMeshesCollisionMask: ColliderLayer.CL_NONE, invisibleMeshesCollisionMask: ColliderLayer.CL_NONE })
+  // The flower's rarity effects (glints, glow, pulse, sway) — the same attach the planters and the Gallery use (KJ 2026-09-30: "why don't I see
+  // its effects?": the specimen was a bare model, so nothing above Common ever showed). `soil` = the turntable's centre in world space.
+  attachPlantVfx(SPECIMEN_VFX_KEY, specimen, sp.id, k.rarityTier, turntableWorld())
+  const tier = rarityTierById(k.rarityTier)
+  const lines = [sp.name, tier.name]
+  const who = [k.grownBy ? `grown by ${k.grownBy}` : '', k.from ? `a gift from ${k.from}` : '', fmtDate(k.openedAt ?? k.at)].filter(Boolean).join(' - ')
+  if (who) lines.push(who)
+  const ts = TextShape.getMutable(plaque)
+  ts.text = lines.join('\n')
+  ts.textColor = k.rarityTier > 0 ? Color4.create(tier.seedColor.r, tier.seedColor.g, tier.seedColor.b, 1) : CREAM
+  playSfx('flowerOpen')   // the same chime as a flower opening in its planter
+}
+
+/** Tapping the table opens the inspector for the flower on it. */
 function examine(): void {
   const k = heldKeepsake()
-  if (!k || !spinner || !plaque) return
-  const sp = plantSpeciesById(k.flower)
-  if (!sp) return
-  const key = `${k.flower}:${k.rarityTier}:${k.at}`
-  if (key !== shownKey) {
-    shownKey = key
-    if (specimen !== null) engine.removeEntity(specimen)
-    specimen = engine.addEntity()
-    const K = (SPECIMEN_M / 0.55) * sp.scale
-    const f = SPECIMEN_M / 0.55
-    Transform.create(specimen, {
-      parent: spinner,
-      position: { x: sp.offsetX * f, y: sp.baseYOffset * f, z: sp.offsetZ * f },
-      scale: { x: K, y: K, z: K },
-    })
-    GltfContainer.create(specimen, { src: sp.modelSrc, visibleMeshesCollisionMask: ColliderLayer.CL_NONE, invisibleMeshesCollisionMask: ColliderLayer.CL_NONE })
-    const tier = rarityTierById(k.rarityTier)
-    const lines = [sp.name, tier.name]
-    const who = [k.grownBy ? `grown by ${k.grownBy}` : '', k.from ? `a gift from ${k.from}` : '', fmtDate(k.openedAt ?? k.at)].filter(Boolean).join(' - ')
-    if (who) lines.push(who)
-    const ts = TextShape.getMutable(plaque)
-    ts.text = lines.join('\n')
-    ts.textColor = k.rarityTier > 0 ? Color4.create(tier.seedColor.r, tier.seedColor.g, tier.seedColor.b, 1) : CREAM
-  }
-  playSfx('flowerOpen')   // the same chime as a flower opening in its planter
+  if (!k) return
+  playSfx('tutorialTap')
+  openFlowerInspector(k)
 }
 
 /** Turn the specimen while someone is near; keep the hover text honest about what a tap does. */
@@ -99,7 +145,11 @@ function spinSystem(dt: number): void {
     Transform.getMutable(spinner).rotation = Quaternion.fromEulerDegrees(0, yawNow, 0)
   }
   hoverAccum -= dt
-  if (tap && hoverAccum <= 0) { hoverAccum = 0.5; setHover(tap, heldKeepsake() ? HOVER_HELD : HOVER_EMPTY) }
+  if (hoverAccum <= 0) {
+    hoverAccum = 0.5
+    syncSpecimen()
+    if (tap) setHover(tap, heldKeepsake() ? HOVER_HELD : HOVER_EMPTY)
+  }
 }
 
 export function setupExamTable(): void {
@@ -112,12 +162,7 @@ export function setupExamTable(): void {
   Name.create(root, { value: 'ExamTable' })
   registerStreamedTree('examTable', root)   // hidden while you are across the garden (streaming.ts)
 
-  // Table: top, apron and four legs, in the shelf's woods.
-  box(root, { x: 0, y: TOP_Y - 0.03, z: 0 }, { x: TOP_W, y: 0.06, z: TOP_D }, WOOD, 0.35)
-  box(root, { x: 0, y: TOP_Y - 0.12, z: 0 }, { x: TOP_W - 0.1, y: 0.12, z: TOP_D - 0.1 }, WOOD_D, 0.3)
-  for (const sx of [-1, 1]) for (const sz of [-1, 1]) {
-    box(root, { x: sx * (TOP_W / 2 - 0.08), y: (TOP_Y - 0.06) / 2, z: sz * (TOP_D / 2 - 0.08) }, { x: 0.09, y: TOP_Y - 0.06, z: 0.09 }, WOOD_D, 0.3)
-  }
+  // (No table geometry — top, apron, legs: the table is modelled in Blender now, KJ 2026-09-30. The turntable, plaque and tap target stay.)
   // Turntable: a low dark disc the specimen stands on.
   const disc = engine.addEntity()
   Transform.create(disc, { parent: root, position: { x: 0, y: TOP_Y + 0.03, z: 0.05 }, scale: { x: 0.85, y: 0.05, z: 0.85 } })
@@ -128,7 +173,7 @@ export function setupExamTable(): void {
 
   // Plaque on the front edge (viewer on -Z, signs.ts rule) and a small title board.
   box(root, { x: 0, y: TOP_Y - 0.14, z: -TOP_D / 2 - 0.01 }, { x: 1.2, y: 0.3, z: 0.02 }, PLATE, 0.3)
-  plaque = label(root, { x: 0, y: TOP_Y - 0.14, z: -TOP_D / 2 - 0.03 }, 'Hold a flower and tap the table', 0.5, CREAM, 1.15, 0.3)
+  plaque = label(root, { x: 0, y: TOP_Y - 0.14, z: -TOP_D / 2 - 0.03 }, PLAQUE_EMPTY, 0.5, CREAM, 1.15, 0.3)
   label(root, { x: 0, y: TOP_Y + 0.02, z: -TOP_D / 2 + 0.06 }, 'Examination table', 0.4, CREAM, 1.2, 0.12)
 
   // One generous tap target over the whole top, specimen included.

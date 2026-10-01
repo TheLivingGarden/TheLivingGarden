@@ -50,6 +50,7 @@ export const TOAST_MS    = 3_500
 // TextShape fontSize is roughly 0.2 m of glyph height per unit: NAME ~0.11 m, COUNT ~0.2 m, SIGN ~0.24 m
 export const FONT_NAME   = 0.55
 export const FONT_COUNT  = 1.0
+export const FONT_LINE   = 0.72   // the combined "30 Uncommon" line under each seed
 export const FONT_SIGN   = 1.0
 
 // Lighter than the first pass: the dark wood and near-black panel swallowed the seed colours
@@ -126,17 +127,6 @@ function holdTier(tier: number): void {
   lastKey = ''   // repaint now
 }
 
-/** The two-shelf cabinet shared by the seed rack and the flower shelf. The viewer stands on the -Z side; the back panel is on +Z. */
-export function buildShelfFrame(root: Entity, w: number): void {
-  box(root, { x: 0, y: 0.4, z: 0 }, { x: w, y: 0.8, z: 0.5 }, WOOD, 0.35)                                   // lower cabinet (plates for the low shelf)
-  box(root, { x: 0, y: LEDGE_LO - 0.03, z: 0 }, { x: w + 0.1, y: 0.06, z: 0.56 }, WOOD_D, 0.3)            // low ledge
-  box(root, { x: 0, y: 1.72, z: -0.02 }, { x: w, y: 0.66, z: 0.46 }, WOOD, 0.35)                             // strip carrying the high shelf plates (tall enough for a two-line name)
-  box(root, { x: 0, y: LEDGE_HI - 0.03, z: 0 }, { x: w + 0.1, y: 0.06, z: 0.56 }, WOOD_D, 0.3)            // high ledge
-  box(root, { x: 0, y: 1.62, z: 0.3 }, { x: w, y: 3.2, z: 0.06 }, PANEL, 0.55)                              // back panel: light and faintly self-lit
-  ;[-1, 1].forEach(sd => box(root, { x: sd * (w / 2 + 0.06), y: 1.7, z: 0.3 }, { x: 0.14, y: 3.4, z: 0.14 }, WOOD_D, 0.3))   // posts
-  box(root, { x: 0, y: 3.0, z: 0.28 }, { x: w * 0.9, y: 0.7, z: 0.07 }, PLATE, 0.3)                        // sign board
-}
-
 export function setupPouchRack(): void {
   const o = PROP_LAYOUT['PouchRack']
   const pos = o ? { x: o.x, y: o.y, z: o.z } : DEFAULT_POS
@@ -147,8 +137,9 @@ export function setupPouchRack(): void {
   Name.create(root, { value: 'PouchRack' })
   registerStreamedTree('pouchRack', root)   // hidden while you are across the garden (streaming.ts)
 
+  // No cabinet geometry any more (KJ 2026-09-30): the shelves are modelled in Blender, in scene.glb. Everything below — seeds, plates' names
+  // and counts, the sign text, the tap areas — keeps its position relative to the rack's origin and sits on KJ's shelves.
   const w = PER_ROW * PITCH + 0.3
-  buildShelfFrame(root, w)
   label(root, { x: 0, y: 3.08, z: 0.22 }, 'SEED POUCH', FONT_SIGN, GOLD, w * 0.9, 0.5)
   label(root, { x: 0, y: 2.78, z: 0.22 }, 'tap a seed to hold it', 0.36, CREAM, w * 0.9, 0.2)
   tapArea(root, { x: 0, y: 3.0, z: 0.2 }, { x: w * 0.9, y: 0.7, z: 0.1 }, 'Open your pouch', () => openSeedMenu())
@@ -185,11 +176,10 @@ export function setupPouchRack(): void {
 
     // Name and count on the plate under this slot's ledge (cabinet front for the low shelf, strip for the high one).
     // Both sit IN FRONT of the surface (z more negative): the first pass put the names on the panel's own plane and they z-fought away.
-    const nameY = row === 0 ? 0.62 : 1.9
-    const countY = row === 0 ? 0.3 : 1.66
+    // ONE line per seed — "30 Uncommon" — midway between where the name and the count used to sit (KJ 2026-09-30).
+    const lineY = row === 0 ? 0.46 : 1.78
     const plateZ = row === 0 ? -0.29 : -0.28
-    label(root, { x, y: nameY, z: plateZ }, t.name, FONT_NAME, Color4.create(c.r, c.g, c.b, 1), PITCH, 0.16)
-    const count = label(root, { x, y: countY, z: plateZ }, '-', FONT_COUNT, CREAM, PITCH, 0.3)
+    const count = label(root, { x, y: lineY, z: plateZ }, `0 ${t.name}`, FONT_LINE, Color4.create(c.r, c.g, c.b, 0.5), PITCH, 0.3)
     const tap = tapArea(root, { x, y: L + 0.3, z: 0 }, { x: PITCH * 0.92, y: 0.7, z: 0.5 }, `${t.name} seeds`, () => holdTier(i))
     slots.push({ tier: i, glow, seed, ghost, ring, count, tap })
   }
@@ -217,7 +207,10 @@ function rackSystem(dt: number): void {
     setScale(s.glow, stocked ? { x: 0.72, y: 0.01, z: 0.72 } : ZERO)
     setScale(s.ghost, stocked ? ZERO : { x: 0.26, y: 0.34, z: 0.26 })
     setScale(s.ring, stocked && s.tier === next ? { x: 0.86, y: 0.006, z: 0.86 } : ZERO)
-    TextShape.getMutable(s.count).text = stocked ? `x${n}` : '0'
+    const ts = TextShape.getMutable(s.count)
+    const tc = rarityTierById(s.tier).seedColor
+    ts.text = `${n} ${rarityTierById(s.tier).name}`
+    ts.textColor = Color4.create(tc.r, tc.g, tc.b, stocked ? 1 : 0.5)   // dimmed while empty
     setHover(s.tap, stocked ? `Hold ${withArticle(rarityTierById(s.tier).name)} seed (${n})` : `${rarityTierById(s.tier).name}: none yet`)
   }
 

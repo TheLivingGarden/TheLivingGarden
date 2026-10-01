@@ -24,8 +24,11 @@ let boxCap     = 1
 let boxCapKnown = false   // false until the server has told us: the default of 1 is a placeholder and must never block planting
 
 export function getPouch(): number[] { return pouch }
+let pouchReceived = false   // true once the server has told us the pouch (it always does, even when it is empty)
+export function hasReceivedPouch(): boolean { return pouchReceived }
 export function setPouch(counts: number[]): void {
   pouch = counts.map(n => Math.max(0, n))
+  pouchReceived = true
 }
 
 /** Which tier the next planting uses when the pouch holds more than one. */

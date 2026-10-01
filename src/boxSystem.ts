@@ -106,7 +106,7 @@ const TAP_DISTANCE  = 8     // m — mobile is third-person only, camera sits we
 interface BoxView {
   boxId:        string
   base:         Entity
-  hit:          Entity          // box collider child: tap target + walk blocker
+  hit:          Entity          // tap target + walk blocker: the base itself (the model's own collider mesh), or a box-collider child when PLANTER_USE_MODEL_COLLIDER is off
   labelText:    string          // what this box's plaque says — shown by a pooled plaque when near
   plant:        Entity | null   // sprout or flower entity while planted
   plantKey:     string          // what `plant` currently shows — rebuilt only when this changes
@@ -345,6 +345,7 @@ function setPlantVisual(v: BoxView, pos: PlanterPos): void {
     Transform.create(e, { position: { x: pos.x, y: BOX_MODEL_RIM_Y - SEEDLING_MODEL_MIN_Y * k, z: pos.z }, rotation: planterRotation(pos), scale: { x: k, y: k, z: k } })
     const src = v.rarityTier > 0 ? SEEDLING_MODEL_SRC_RARE : SEEDLING_MODEL_SRC_NORMAL
     GltfContainer.create(e, { src, visibleMeshesCollisionMask: ColliderLayer.CL_NONE, invisibleMeshesCollisionMask: ColliderLayer.CL_NONE })
+    GltfNodeModifiers.create(e, { modifiers: [{ path: '', castShadows: false }] })   // (plantVfx re-supplies this when it takes the node over)
     attachSeedlingVfx(v.boxId, e, v.rarityTier)   // tier pulse while growing (Rare and up)
     v.plant = e
     return
@@ -357,6 +358,7 @@ function setPlantVisual(v: BoxView, pos: PlanterPos): void {
     const at = planterPoint(pos, species.offsetX, species.offsetZ)   // footprint-centring offset turns with the planter
     Transform.create(e, { position: { x: at.x, y: BOX_MODEL_RIM_Y + species.baseYOffset, z: at.z }, rotation: planterRotation(pos), scale: { x: species.scale, y: species.scale, z: species.scale } })
     GltfContainer.create(e, { src: species.modelSrc, visibleMeshesCollisionMask: ColliderLayer.CL_NONE, invisibleMeshesCollisionMask: ColliderLayer.CL_NONE })
+    GltfNodeModifiers.create(e, { modifiers: [{ path: '', castShadows: false }] })
     attachPlantVfx(v.boxId, e, species.id, v.rarityTier, { x: pos.x, y: BOX_MODEL_RIM_Y, z: pos.z })
   } else {
     // Species id not in the catalog (shouldn't happen) — fall back to a tinted sphere.
@@ -395,6 +397,7 @@ function createBalloon(v: BoxView, pos: PlanterPos): void {
   const balloon = engine.addEntity()
   Transform.create(balloon, { position: { x: pos.x, y: 0, z: pos.z }, rotation: planterRotation(pos), scale: { x: 0, y: 0, z: 0 } })
   GltfContainer.create(balloon, { src: BALLOON_MODEL_SRC, visibleMeshesCollisionMask: ColliderLayer.CL_NONE, invisibleMeshesCollisionMask: ColliderLayer.CL_NONE })
+  GltfNodeModifiers.create(balloon, { modifiers: [{ path: '', castShadows: false }] })   // 96 balloons: no shadow pass (KJ 2026-10-01 perf pass)
   // The countdown / "Ready to Harvest" text rides on the balloon's dark disc, facing out.
   const text = engine.addEntity()
   Transform.create(text, { parent: balloon, position: BALLOON_TEXT_POS, rotation: Quaternion.fromEulerDegrees(0, 180, 0) })
@@ -611,19 +614,30 @@ function onTap(v: BoxView): void {
 const PLANTER_COLLIDER_CENTER = { x: 0, y: 0.55, z: 0.06 }
 const PLANTER_COLLIDER_SIZE   = { x: 1.8, y: 1.1, z: 1.95 }
 
+/** KJ 2026-10-01: the planter model now carries its own collider mesh ("planter_collider" — a 12-triangle box inside planterBox.glb, next to the
+ *  789-triangle visible mesh), so collision comes from the MODEL: pointer + physics, on the model's invisible (_collider) meshes only. The visible
+ *  meshes carry no collision. `false` = the old separate box collider child (kept as the fallback, e.g. if taps misbehave on a phone). */
+const PLANTER_USE_MODEL_COLLIDER = true
+
 function createBox(p: PlanterPos & { id: string }): BoxView {
-  // KJ's planter template has no _collider mesh. Its visible meshes used to carry pointer +
-  // physics collision: 96 × 1,577-tri mesh colliders tested on every pointer raycast and
-  // physics step. One box collider per planter instead, sized to the model (glTF bounds
-  // x ±0.9, y 0–1.31, z −0.93…1.05; the box stops at the rim so the decorations stay free).
+  // Before 2026-10-01 the template had no _collider mesh and its visible meshes carried pointer + physics collision: 96 × 1,577-tri mesh
+  // colliders tested on every pointer raycast and physics step. A box collider per planter replaced that; now the model has a 12-tri one of its own.
   const base = engine.addEntity()
   Transform.create(base, { position: { x: p.x, y: 0, z: p.z }, rotation: planterRotation(p), scale: { x: BOX_MODEL_SCALE, y: BOX_MODEL_SCALE, z: BOX_MODEL_SCALE } })
-  GltfContainer.create(base, { src: BOX_MODEL_SRC, visibleMeshesCollisionMask: ColliderLayer.CL_NONE, invisibleMeshesCollisionMask: ColliderLayer.CL_NONE })
+  GltfContainer.create(base, {
+    src: BOX_MODEL_SRC,
+    visibleMeshesCollisionMask: ColliderLayer.CL_NONE,
+    invisibleMeshesCollisionMask: PLANTER_USE_MODEL_COLLIDER ? ColliderLayer.CL_POINTER | ColliderLayer.CL_PHYSICS : ColliderLayer.CL_NONE,
+  })
   // No shadow casting (KJ 2026-09-19): 96 planters were drawn again for every shadow cascade
   GltfNodeModifiers.create(base, { modifiers: [{ path: '', castShadows: false }] })
-  const hit = engine.addEntity()
-  Transform.create(hit, { parent: base, position: PLANTER_COLLIDER_CENTER, scale: PLANTER_COLLIDER_SIZE })
-  MeshCollider.setBox(hit, ColliderLayer.CL_POINTER | ColliderLayer.CL_PHYSICS)
+  // `hit` is the entity taps land on (pointer events + hover text). With the model collider that IS the base entity.
+  let hit = base
+  if (!PLANTER_USE_MODEL_COLLIDER) {
+    hit = engine.addEntity()
+    Transform.create(hit, { parent: base, position: PLANTER_COLLIDER_CENTER, scale: PLANTER_COLLIDER_SIZE })
+    MeshCollider.setBox(hit, ColliderLayer.CL_POINTER | ColliderLayer.CL_PHYSICS)
+  }
 
   const v: BoxView = { boxId: p.id, base, hit, labelText: '', plant: null, plantKey: '', balloon: null, balloonText: null, animSlot: -1, owner: '', ownerName: '', rarityTier: 0, opened: false, flower: '', opensLocalAt: 0, waters: 0, lastWaterer: '', drop: null, stage: 0, tends: 0, plantedAt: 0 }
   pointerEventsSystem.onPointerDown(

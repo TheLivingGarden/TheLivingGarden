@@ -1,61 +1,38 @@
 // =============================================================
-// The Living Garden — Fairy Light Flicker System
+// The Living Garden — Fairy Light System
 //
-// Four independent strings, each with three brightness GLBs
-// (Low / Mid / High). Exactly one GLB is visible per string
-// at any time — the others are hidden.
+// ONE model (FairyLights_1_High — the fairy and trellis strings consolidated, KJ 2026-10-01) whose emission emissiveGlow.ts sets.
 //
-//   FairyLights_1   FairyLights_2   (scene strings)
-//   TrellisLights_1 TrellisLights_2 (trellis strings)
-//
-// Flicker is driven entirely by setTimeout chains — zero
-// per-frame ECS system overhead.
+// KJ 2026-10-01: "they tween constantly — only tween them during the bloom and just have a soft glow the rest of the time". So:
+//   - the rest of the time (including the pre-bloom build-up) they hold ONE steady soft glow: a single write, then nothing;
+//   - during a bloom they twinkle between Low / Mid / High, slowly and eased. Every step is a material re-apply across the whole model
+//     (46 primitives), so the twinkle is a few steps a second at most, not the old 80 ms flicker.
+//   - when the bloom ends they ease back to the soft glow and stop.
 // =============================================================
 
-import { engine, Entity, VisibilityComponent, timers } from '@dcl/sdk/ecs'
+import { engine, timers } from '@dcl/sdk/ecs'
+import { Glow, makeGlow, setGlowTarget, snapGlow } from './emissiveGlow'
 
-// ── Normal flicker ────────────────────────────────────────────
-// Gentle breathing glow: mostly bright with soft occasional dips.
-const NORMAL_WEIGHTS = [0.08, 0.27, 0.65]   // [Low, Mid, High] probability
-const NORMAL_MIN_MS  = 350
-const NORMAL_MAX_MS  = 1_900
+// ── Bloom twinkle ─────────────────────────────────────────────
+const BLOOM_WEIGHTS = [0.22, 0.33, 0.45]   // [Low, Mid, High] probability
+const BLOOM_MIN_MS  = 700
+const BLOOM_MAX_MS  = 1_800
+const TAU_BLOOM     = 0.3     // ease time constant, seconds
+const TAU_SETTLE    = 0.8     // easing back to the soft glow when the bloom ends
 
-// ── Pre-bloom flicker ─────────────────────────────────────────
-// Medium shimmer during the 5-min build-up — between normal and full bloom.
-const PREBOOM_WEIGHTS = [0.12, 0.30, 0.58]  // [Low, Mid, High] probability
-const PREBOOM_MIN_MS  = 180
-const PREBOOM_MAX_MS  = 900
+// ── The model ─────────────────────────────────────────────────
+const MODEL_ENTITY = 'FairyLights_1_High.glb'   // the composite entity name
 
-// ── Bloom flicker ─────────────────────────────────────────────
-// Faster and more dramatic — frequent dips give a magical twinkle.
-const BLOOM_WEIGHTS  = [0.22, 0.33, 0.45]   // [Low, Mid, High] probability
-const BLOOM_MIN_MS   = 80
-const BLOOM_MAX_MS   = 420
-
-// ── String definitions ────────────────────────────────────────
-// Each entry is [Low name, Mid name, High name] for one string.
-
-const STRING_DEFS: [string, string, string][] = [
-  ['FairyLights_1_Low.glb',   'FairyLights_1_Mid.glb',   'FairyLights_1_High.glb'],
-  ['FairyLights_2_Low.glb',   'FairyLights_2_Mid.glb',   'FairyLights_2_High.glb'],
-  ['TrellisLights_1_Low.glb', 'TrellisLights_1_Mid.glb', 'TrellisLights_1_High.glb'],
-  ['TrellisLights_2_Low.glb', 'TrellisLights_2_Mid.glb', 'TrellisLights_2_High.glb'],
-]
-
-// ─────────────────────────────────────────────────────────────
+// As exported (read from the GLB): all materials are base 0.8/0.3/0, emissive 1/0.342/0, glTF emissive strength 1.5.
+const LOOK = { color: { r: 1, g: 0.342, b: 0 }, albedo: { r: 0.8, g: 0.3, b: 0 }, metallic: 0, roughness: 0.5, unit: 1.5, step: 0.06 }
+const LEVEL_FRACTION: [number, number, number] = [1 / 3, 2 / 3, 1]   // Low, Mid, High of the model's full emission
+const SOFT_GLOW = 0.6   // TUNING — the resting glow, as a fraction of the model's full emission
 
 type Level = 0 | 1 | 2   // 0 = Low, 1 = Mid, 2 = High
 
-interface LightString {
-  variants: [Entity, Entity, Entity]   // [Low, Mid, High]
-  current:  Level
-}
-
-const strings: LightString[] = []
-let bloomMode   = false
-let preboomMode = false
-
-// ── Helpers ───────────────────────────────────────────────────
+let glow: Glow | null = null
+let twinkleGen = 0
+let current: Level = 1
 
 function rnd(min: number, max: number): number {
   return min + Math.random() * (max - min)
@@ -71,31 +48,15 @@ function weightedPick(weights: number[]): Level {
   return 2
 }
 
-/** Swap the visible variant — only the two that change are written (was all three per step). */
-function applyLevel(s: LightString, level: Level): void {
-  for (let i = 0; i < 3; i++) {
-    const visible = i === level
-    if (VisibilityComponent.getOrNull(s.variants[i])?.visible === visible) continue
-    VisibilityComponent.createOrReplace(s.variants[i], { visible })
-  }
-  s.current = level
-}
-
-function scheduleNext(s: LightString, delayMs: number): void {
+function scheduleNext(gen: number, delayMs: number): void {
   timers.setTimeout(() => {
-    const weights = bloomMode   ? BLOOM_WEIGHTS   :
-                    preboomMode ? PREBOOM_WEIGHTS  : NORMAL_WEIGHTS
-    const minMs   = bloomMode   ? BLOOM_MIN_MS    :
-                    preboomMode ? PREBOOM_MIN_MS   : NORMAL_MIN_MS
-    const maxMs   = bloomMode   ? BLOOM_MAX_MS    :
-                    preboomMode ? PREBOOM_MAX_MS   : NORMAL_MAX_MS
-
+    if (twinkleGen !== gen || glow === null) return   // the bloom ended (or a newer one started)
     // Re-roll once if we'd pick the same level — ensures a visible change each step
-    let next = weightedPick(weights)
-    if (next === s.current) next = weightedPick(weights)
-
-    applyLevel(s, next)
-    scheduleNext(s, rnd(minMs, maxMs))
+    let next = weightedPick(BLOOM_WEIGHTS)
+    if (next === current) next = weightedPick(BLOOM_WEIGHTS)
+    current = next
+    setGlowTarget(glow, LEVEL_FRACTION[next], TAU_BLOOM)
+    scheduleNext(gen, rnd(BLOOM_MIN_MS, BLOOM_MAX_MS))
   }, delayMs)
 }
 
@@ -103,36 +64,28 @@ function scheduleNext(s: LightString, delayMs: number): void {
 
 /** Call once at scene startup. */
 export function setupFairyLights(): void {
-  for (let i = 0; i < STRING_DEFS.length; i++) {
-    const [lowName, midName, highName] = STRING_DEFS[i]
-    const low  = engine.getEntityOrNullByName(lowName)
-    const mid  = engine.getEntityOrNullByName(midName)
-    const high = engine.getEntityOrNullByName(highName)
-
-    if (!low || !mid || !high) {
-      console.error(`[FairyLights] Missing entities for string ${i + 1} — skipping`)
-      continue
-    }
-
-    const s: LightString = { variants: [low, mid, high], current: 2 }
-    strings.push(s)
-
-    applyLevel(s, 2)  // start at High
-    // Stagger starts slightly so strings don't all fire together
-    scheduleNext(s, rnd(NORMAL_MIN_MS, NORMAL_MAX_MS) + i * 80)
+  const entity = engine.getEntityOrNullByName(MODEL_ENTITY)
+  if (!entity) {
+    console.log(`[FairyLights] no "${MODEL_ENTITY}" entity in the composite — skipping`)
+    return
   }
-
-  console.log(`[FairyLights] Ready — ${strings.length}/${STRING_DEFS.length} strings initialised`)
+  glow = makeGlow(entity, LOOK, 1, TAU_BLOOM)
+  snapGlow(glow, SOFT_GLOW)   // the resting glow, written once as soon as the model has loaded
+  console.log('[FairyLights] Ready — one consolidated model, steady soft glow')
 }
 
-/** Switch to bloom flicker (faster, more magical).
- *  Takes effect on each string's next scheduled timeout. */
+/** Bloom on: twinkle (slow and eased). Bloom off: ease back to the steady soft glow and stop. */
 export function setFairyLightsBloom(active: boolean): void {
-  bloomMode = active
+  twinkleGen++
+  if (glow === null) return
+  if (active) {
+    current = 2
+    setGlowTarget(glow, LEVEL_FRACTION[2], TAU_BLOOM)
+    scheduleNext(twinkleGen, rnd(BLOOM_MIN_MS, BLOOM_MAX_MS))
+  } else {
+    setGlowTarget(glow, SOFT_GLOW, TAU_SETTLE)
+  }
 }
 
-/** Switch to pre-bloom shimmer (medium speed — build-up anticipation).
- *  No-op while bloom is active; bloom takes priority. */
-export function setFairyLightsPreboom(active: boolean): void {
-  preboomMode = active
-}
+/** The pre-bloom build-up no longer changes the fairy lights (they only move during the bloom itself). Kept so callers need no change. */
+export function setFairyLightsPreboom(_active: boolean): void { /* intentionally nothing */ }

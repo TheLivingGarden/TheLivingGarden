@@ -319,6 +319,7 @@ function applyPulse(a: Active, now: number): void {
         // and the seedling tint / 52 of 78 species' pulses silently never applied (KJ 2026-09-19).
         // A global modifier skips the lookup; with one mesh node it's exactly equivalent.
         path: a.mats.length === 1 ? '' : m.path,
+        castShadows: false,   // perf pass 2026-10-01: flowers on planters / the Gallery / the table cast no shadow
         material: { material: { $case: 'pbr' as const, pbr: {
           texture: tex,
           emissiveTexture: tex,

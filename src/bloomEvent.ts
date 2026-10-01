@@ -262,11 +262,13 @@ export function startBloomPhases(fxLevel: 0|1|2 = 2, variantId = 'classic', hold
   }
 
   // ── Visual baseline (every bloom, even the quiet one) ────────
+  // SPREAD over the first ~0.6 s (KJ 2026-10-01): everything used to start on the same tick, a one-frame spike. The lights and the opening
+  // shockwave stay at t=0 — they are the "it just happened" beat; the rest follows in quick succession.
+  const early = (ms: number, fn: () => void): void => { timers.setTimeout(() => { if (bloomGen === gen) fn() }, ms) }
   setGroundLightsBloom(true)
   setFairyLightsBloom(true)
-  startFireflies()
-  stopLoops()
-  startLoops()
+  early(200, () => { stopLoops(); startLoops() })
+  early(400, startFireflies)
 
   // ── Quiet solo bloom: lights, one soft petal rain, a ripple — no shockwaves.
   // GDD §3 pillar 3: "solo care earns a quiet bloom, group care the full spectacle".
@@ -287,7 +289,7 @@ export function startBloomPhases(fxLevel: 0|1|2 = 2, variantId = 'classic', hold
     if (moonlit) {
       // Rare variant: a double-crack opening and petals from the first second
       timers.setTimeout(triggerBloomShockwave, jitter(900))
-      startPetalRain()
+      early(550, startPetalRain)
     }
     at(0.40, () => setIntensity(0))
     at(0.65, () => { setIntensity(1); triggerBloomShockwave(); startPetalRain() })
@@ -307,7 +309,7 @@ export function startBloomPhases(fxLevel: 0|1|2 = 2, variantId = 'classic', hold
   if (moonlit) {
     // Rare variant: a double-crack opening and petals from the first second
     timers.setTimeout(triggerBloomShockwave, jitter(900))
-    startPetalRain()
+    early(550, startPetalRain)
   }
 
   at(0.22, () => setIntensity(1))

@@ -19,14 +19,15 @@
 //     lets every airborne petal land naturally, then idles them.
 // =============================================================
 
-import { engine, Entity, GltfContainer, Transform } from '@dcl/sdk/ecs'
+import { engine, Entity, GltfContainer, GltfNodeModifiers, Transform } from '@dcl/sdk/ecs'
 import { BLOOM_CENTER } from './shared/config'
+import { fx } from './perfTier'
 
 // ---------------------------------------------------------------
 // Configuration
 // ---------------------------------------------------------------
 
-const PETAL_COUNT        = 20
+const PETAL_COUNT        = () => fx(10, 6)   // KJ 2026-10-01: half as many (was 20)
 const PETAL_SPAWN_RADIUS = 12
 const PETAL_HEIGHT_MAX   = 9      // max spawn height (m)
 const PETAL_HEIGHT_MIN   = 1      // min spawn height (m)
@@ -128,9 +129,10 @@ export function setupPetalSystem(): void {
 
   Transform.getMutable(petalSource).scale = { x: 0, y: 0, z: 0 }
 
-  for (let i = 0; i < PETAL_COUNT; i++) {
+  for (let i = 0; i < PETAL_COUNT(); i++) {
     const ent = engine.addEntity()
     GltfContainer.create(ent, { src })
+    GltfNodeModifiers.create(ent, { modifiers: [{ path: '', castShadows: false }] })
     Transform.create(ent, {
       position: { x: 0, y: -10, z: 0 },
       scale:    { x: 0, y: 0, z: 0 },
@@ -146,7 +148,7 @@ export function setupPetalSystem(): void {
     })
   }
 
-  console.log(`[Petals] Pool ready — ${PETAL_COUNT} instances from "${src}"`)
+  console.log(`[Petals] Pool ready — ${PETAL_COUNT()} instances from "${src}"`)
 }
 
 /** Start (or re-burst) the petal rain.

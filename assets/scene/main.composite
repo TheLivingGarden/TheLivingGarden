@@ -111,69 +111,6 @@
             "parent": 579
           }
         },
-        "513": {
-          "json": {
-            "position": {
-              "x": 7.989999771118164,
-              "y": 0,
-              "z": 24
-            },
-            "scale": {
-              "x": 1,
-              "y": 1,
-              "z": 1
-            },
-            "rotation": {
-              "x": 0,
-              "y": 0,
-              "z": 0,
-              "w": 1
-            },
-            "parent": 579
-          }
-        },
-        "514": {
-          "json": {
-            "position": {
-              "x": 7.989999771118164,
-              "y": 0,
-              "z": 24
-            },
-            "scale": {
-              "x": 1,
-              "y": 1,
-              "z": 1
-            },
-            "rotation": {
-              "x": 0,
-              "y": 0,
-              "z": 0,
-              "w": 1
-            },
-            "parent": 579
-          }
-        },
-        "515": {
-          "json": {
-            "position": {
-              "x": 7.989999771118164,
-              "y": 0,
-              "z": 24
-            },
-            "scale": {
-              "x": 1,
-              "y": 1,
-              "z": 1
-            },
-            "rotation": {
-              "x": 0,
-              "y": 0,
-              "z": 0,
-              "w": 1
-            },
-            "parent": 579
-          }
-        },
         "516": {
           "json": {
             "position": {
@@ -214,27 +151,6 @@
               "w": 1
             },
             "parent": 0
-          }
-        },
-        "518": {
-          "json": {
-            "position": {
-              "x": 7.989999771118164,
-              "y": 0,
-              "z": 24
-            },
-            "scale": {
-              "x": 1,
-              "y": 1,
-              "z": 1
-            },
-            "rotation": {
-              "x": 0,
-              "y": 0,
-              "z": 0,
-              "w": 1
-            },
-            "parent": 579
           }
         },
         "519": {
@@ -319,27 +235,6 @@
               "w": 0.8660253882408142
             },
             "parent": 533
-          }
-        },
-        "524": {
-          "json": {
-            "position": {
-              "x": 7.989999771118164,
-              "y": 0,
-              "z": 24
-            },
-            "scale": {
-              "x": 1,
-              "y": 1,
-              "z": 1
-            },
-            "rotation": {
-              "x": 0,
-              "y": 0,
-              "z": 0,
-              "w": 1
-            },
-            "parent": 579
           }
         },
         "525": {
@@ -1077,132 +972,6 @@
             "parent": 0
           }
         },
-        "563": {
-          "json": {
-            "position": {
-              "x": 8,
-              "y": 0,
-              "z": 24
-            },
-            "scale": {
-              "x": 1,
-              "y": 1,
-              "z": 1
-            },
-            "rotation": {
-              "x": 0,
-              "y": 0,
-              "z": 0,
-              "w": 1
-            },
-            "parent": 579
-          }
-        },
-        "574": {
-          "json": {
-            "position": {
-              "x": 8,
-              "y": 0,
-              "z": 24
-            },
-            "scale": {
-              "x": 1,
-              "y": 1,
-              "z": 1
-            },
-            "rotation": {
-              "x": 0,
-              "y": 0,
-              "z": 0,
-              "w": 1
-            },
-            "parent": 579
-          }
-        },
-        "575": {
-          "json": {
-            "position": {
-              "x": 8,
-              "y": 0,
-              "z": 24
-            },
-            "scale": {
-              "x": 1,
-              "y": 1,
-              "z": 1
-            },
-            "rotation": {
-              "x": 0,
-              "y": 0,
-              "z": 0,
-              "w": 1
-            },
-            "parent": 579
-          }
-        },
-        "576": {
-          "json": {
-            "position": {
-              "x": 8,
-              "y": 0,
-              "z": 24
-            },
-            "scale": {
-              "x": 1,
-              "y": 1,
-              "z": 1
-            },
-            "rotation": {
-              "x": 0,
-              "y": 0,
-              "z": 0,
-              "w": 1
-            },
-            "parent": 579
-          }
-        },
-        "577": {
-          "json": {
-            "position": {
-              "x": 8,
-              "y": 0,
-              "z": 24
-            },
-            "scale": {
-              "x": 1,
-              "y": 1,
-              "z": 1
-            },
-            "rotation": {
-              "x": 0,
-              "y": 0,
-              "z": 0,
-              "w": 1
-            },
-            "parent": 579
-          }
-        },
-        "578": {
-          "json": {
-            "position": {
-              "x": 8,
-              "y": 0,
-              "z": 24
-            },
-            "scale": {
-              "x": 1,
-              "y": 1,
-              "z": 1
-            },
-            "rotation": {
-              "x": 0,
-              "y": 0,
-              "z": 0,
-              "w": 1
-            },
-            "parent": 579
-          }
-        },
         "579": {
           "json": {
             "position": {
@@ -1224,133 +993,7 @@
             "parent": 0
           }
         },
-        "580": {
-          "json": {
-            "position": {
-              "x": 1.75,
-              "y": 0,
-              "z": 3.8399999141693115
-            },
-            "scale": {
-              "x": 1,
-              "y": 1,
-              "z": 1
-            },
-            "rotation": {
-              "x": 0,
-              "y": 1,
-              "z": 0,
-              "w": 0
-            },
-            "parent": 0
-          }
-        },
-        "581": {
-          "json": {
-            "position": {
-              "x": 1.75,
-              "y": 0,
-              "z": 44.41252517700195
-            },
-            "scale": {
-              "x": 1,
-              "y": 1,
-              "z": 1
-            },
-            "rotation": {
-              "x": 0,
-              "y": 1,
-              "z": 0,
-              "w": 0
-            },
-            "parent": 0
-          }
-        },
-        "582": {
-          "json": {
-            "position": {
-              "x": 14.845359802246094,
-              "y": 0,
-              "z": 30.3574161529541
-            },
-            "scale": {
-              "x": 1,
-              "y": 1,
-              "z": 1
-            },
-            "rotation": {
-              "x": 0,
-              "y": 0,
-              "z": 0,
-              "w": 1
-            },
-            "parent": 0
-          }
-        },
-        "583": {
-          "json": {
-            "position": {
-              "x": 14.717658996582031,
-              "y": 0,
-              "z": 17.63521385192871
-            },
-            "scale": {
-              "x": 1,
-              "y": 1,
-              "z": 1
-            },
-            "rotation": {
-              "x": 0,
-              "y": 0,
-              "z": 0,
-              "w": 1
-            },
-            "parent": 0
-          }
-        },
         "584": {
-          "json": {
-            "position": {
-              "x": 8,
-              "y": 0,
-              "z": 24
-            },
-            "scale": {
-              "x": 1,
-              "y": 1,
-              "z": 1
-            },
-            "rotation": {
-              "x": 0,
-              "y": 0,
-              "z": 0,
-              "w": 1
-            },
-            "parent": 0
-          }
-        },
-        "585": {
-          "json": {
-            "position": {
-              "x": 8,
-              "y": 0,
-              "z": 24
-            },
-            "scale": {
-              "x": 1,
-              "y": 1,
-              "z": 1
-            },
-            "rotation": {
-              "x": 0,
-              "y": 0,
-              "z": 0,
-              "w": 1
-            },
-            "parent": 0
-          }
-        },
-        "586": {
           "json": {
             "position": {
               "x": 8,
@@ -1392,91 +1035,7 @@
             "parent": 0
           }
         },
-        "588": {
-          "json": {
-            "position": {
-              "x": 8,
-              "y": 0,
-              "z": 24
-            },
-            "scale": {
-              "x": 1,
-              "y": 1,
-              "z": 1
-            },
-            "rotation": {
-              "x": 0,
-              "y": 0,
-              "z": 0,
-              "w": 1
-            },
-            "parent": 0
-          }
-        },
-        "589": {
-          "json": {
-            "position": {
-              "x": 8,
-              "y": 0,
-              "z": 24
-            },
-            "scale": {
-              "x": 1,
-              "y": 1,
-              "z": 1
-            },
-            "rotation": {
-              "x": 0,
-              "y": 0,
-              "z": 0,
-              "w": 1
-            },
-            "parent": 0
-          }
-        },
         "590": {
-          "json": {
-            "position": {
-              "x": 8,
-              "y": 0,
-              "z": 24
-            },
-            "scale": {
-              "x": 1,
-              "y": 1,
-              "z": 1
-            },
-            "rotation": {
-              "x": 0,
-              "y": 0,
-              "z": 0,
-              "w": 1
-            },
-            "parent": 0
-          }
-        },
-        "591": {
-          "json": {
-            "position": {
-              "x": 8,
-              "y": 0,
-              "z": 24
-            },
-            "scale": {
-              "x": 1,
-              "y": 1,
-              "z": 1
-            },
-            "rotation": {
-              "x": 0,
-              "y": 0,
-              "z": 0,
-              "w": 1
-            },
-            "parent": 0
-          }
-        },
-        "592": {
           "json": {
             "position": {
               "x": 8,
@@ -1503,384 +1062,6 @@
               "x": 8,
               "y": 0,
               "z": 24
-            },
-            "scale": {
-              "x": 1,
-              "y": 1,
-              "z": 1
-            },
-            "rotation": {
-              "x": 0,
-              "y": 0,
-              "z": 0,
-              "w": 1
-            },
-            "parent": 0
-          }
-        },
-        "594": {
-          "json": {
-            "position": {
-              "x": 8,
-              "y": 0,
-              "z": 24
-            },
-            "scale": {
-              "x": 1,
-              "y": 1,
-              "z": 1
-            },
-            "rotation": {
-              "x": 0,
-              "y": 0,
-              "z": 0,
-              "w": 1
-            },
-            "parent": 0
-          }
-        },
-        "595": {
-          "json": {
-            "position": {
-              "x": 8,
-              "y": 0,
-              "z": 24
-            },
-            "scale": {
-              "x": 1,
-              "y": 1,
-              "z": 1
-            },
-            "rotation": {
-              "x": 0,
-              "y": 0,
-              "z": 0,
-              "w": 1
-            },
-            "parent": 0
-          }
-        },
-        "596": {
-          "json": {
-            "position": {
-              "x": 8,
-              "y": 0,
-              "z": 24
-            },
-            "scale": {
-              "x": 1,
-              "y": 1,
-              "z": 1
-            },
-            "rotation": {
-              "x": 0,
-              "y": 0,
-              "z": 0,
-              "w": 1
-            },
-            "parent": 0
-          }
-        },
-        "597": {
-          "json": {
-            "position": {
-              "x": 8,
-              "y": 0,
-              "z": 24
-            },
-            "scale": {
-              "x": 1,
-              "y": 1,
-              "z": 1
-            },
-            "rotation": {
-              "x": 0,
-              "y": 0,
-              "z": 0,
-              "w": 1
-            },
-            "parent": 0
-          }
-        },
-        "598": {
-          "json": {
-            "position": {
-              "x": 8,
-              "y": 0,
-              "z": 24
-            },
-            "scale": {
-              "x": 1,
-              "y": 1,
-              "z": 1
-            },
-            "rotation": {
-              "x": 0,
-              "y": 0,
-              "z": 0,
-              "w": 1
-            },
-            "parent": 0
-          }
-        },
-        "599": {
-          "json": {
-            "position": {
-              "x": 8,
-              "y": 0,
-              "z": 24
-            },
-            "scale": {
-              "x": 1,
-              "y": 1,
-              "z": 1
-            },
-            "rotation": {
-              "x": 0,
-              "y": 0,
-              "z": 0,
-              "w": 1
-            },
-            "parent": 0
-          }
-        },
-        "600": {
-          "json": {
-            "position": {
-              "x": 1.75,
-              "y": 0,
-              "z": 3.8399999141693115
-            },
-            "scale": {
-              "x": 1,
-              "y": 1,
-              "z": 1
-            },
-            "rotation": {
-              "x": 0,
-              "y": 1,
-              "z": 0,
-              "w": 0
-            },
-            "parent": 0
-          }
-        },
-        "601": {
-          "json": {
-            "position": {
-              "x": 1.75,
-              "y": 0,
-              "z": 3.8399999141693115
-            },
-            "scale": {
-              "x": 1,
-              "y": 1,
-              "z": 1
-            },
-            "rotation": {
-              "x": 0,
-              "y": 1,
-              "z": 0,
-              "w": 0
-            },
-            "parent": 0
-          }
-        },
-        "602": {
-          "json": {
-            "position": {
-              "x": 1.75,
-              "y": 0,
-              "z": 3.8399999141693115
-            },
-            "scale": {
-              "x": 1,
-              "y": 1,
-              "z": 1
-            },
-            "rotation": {
-              "x": 0,
-              "y": 1,
-              "z": 0,
-              "w": 0
-            },
-            "parent": 0
-          }
-        },
-        "603": {
-          "json": {
-            "position": {
-              "x": 1.75,
-              "y": 0,
-              "z": 44.41171646118164
-            },
-            "scale": {
-              "x": 1,
-              "y": 1,
-              "z": 1
-            },
-            "rotation": {
-              "x": 0,
-              "y": 1,
-              "z": 0,
-              "w": 0
-            },
-            "parent": 0
-          }
-        },
-        "604": {
-          "json": {
-            "position": {
-              "x": 1.75,
-              "y": 0,
-              "z": 44.41171646118164
-            },
-            "scale": {
-              "x": 1,
-              "y": 1,
-              "z": 1
-            },
-            "rotation": {
-              "x": 0,
-              "y": 1,
-              "z": 0,
-              "w": 0
-            },
-            "parent": 0
-          }
-        },
-        "605": {
-          "json": {
-            "position": {
-              "x": 1.75,
-              "y": 0,
-              "z": 44.41171646118164
-            },
-            "scale": {
-              "x": 1,
-              "y": 1,
-              "z": 1
-            },
-            "rotation": {
-              "x": 0,
-              "y": 1,
-              "z": 0,
-              "w": 0
-            },
-            "parent": 0
-          }
-        },
-        "606": {
-          "json": {
-            "position": {
-              "x": 14.850000381469727,
-              "y": 0,
-              "z": 30.360000610351562
-            },
-            "scale": {
-              "x": 1,
-              "y": 1,
-              "z": 1
-            },
-            "rotation": {
-              "x": 0,
-              "y": 0,
-              "z": 0,
-              "w": 1
-            },
-            "parent": 0
-          }
-        },
-        "607": {
-          "json": {
-            "position": {
-              "x": 14.850000381469727,
-              "y": 0,
-              "z": 30.360000610351562
-            },
-            "scale": {
-              "x": 1,
-              "y": 1,
-              "z": 1
-            },
-            "rotation": {
-              "x": 0,
-              "y": 0,
-              "z": 0,
-              "w": 1
-            },
-            "parent": 0
-          }
-        },
-        "608": {
-          "json": {
-            "position": {
-              "x": 14.850000381469727,
-              "y": 0,
-              "z": 30.360000610351562
-            },
-            "scale": {
-              "x": 1,
-              "y": 1,
-              "z": 1
-            },
-            "rotation": {
-              "x": 0,
-              "y": 0,
-              "z": 0,
-              "w": 1
-            },
-            "parent": 0
-          }
-        },
-        "609": {
-          "json": {
-            "position": {
-              "x": 14.720000267028809,
-              "y": 0,
-              "z": 17.639999389648438
-            },
-            "scale": {
-              "x": 1,
-              "y": 1,
-              "z": 1
-            },
-            "rotation": {
-              "x": 0,
-              "y": 0,
-              "z": 0,
-              "w": 1
-            },
-            "parent": 0
-          }
-        },
-        "610": {
-          "json": {
-            "position": {
-              "x": 14.720000267028809,
-              "y": 0,
-              "z": 17.639999389648438
-            },
-            "scale": {
-              "x": 1,
-              "y": 1,
-              "z": 1
-            },
-            "rotation": {
-              "x": 0,
-              "y": 0,
-              "z": 0,
-              "w": 1
-            },
-            "parent": 0
-          }
-        },
-        "611": {
-          "json": {
-            "position": {
-              "x": 14.720000267028809,
-              "y": 0,
-              "z": 17.639999389648438
             },
             "scale": {
               "x": 1,
@@ -4257,37 +3438,9 @@
             "invisibleMeshesCollisionMask": 3
           }
         },
-        "513": {
-          "json": {
-            "src": "assets/scene/Models/FairyLights_1_Low/FairyLights_1_Low.glb",
-            "visibleMeshesCollisionMask": 0,
-            "invisibleMeshesCollisionMask": 3
-          }
-        },
-        "514": {
-          "json": {
-            "src": "assets/scene/Models/FairyLights_1_Mid/FairyLights_1_Mid.glb",
-            "visibleMeshesCollisionMask": 0,
-            "invisibleMeshesCollisionMask": 3
-          }
-        },
-        "515": {
-          "json": {
-            "src": "assets/scene/Models/FairyLights_2_High/FairyLights_2_High.glb",
-            "visibleMeshesCollisionMask": 0,
-            "invisibleMeshesCollisionMask": 3
-          }
-        },
         "516": {
           "json": {
             "src": "assets/scene/Models/petal/petal.glb",
-            "visibleMeshesCollisionMask": 0,
-            "invisibleMeshesCollisionMask": 3
-          }
-        },
-        "518": {
-          "json": {
-            "src": "assets/scene/Models/FairyLights_2_Low/FairyLights_2_Low.glb",
             "visibleMeshesCollisionMask": 0,
             "invisibleMeshesCollisionMask": 3
           }
@@ -4316,13 +3469,6 @@
         "523": {
           "json": {
             "src": "assets/scene/Models/demoPlant/demoPlant.glb",
-            "visibleMeshesCollisionMask": 0,
-            "invisibleMeshesCollisionMask": 3
-          }
-        },
-        "524": {
-          "json": {
-            "src": "assets/scene/Models/FairyLights_2_Mid/FairyLights_2_Mid.glb",
             "visibleMeshesCollisionMask": 0,
             "invisibleMeshesCollisionMask": 3
           }
@@ -4481,93 +3627,9 @@
             "invisibleMeshesCollisionMask": 3
           }
         },
-        "563": {
-          "json": {
-            "src": "assets/scene/Models/TrellisLights_1_High/TrellisLights_1_High.glb",
-            "visibleMeshesCollisionMask": 0,
-            "invisibleMeshesCollisionMask": 3
-          }
-        },
-        "574": {
-          "json": {
-            "src": "assets/scene/Models/TrellisLights_1_Low/TrellisLights_1_Low.glb",
-            "visibleMeshesCollisionMask": 0,
-            "invisibleMeshesCollisionMask": 3
-          }
-        },
-        "575": {
-          "json": {
-            "src": "assets/scene/Models/TrellisLights_1_Mid/TrellisLights_1_Mid.glb",
-            "visibleMeshesCollisionMask": 0,
-            "invisibleMeshesCollisionMask": 3
-          }
-        },
-        "576": {
-          "json": {
-            "src": "assets/scene/Models/TrellisLights_2_High/TrellisLights_2_High.glb",
-            "visibleMeshesCollisionMask": 0,
-            "invisibleMeshesCollisionMask": 3
-          }
-        },
-        "577": {
-          "json": {
-            "src": "assets/scene/Models/TrellisLights_2_Low/TrellisLights_2_Low.glb",
-            "visibleMeshesCollisionMask": 0,
-            "invisibleMeshesCollisionMask": 3
-          }
-        },
-        "578": {
-          "json": {
-            "src": "assets/scene/Models/TrellisLights_2_Mid/TrellisLights_2_Mid.glb",
-            "visibleMeshesCollisionMask": 0,
-            "invisibleMeshesCollisionMask": 3
-          }
-        },
-        "580": {
-          "json": {
-            "src": "assets/scene/Models/lamppost/lamppost.glb",
-            "visibleMeshesCollisionMask": 0,
-            "invisibleMeshesCollisionMask": 3
-          }
-        },
-        "581": {
-          "json": {
-            "src": "assets/scene/Models/lamppost/lamppost.glb",
-            "visibleMeshesCollisionMask": 0,
-            "invisibleMeshesCollisionMask": 3
-          }
-        },
-        "582": {
-          "json": {
-            "src": "assets/scene/Models/lamppost/lamppost.glb",
-            "visibleMeshesCollisionMask": 0,
-            "invisibleMeshesCollisionMask": 3
-          }
-        },
-        "583": {
-          "json": {
-            "src": "assets/scene/Models/lamppost/lamppost.glb",
-            "visibleMeshesCollisionMask": 0,
-            "invisibleMeshesCollisionMask": 3
-          }
-        },
         "584": {
           "json": {
             "src": "assets/scene/Models/GroundLights_High/GroundLights_High.glb",
-            "visibleMeshesCollisionMask": 0,
-            "invisibleMeshesCollisionMask": 3
-          }
-        },
-        "585": {
-          "json": {
-            "src": "assets/scene/Models/GroundLights_Low/GroundLights_Low.glb",
-            "visibleMeshesCollisionMask": 0,
-            "invisibleMeshesCollisionMask": 3
-          }
-        },
-        "586": {
-          "json": {
-            "src": "assets/scene/Models/GroundLights_Mid/GroundLights_Mid.glb",
             "visibleMeshesCollisionMask": 0,
             "invisibleMeshesCollisionMask": 3
           }
@@ -4579,20 +3641,6 @@
             "invisibleMeshesCollisionMask": 3
           }
         },
-        "588": {
-          "json": {
-            "src": "assets/scene/Models/Circle1_Low/Circle1_Low.glb",
-            "visibleMeshesCollisionMask": 0,
-            "invisibleMeshesCollisionMask": 3
-          }
-        },
-        "589": {
-          "json": {
-            "src": "assets/scene/Models/Circle1_Mid/Circle1_Mid.glb",
-            "visibleMeshesCollisionMask": 0,
-            "invisibleMeshesCollisionMask": 3
-          }
-        },
         "590": {
           "json": {
             "src": "assets/scene/Models/Circle2_High/Circle2_High.glb",
@@ -4600,149 +3648,9 @@
             "invisibleMeshesCollisionMask": 3
           }
         },
-        "591": {
-          "json": {
-            "src": "assets/scene/Models/Circle2_Low/Circle2_Low.glb",
-            "visibleMeshesCollisionMask": 0,
-            "invisibleMeshesCollisionMask": 3
-          }
-        },
-        "592": {
-          "json": {
-            "src": "assets/scene/Models/Circle2_Mid/Circle2_Mid.glb",
-            "visibleMeshesCollisionMask": 0,
-            "invisibleMeshesCollisionMask": 3
-          }
-        },
         "593": {
           "json": {
             "src": "assets/scene/Models/Circle3_High/Circle3_High.glb",
-            "visibleMeshesCollisionMask": 0,
-            "invisibleMeshesCollisionMask": 3
-          }
-        },
-        "594": {
-          "json": {
-            "src": "assets/scene/Models/Circle3_Low/Circle3_Low.glb",
-            "visibleMeshesCollisionMask": 0,
-            "invisibleMeshesCollisionMask": 3
-          }
-        },
-        "595": {
-          "json": {
-            "src": "assets/scene/Models/Circle3_Mid/Circle3_Mid.glb",
-            "visibleMeshesCollisionMask": 0,
-            "invisibleMeshesCollisionMask": 3
-          }
-        },
-        "596": {
-          "json": {
-            "src": "assets/scene/Models/Circle1_Off/Circle1_Off.glb",
-            "visibleMeshesCollisionMask": 0,
-            "invisibleMeshesCollisionMask": 3
-          }
-        },
-        "597": {
-          "json": {
-            "src": "assets/scene/Models/Circle2_Off/Circle2_Off.glb",
-            "visibleMeshesCollisionMask": 0,
-            "invisibleMeshesCollisionMask": 3
-          }
-        },
-        "598": {
-          "json": {
-            "src": "assets/scene/Models/Circle3_Off/Circle3_Off.glb",
-            "visibleMeshesCollisionMask": 0,
-            "invisibleMeshesCollisionMask": 3
-          }
-        },
-        "599": {
-          "json": {
-            "src": "assets/scene/Models/GroundLights_Off/GroundLights_Off.glb",
-            "visibleMeshesCollisionMask": 0,
-            "invisibleMeshesCollisionMask": 3
-          }
-        },
-        "600": {
-          "json": {
-            "src": "assets/scene/Models/lamppost_light_high/lamppost_light_high.glb",
-            "visibleMeshesCollisionMask": 0,
-            "invisibleMeshesCollisionMask": 3
-          }
-        },
-        "601": {
-          "json": {
-            "src": "assets/scene/Models/lamppost_light_low/lamppost_light_low.glb",
-            "visibleMeshesCollisionMask": 0,
-            "invisibleMeshesCollisionMask": 3
-          }
-        },
-        "602": {
-          "json": {
-            "src": "assets/scene/Models/lamppost_light_mid/lamppost_light_mid.glb",
-            "visibleMeshesCollisionMask": 0,
-            "invisibleMeshesCollisionMask": 3
-          }
-        },
-        "603": {
-          "json": {
-            "src": "assets/scene/Models/lamppost_light_high/lamppost_light_high.glb",
-            "visibleMeshesCollisionMask": 0,
-            "invisibleMeshesCollisionMask": 3
-          }
-        },
-        "604": {
-          "json": {
-            "src": "assets/scene/Models/lamppost_light_low/lamppost_light_low.glb",
-            "visibleMeshesCollisionMask": 0,
-            "invisibleMeshesCollisionMask": 3
-          }
-        },
-        "605": {
-          "json": {
-            "src": "assets/scene/Models/lamppost_light_mid/lamppost_light_mid.glb",
-            "visibleMeshesCollisionMask": 0,
-            "invisibleMeshesCollisionMask": 3
-          }
-        },
-        "606": {
-          "json": {
-            "src": "assets/scene/Models/lamppost_light_high/lamppost_light_high.glb",
-            "visibleMeshesCollisionMask": 0,
-            "invisibleMeshesCollisionMask": 3
-          }
-        },
-        "607": {
-          "json": {
-            "src": "assets/scene/Models/lamppost_light_low/lamppost_light_low.glb",
-            "visibleMeshesCollisionMask": 0,
-            "invisibleMeshesCollisionMask": 3
-          }
-        },
-        "608": {
-          "json": {
-            "src": "assets/scene/Models/lamppost_light_mid/lamppost_light_mid.glb",
-            "visibleMeshesCollisionMask": 0,
-            "invisibleMeshesCollisionMask": 3
-          }
-        },
-        "609": {
-          "json": {
-            "src": "assets/scene/Models/lamppost_light_high/lamppost_light_high.glb",
-            "visibleMeshesCollisionMask": 0,
-            "invisibleMeshesCollisionMask": 3
-          }
-        },
-        "610": {
-          "json": {
-            "src": "assets/scene/Models/lamppost_light_low/lamppost_light_low.glb",
-            "visibleMeshesCollisionMask": 0,
-            "invisibleMeshesCollisionMask": 3
-          }
-        },
-        "611": {
-          "json": {
-            "src": "assets/scene/Models/lamppost_light_mid/lamppost_light_mid.glb",
             "visibleMeshesCollisionMask": 0,
             "invisibleMeshesCollisionMask": 3
           }
@@ -5981,21 +4889,6 @@
             "value": "FairyLights_1_High.glb"
           }
         },
-        "513": {
-          "json": {
-            "value": "FairyLights_1_Low.glb"
-          }
-        },
-        "514": {
-          "json": {
-            "value": "FairyLights_1_Mid.glb"
-          }
-        },
-        "515": {
-          "json": {
-            "value": "FairyLights_2_High.glb"
-          }
-        },
         "516": {
           "json": {
             "value": "Petal"
@@ -6004,11 +4897,6 @@
         "517": {
           "json": {
             "value": "Image"
-          }
-        },
-        "518": {
-          "json": {
-            "value": "FairyLights_2_Low.glb"
           }
         },
         "519": {
@@ -6029,11 +4917,6 @@
         "523": {
           "json": {
             "value": "Plant_8"
-          }
-        },
-        "524": {
-          "json": {
-            "value": "FairyLights_2_Mid.glb"
           }
         },
         "525": {
@@ -6211,59 +5094,9 @@
             "value": "BloomResetTime_4"
           }
         },
-        "563": {
-          "json": {
-            "value": "TrellisLights_1_High.glb"
-          }
-        },
-        "574": {
-          "json": {
-            "value": "TrellisLights_1_Low.glb"
-          }
-        },
-        "575": {
-          "json": {
-            "value": "TrellisLights_1_Mid.glb"
-          }
-        },
-        "576": {
-          "json": {
-            "value": "TrellisLights_2_High.glb"
-          }
-        },
-        "577": {
-          "json": {
-            "value": "TrellisLights_2_Low.glb"
-          }
-        },
-        "578": {
-          "json": {
-            "value": "TrellisLights_2_Mid.glb"
-          }
-        },
         "579": {
           "json": {
             "value": "FairyLights"
-          }
-        },
-        "580": {
-          "json": {
-            "value": "lamppost"
-          }
-        },
-        "581": {
-          "json": {
-            "value": "lamppost_2"
-          }
-        },
-        "582": {
-          "json": {
-            "value": "lamppost_3"
-          }
-        },
-        "583": {
-          "json": {
-            "value": "lamppost_4"
           }
         },
         "584": {
@@ -6271,29 +5104,9 @@
             "value": "GroundLights_High"
           }
         },
-        "585": {
-          "json": {
-            "value": "GroundLights_Low"
-          }
-        },
-        "586": {
-          "json": {
-            "value": "GroundLights_Mid"
-          }
-        },
         "587": {
           "json": {
             "value": "Circle1_High"
-          }
-        },
-        "588": {
-          "json": {
-            "value": "Circle1_Low"
-          }
-        },
-        "589": {
-          "json": {
-            "value": "Circle1_Mid"
           }
         },
         "590": {
@@ -6301,109 +5114,9 @@
             "value": "Circle2_High"
           }
         },
-        "591": {
-          "json": {
-            "value": "Circle2_Low"
-          }
-        },
-        "592": {
-          "json": {
-            "value": "Circle2_Mid"
-          }
-        },
         "593": {
           "json": {
             "value": "Circle3_High"
-          }
-        },
-        "594": {
-          "json": {
-            "value": "Circle3_Low"
-          }
-        },
-        "595": {
-          "json": {
-            "value": "Circle3_Mid"
-          }
-        },
-        "596": {
-          "json": {
-            "value": "Circle1_Off.glb"
-          }
-        },
-        "597": {
-          "json": {
-            "value": "Circle2_Off.glb"
-          }
-        },
-        "598": {
-          "json": {
-            "value": "Circle3_Off.glb"
-          }
-        },
-        "599": {
-          "json": {
-            "value": "GroundLights_Off.glb"
-          }
-        },
-        "600": {
-          "json": {
-            "value": "lamppost_light_high"
-          }
-        },
-        "601": {
-          "json": {
-            "value": "lamppost_light_low"
-          }
-        },
-        "602": {
-          "json": {
-            "value": "lamppost_light_mid"
-          }
-        },
-        "603": {
-          "json": {
-            "value": "lamppost_light_high_2"
-          }
-        },
-        "604": {
-          "json": {
-            "value": "lamppost_light_low_2"
-          }
-        },
-        "605": {
-          "json": {
-            "value": "lamppost_light_mid_2"
-          }
-        },
-        "606": {
-          "json": {
-            "value": "lamppost_light_high_3"
-          }
-        },
-        "607": {
-          "json": {
-            "value": "lamppost_light_low_3"
-          }
-        },
-        "608": {
-          "json": {
-            "value": "lamppost_light_mid_3"
-          }
-        },
-        "609": {
-          "json": {
-            "value": "lamppost_light_high_4"
-          }
-        },
-        "610": {
-          "json": {
-            "value": "lamppost_light_low_4"
-          }
-        },
-        "611": {
-          "json": {
-            "value": "lamppost_light_mid_4"
           }
         },
         "612": {
@@ -6651,38 +5364,10 @@
                   562,
                   543,
                   579,
-                  580,
-                  581,
-                  582,
-                  583,
                   584,
-                  585,
-                  586,
                   587,
-                  588,
-                  589,
                   590,
-                  591,
-                  592,
                   593,
-                  594,
-                  595,
-                  600,
-                  601,
-                  602,
-                  603,
-                  604,
-                  605,
-                  606,
-                  607,
-                  608,
-                  609,
-                  610,
-                  611,
-                  596,
-                  597,
-                  598,
-                  599,
                   612,
                   613,
                   646,
@@ -6951,18 +5636,7 @@
               {
                 "entity": 579,
                 "children": [
-                  512,
-                  513,
-                  514,
-                  515,
-                  518,
-                  524,
-                  563,
-                  574,
-                  575,
-                  576,
-                  577,
-                  578
+                  512
                 ]
               },
               {
@@ -7198,22 +5872,10 @@
         "512": {
           "json": {}
         },
-        "513": {
-          "json": {}
-        },
-        "514": {
-          "json": {}
-        },
-        "515": {
-          "json": {}
-        },
         "516": {
           "json": {}
         },
         "517": {
-          "json": {}
-        },
-        "518": {
           "json": {}
         },
         "519": {
@@ -7226,9 +5888,6 @@
           "json": {}
         },
         "523": {
-          "json": {}
-        },
-        "524": {
           "json": {}
         },
         "525": {
@@ -7336,127 +5995,25 @@
         "562": {
           "json": {}
         },
-        "563": {
-          "json": {}
-        },
         "564": {
           "json": {}
         },
         "569": {
           "json": {}
         },
-        "574": {
-          "json": {}
-        },
-        "575": {
-          "json": {}
-        },
-        "576": {
-          "json": {}
-        },
-        "577": {
-          "json": {}
-        },
-        "578": {
-          "json": {}
-        },
         "579": {
-          "json": {}
-        },
-        "580": {
-          "json": {}
-        },
-        "581": {
-          "json": {}
-        },
-        "582": {
-          "json": {}
-        },
-        "583": {
           "json": {}
         },
         "584": {
           "json": {}
         },
-        "585": {
-          "json": {}
-        },
-        "586": {
-          "json": {}
-        },
         "587": {
-          "json": {}
-        },
-        "588": {
-          "json": {}
-        },
-        "589": {
           "json": {}
         },
         "590": {
           "json": {}
         },
-        "591": {
-          "json": {}
-        },
-        "592": {
-          "json": {}
-        },
         "593": {
-          "json": {}
-        },
-        "594": {
-          "json": {}
-        },
-        "595": {
-          "json": {}
-        },
-        "596": {
-          "json": {}
-        },
-        "597": {
-          "json": {}
-        },
-        "598": {
-          "json": {}
-        },
-        "599": {
-          "json": {}
-        },
-        "600": {
-          "json": {}
-        },
-        "601": {
-          "json": {}
-        },
-        "602": {
-          "json": {}
-        },
-        "603": {
-          "json": {}
-        },
-        "604": {
-          "json": {}
-        },
-        "605": {
-          "json": {}
-        },
-        "606": {
-          "json": {}
-        },
-        "607": {
-          "json": {}
-        },
-        "608": {
-          "json": {}
-        },
-        "609": {
-          "json": {}
-        },
-        "610": {
-          "json": {}
-        },
-        "611": {
           "json": {}
         },
         "612": {

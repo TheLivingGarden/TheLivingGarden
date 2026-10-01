@@ -25,13 +25,13 @@ import {
   RARITY_TIERS, PLANT_SPECIES, PlantSpecies, rarityTierById, plantSpeciesById, bespokePool, stampTotal, withArticle,
 } from './shared/config'
 import { PROP_LAYOUT } from './shared/layout'
-import { getDiscovered, getFlowers, holdFlower, stampsFound, gardenersHere } from './playerInventory'
+import { getDiscovered, getFlowers, getHeld, holdFlower, stampsFound, gardenersHere } from './playerInventory'
 import { groupFlowers, Group, openSeedMenuFlowers } from './seedMenu'
 import { showToast } from './notifications'
 import { playSfx } from './sounds'
 import { registerStreamedTree } from './streaming'
 import {
-  box, label, setScale, tapArea, setHover, buildShelfFrame, ZERO, LEDGE_LO, LEDGE_HI,
+  box, label, setScale, tapArea, setHover, ZERO, LEDGE_LO, LEDGE_HI,
   WOOD_D, PLATE, CREAM, GOLD, FONT_SIGN, REFRESH_MS, TOAST_MS,
 } from './pouchRack'
 
@@ -56,7 +56,7 @@ const F_PAGE    = 8
 const F_MODEL_K = 0.8   // species models are normalised to ~0.55 m; ×0.8 ≈ 0.44 m on the shelf
 
 interface FSlot {
-  model: Entity; glow: Entity; name: Entity; sub: Entity; tap: Entity
+  model: Entity; glow: Entity; plate: Entity; name: Entity; sub: Entity; tap: Entity
   src: string; tier: number
 }
 let fSlots: FSlot[] = []
@@ -102,7 +102,7 @@ function setupFlowerShelf(): void {
   registerStreamedTree('flowerShelf', root)   // hidden while you are across the garden (streaming.ts)
 
   const w = F_PER_ROW * F_PITCH + 0.3
-  buildShelfFrame(root, w)
+  // (No cabinet geometry: the shelf is modelled in Blender now — KJ 2026-09-30. Items, labels and tabs stay.)
   fTitle = label(root, { x: 0, y: 3.1, z: 0.22 }, 'MY FLOWERS', FONT_SIGN, GOLD, w * 0.6, 0.5)
   fSubtitle = label(root, { x: 0, y: 2.8, z: 0.22 }, '', 0.75, CREAM, w * 0.8, 0.25)
   tapArea(root, { x: 0, y: 3.0, z: 0.2 }, { x: w * 0.5, y: 0.7, z: 0.1 }, 'Open all your flowers', () => openSeedMenuFlowers())
@@ -147,14 +147,19 @@ function setupFlowerShelf(): void {
     const model = engine.addEntity()
     Transform.create(model, { parent: root, position: { x, y: L, z: 0 }, scale: ZERO })
     GltfContainer.create(model, { src: PLANT_SPECIES[0].modelSrc, visibleMeshesCollisionMask: ColliderLayer.CL_NONE, invisibleMeshesCollisionMask: ColliderLayer.CL_NONE })
-    // Names may wrap to two lines ("Three-Spike Grass"), so the name sits high on its plate and the rarity low
-    const nameY = row === 0 ? 0.6 : 1.87
-    const subY  = row === 0 ? 0.2 : 1.5
+    // A light, UNLIT backdrop behind each plant so it pops off the dark wood (KJ 2026-09-30): same colour as the Collection wall, sized to the slot.
+    const plate = engine.addEntity()
+    Transform.create(plate, { parent: root, position: { x, y: L + 0.42, z: 0.12 }, scale: ZERO })
+    MeshRenderer.setBox(plate)
+    Material.setBasicMaterial(plate, { diffuseColor: Color4.create(0.82, 0.76, 0.64, 1) })
+    // Name and rarity on separate lines, now close together (was 0.4 m apart to leave room for a wrapped two-line name).
+    const nameY = row === 0 ? 0.5 : 1.8
+    const subY  = row === 0 ? 0.3 : 1.6
     const plateZ = row === 0 ? -0.29 : -0.28
-    const name = label(root, { x, y: nameY, z: plateZ }, '', 0.72, CREAM, F_PITCH, 0.34)
-    const sub  = label(root, { x, y: subY, z: plateZ }, '', 0.62, CREAM, F_PITCH, 0.2)
+    const name = label(root, { x, y: nameY, z: plateZ }, '', 0.72, CREAM, F_PITCH, 0.26)
+    const sub  = label(root, { x, y: subY, z: plateZ }, '', 0.62, CREAM, F_PITCH, 0.16)
     const tap  = tapArea(root, { x, y: L + 0.3, z: 0 }, { x: F_PITCH * 0.92, y: 0.7, z: 0.5 }, '', () => holdSlot(i))
-    fSlots.push({ model, glow, name, sub, tap, src: '', tier: -1 })
+    fSlots.push({ model, glow, plate, name, sub, tap, src: '', tier: -1 })
   }
 }
 
@@ -204,6 +209,9 @@ function turnFlowerPage(dir: number): void {
 function holdSlot(i: number): void {
   const g = fGroups[fPage * F_PAGE + i]
   if (!g) { showToast('Grow a flower in a planter and it appears here', TOAST_MS, false); return }
+  // A click TOGGLES (KJ 2026-09-30): pick it up — into my hand and onto the examination table — or, if it is the one already held, put it back.
+  const held = getHeld()
+  if (held && held.flower === g.flower && held.rarityTier === g.rarityTier) { holdFlower(-1); playSfx('tutorialTap'); return }
   holdFlower(g.lastIndex)
   playSfx('seedCatch')   // (Notification pass 2026-09-27: no "Holding your …" toast — it is in your hand)
 }
@@ -228,7 +236,7 @@ function refreshFlowerShelf(): void {
     const g = fGroups[fPage * F_PAGE + i]
     const sp = g ? plantSpeciesById(g.flower) : null
     if (!g || !sp) {
-      setScale(s.model, ZERO); setScale(s.glow, ZERO)
+      setScale(s.model, ZERO); setScale(s.glow, ZERO); setScale(s.plate, ZERO)
       TextShape.getMutable(s.name).text = ''; TextShape.getMutable(s.sub).text = ''
       setHover(s.tap, 'Empty')
       continue
@@ -247,10 +255,11 @@ function refreshFlowerShelf(): void {
       s.tier = g.rarityTier
     }
     setScale(s.glow, { x: 0.72, y: 0.01, z: 0.72 })
+    setScale(s.plate, { x: F_PITCH * 0.9, y: 0.85, z: 0.02 })
     TextShape.getMutable(s.name).text = sp.name
     TextShape.getMutable(s.sub).text = `${t.name}${g.count > 1 ? `  x${g.count}` : ''}`
     TextShape.getMutable(s.sub).textColor = c
-    setHover(s.tap, `Hold your ${sp.name}${g.count > 1 ? ` (${g.count})` : ''}`)
+    setHover(s.tap, sp.name)   // just the name: a click toggles it in your hand / on the table
   }
 }
 

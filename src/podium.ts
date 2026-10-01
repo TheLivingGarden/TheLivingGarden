@@ -46,13 +46,11 @@ interface Slot {
   shownAddress: string; sig: string
 }
 
-// "TOP GARDENERS" display (KJ 2026-09-29: the all-time LIST moved to the side-by-side boards on the far
-// wall; the podium keeps the people). A title on the stand's dark screen, and over each avatar a big
+// Podium captions (KJ 2026-09-29: the all-time LIST moved to the side-by-side boards on the far
+// wall; the podium keeps the people; the "TOP GARDENERS" title was removed 2026-09-30). Over each avatar a big
 // rank with their all-time waters underneath, on the panel behind them (Cube.001, face z -7.51). The
 // captions sit in the clear band between the canopy's underside (y 5.74) and the avatars' nametags
 // (about y 3.9), read from the garden side (+Z) so they turn 180. Both follow the paged entries.
-const TITLE_TEXT   = 'TOP GARDENERS'
-const TITLE_AT     = { x: 16.0, y: 7.45, z: -5.37 }   // on StandTop's screen (world y 7.0-8.7), garden face z -5.45
 const CAP_Z        = -7.35
 const CAP_RANK_Y   = 5.2
 const CAP_WATERS_Y = 4.6
@@ -189,9 +187,6 @@ function build(): void {
     }
     slots.push({ avatar, rank: caption(CAP_RANK_Y, '', 3.2, CAP_GOLD), waters: caption(CAP_WATERS_Y, '', 1.7, CAP_GREEN), shownAddress: '', sig: '' })
   }
-  const title = engine.addEntity()
-  Transform.create(title, { position: TITLE_AT, rotation: Quaternion.fromEulerDegrees(0, 180, 0) })
-  TextShape.create(title, { text: TITLE_TEXT, fontSize: 3.2, textColor: CAP_GOLD, textAlign: TextAlignMode.TAM_MIDDLE_CENTER })
   makePageButton(-1)
   makePageButton(1)
   // Print every slot's WORLD position: the stand sits under a parent rotated -90° on Y,
@@ -254,7 +249,7 @@ const WAVE_SCAN_S    = 0.5
 // Lazy avatars (KJ 2026-09-30): four full skinned avatars plus their wearable downloads and catalyst lookups are only worth it when
 // someone is standing near the podium. Built inside NEAR_IN_M, removed beyond NEAR_OUT_M.
 const NEAR_IN_M  = 26
-const NEAR_OUT_M = 34
+const NEAR_OUT_M = 70   // wide on purpose: building four avatars is the costly part, so once built they stay while you roam the garden
 let near = false
 let waveScanIn = 0
 const lastWaveAt = new Map<Entity, number>()

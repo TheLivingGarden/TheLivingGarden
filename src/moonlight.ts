@@ -21,13 +21,14 @@ import {
 } from '@dcl/sdk/ecs'
 import { isMobile } from '@dcl/sdk/platform'
 import { GARDEN_BOUNDS, BLOOM_CENTER, SPARKLE_SRC, GOLDEN_HOUR_S } from './shared/config'
+import { fx } from './perfTier'
 
 const NIGHT_TIME_S   = 0        // seconds since 00:00 — midnight
-const WISP_COUNT     = 28       // TUNING — pooled, billboard planes
+const WISP_COUNT     = () => fx(10, 6)   // TUNING — pooled, billboard planes (KJ 2026-10-01: fewer and bigger; was 28 at 0.22-0.55)
 const WISP_Y_MIN     = 0.2
 const WISP_Y_MAX     = 6.5
-const WISP_SIZE_MIN  = 0.22
-const WISP_SIZE_MAX  = 0.55
+const WISP_SIZE_MIN  = 0.36
+const WISP_SIZE_MAX  = 0.88
 const WISP_RAMP_S    = 6        // wisps swell in over the nightfall, not all at once
 const SYSTEM_NAME    = 'moonlight-wisps'
 
@@ -57,6 +58,10 @@ const GLOW_MOBILE_MULT = 1.45
 // intensity further for desktop, where KJ still found it weak even at High quality.
 // NOTE FOR KJ: dynamic lights are capped per graphics-quality preset and fully OFF at
 // Very Low — a client setting, not something the scene can override.
+// OFF (KJ 2026-10-01: a Moonlit bloom cost ~10 fps at the start and never fully recovered). A real point light of this reach is lit-pixel work for every
+// lit surface in ~20 m — here that is the plaza's plants and 96 planters — on top of the sky change. The glow sprite carries the effect on
+// its own (as it already does on a phone), so on desktop it now runs at the phone's size. Set true to bring the real light back.
+const MOONLIGHT_REAL_LIGHT = false
 const LIGHT_Y         = BLOOM_CENTER.y + 3.5
 const LIGHT_COLOR     = { r: 0.55, g: 0.72, b: 1.0 }
 const LIGHT_INTENSITY = 260_000
@@ -120,7 +125,7 @@ function respawn(w: Wisp, y: number): void {
 }
 
 function createWisps(): void {
-  for (let i = 0; i < WISP_COUNT; i++) {
+  for (let i = 0; i < WISP_COUNT(); i++) {
     const entity = engine.addEntity()
     Transform.create(entity, { position: { x: 0, y: -100, z: 0 }, scale: { x: 0, y: 0, z: 0 } })
     MeshRenderer.setPlane(entity)
@@ -148,7 +153,7 @@ function wispSystem(dt: number): void {
   if (glowEntity !== null) {
     glowT += dt
     const breathe = (Math.sin((glowT / GLOW_BREATHE_S) * Math.PI * 2) + 1) / 2   // 0..1
-    const mult = isMobile() ? GLOW_MOBILE_MULT : 1
+    const mult = (isMobile() || !MOONLIGHT_REAL_LIGHT) ? GLOW_MOBILE_MULT : 1   // no real light: the sprite carries the whole effect, so it runs big
     const k = (GLOW_SIZE_MIN + breathe * (GLOW_SIZE_MAX - GLOW_SIZE_MIN)) * ramp * mult
     Transform.getMutable(glowEntity).scale = { x: k, y: k, z: k }
   }
@@ -182,7 +187,7 @@ export function startMoonlight(): void {
   setBillboards(true)
   // Desktop (Unity) only — the real point light triggers a known godot-explorer
   // artifact on mobile (flicker); mobile relies on the boosted glow sprite instead.
-  if (!isMobile()) {
+  if (MOONLIGHT_REAL_LIGHT && !isMobile()) {
     if (lightEntity === null) createLight()
     if (lightEntity !== null) LightSource.getMutable(lightEntity).active = true
   }

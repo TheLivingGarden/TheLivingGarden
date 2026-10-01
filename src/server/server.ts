@@ -542,21 +542,46 @@ function standingIn(board: Map<string, LeaderboardEntry>, address: string): { ra
   return { rank: ahead + 1, count: mine.total }
 }
 
+// Broadcast throttle (KJ 2026-10-01): this ran on EVERY water — the full two-board JSON to everyone plus a per-player standing message to each
+// connected player, so a busy garden sent players x waters messages for boards that mostly had not changed. A broadcast now goes out at most
+// once per BOARD_BROADCAST_MIN_MS (further calls inside the window collapse into one trailing send), only when the boards actually changed,
+// and each player's standing only when THEIR standing changed. Targeted sends (a join) are untouched and always go.
+const BOARD_BROADCAST_MIN_MS = 1_000
+let lastBoardBroadcastAt = 0
+let boardBroadcastTimer: ReturnType<typeof timers.setTimeout> | null = null
+let lastBoardFingerprint = ''
+const lastStandingSent = new Map<string, string>()   // lowercase address → standing last sent
+
 function broadcastLeaderboard(to?: string[]): void {
+  if (!to) {
+    const wait = BOARD_BROADCAST_MIN_MS - (Date.now() - lastBoardBroadcastAt)
+    if (wait > 0) {
+      if (boardBroadcastTimer === null) boardBroadcastTimer = timers.setTimeout(() => { boardBroadcastTimer = null; broadcastLeaderboard() }, wait)
+      return
+    }
+    lastBoardBroadcastAt = Date.now()
+  }
   ensureWeeklyReset()
   const payload = { entriesJson: boardJson(leaderboard), allTimeJson: boardJson(lifetime), weeklyResetAt }
   if (to) {
     // Targeted send — used on player join to push current state to one client
     room.send('leaderboardUpdate', payload, { to })
   } else {
-    // Broadcast — reaches all connected clients including the triggering player
-    room.send('leaderboardUpdate', payload)
+    const fingerprint = `${payload.entriesJson}|${payload.allTimeJson}|${weeklyResetAt}`
+    if (fingerprint !== lastBoardFingerprint) {
+      lastBoardFingerprint = fingerprint
+      // Broadcast — reaches all connected clients including the triggering player
+      room.send('leaderboardUpdate', payload)
+    }
   }
   // Each recipient also gets their OWN standing — one small per-player message rather than
   // a per-player board, since the board itself is identical for everyone.
   for (const address of to ?? [...new Set(playerAddresses.values())]) {
     const w = standingIn(leaderboard, address)
     const a = standingIn(lifetime, address)
+    const key = `${w.rank}:${w.count}:${a.rank}:${a.count}`
+    if (!to && lastStandingSent.get(address.toLowerCase()) === key) continue   // unchanged for this player
+    lastStandingSent.set(address.toLowerCase(), key)
     room.send('yourStanding', { weeklyRank: w.rank, weeklyCount: w.count, allTimeRank: a.rank, allTimeCount: a.count }, { to: [address] })
   }
 }
@@ -961,7 +986,7 @@ const savePouch = (a: string) => savePlayerJson(a, 'seeds')
 
 function sendPouch(address: string): void {
   const p = playerRecords.get(recordKey(address, 'seeds'))?.value as SeedPouch | undefined
-  if (p) room.send('pouchUpdate', { countsJson: JSON.stringify(p) }, { to: [address] })
+  if (p) { room.send('pouchUpdate', { countsJson: JSON.stringify(p) }, { to: [address] }); console.log(`[Server] pouch -> ${address.slice(0, 8)}… ${JSON.stringify(p)}`) }
   else console.error(`[Server] sendPouch: no live pouch for ${address} — call loadPouch first`)
   refreshHandSeed(address)   // the rarest seed they hold may have changed
 }
@@ -1243,6 +1268,7 @@ async function sendCollection(address: string): Promise<void> {
   // In CHUNKS, each with the cap (shared/collection.ts): one 14 KB message was silently dropped for a 136-flower collector and the client
   // fell back to a planter cap of 1. Provenance stays server-side; the client reads flower / tier / at / from.
   const slim = flowers.map(slimKeepsake)
+  console.log(`[Server] collection -> ${address.slice(0, 8)}… ${slim.length} flower(s), box cap ${cap}`)
   for (const c of chunkCollection(slim)) {
     const json = JSON.stringify(c.items)
     if (json.length > MAX_SAFE_MESSAGE_BYTES) console.error(`[Server] collectionUpdate chunk is ${json.length} bytes for ${address.slice(0, 8)}… — over the safe limit`)
@@ -1847,6 +1873,7 @@ function playerJoinSystem(): void {
         lastWaterAt.delete(address.toLowerCase())
         lastTendAt.delete(address.toLowerCase())
         waterStreak.delete(address.toLowerCase())
+        lastStandingSent.delete(address.toLowerCase())
         console.log(`[Server] Player disconnected: ${address}`)
       }
     }
