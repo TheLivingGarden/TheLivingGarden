@@ -2240,7 +2240,7 @@ export async function server(): Promise<void> {
       if (!verdict.ok) {
         sendNotice(playerAddress, verdict.reason === 'plot_taken'
           ? (verdict.full ? 'The garden is full right now - every plot is taken. Try again soon' : `That is ${verdict.ownerName}'s plot - plant in a bed of your own`)
-          : `You have a bed with room - plant in Bed ${verdict.bed} first`)
+          : 'Your plot has room - plant in the planter marked "Plant here" first')
         sendBox(b, [playerAddress])
         return
       }

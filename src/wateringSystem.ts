@@ -154,9 +154,9 @@ const SND_WATERING = 'assets/scene/Sounds/watering.mp3'
 const SND_MAGIC    = 'assets/scene/Sounds/MagicFX_short.wav'
 const SND_WILT     = 'assets/scene/Sounds/PlantWiltSound.mp3'
 const VOL_HOVER    = 0.7
-const VOL_CLICK    = 0.9
-const VOL_WATERING = 0.7
-const VOL_MAGIC    = 0.9
+const VOL_CLICK    = 0.4   // KJ 2026-10-02: the release click was too loud (was 0.9)
+const VOL_WATERING = 0.45   // KJ 2026-10-02: was 0.7 — overshadowed the music
+const VOL_MAGIC    = 0.55   // was 0.9
 const VOL_WILT     = 0.8
 const SND_INIT_POS = { x: 8, y: 1, z: 8 }   // initial transform — overwritten on play
 

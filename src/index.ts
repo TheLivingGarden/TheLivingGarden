@@ -14,6 +14,7 @@ import { setupGalleryThreads } from './galleryThreads'
 import { setupWaterStreakBadges } from './waterStreakBadgeSystem'
 import { setGoldenHour } from './moonlight'
 import { installSystemProfiler } from './hitchHud'
+import { installSystemTap } from './systemTap'
 
 // Importing shared schemas + messages here ensures registerMessages()
 // and defineComponent() run on BOTH server and client before any
@@ -22,7 +23,7 @@ import './shared/schemas'
 import './shared/messages'
 
 export async function main() {
-  if (!isServer()) installSystemProfiler()   // must run before any engine.addSystem (it wraps them)
+  if (!isServer()) { installSystemTap(); installSystemProfiler() }   // must run before any engine.addSystem (they wrap them)
   if (isServer()) {
     const { server } = await import('./server/server')
     await server()

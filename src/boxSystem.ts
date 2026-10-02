@@ -59,6 +59,7 @@ import { setupGiftSystem } from './giftSystem'
 import { showDiscovery } from './discoveryCard'
 import { registerStreamSource } from './streaming'
 import { triggerSparkle } from './sparkleSystem'
+import { openSeedMenuForPlanter } from './seedMenu'
 import { setPouch, getBoxCap, isBoxCapKnown, nextSeedTier } from './playerInventory'
 import { createSign, moveSign, setupSignSystem, Sign } from './signs'
 import { playSfx } from './sounds'
@@ -276,7 +277,7 @@ function myBoxCount(): number { let n = 0; for (const v of views.values()) if (i
 
 function flowerName(v: BoxView): string { return plantSpeciesById(v.flower)?.name ?? v.flower }
 
-/** Board text. The countdown lives on the balloon (balloonTextFor), so this only changes on events. */
+/** Board text. The grow timer is on the bed sign (bedTimerLine); the balloon is only for ready planters. */
 /** Short lines only, so the big font fits on the planter's front: the OWNER is on the bed sign, so it is left out unless this planter sits in someone else's bed. */
 function labelFor(v: BoxView): string {
   if (!v.owner) {
@@ -289,6 +290,25 @@ function labelFor(v: BoxView): string {
   if (v.opened) return `${spill}${flowerName(v)}${v.rarityTier > 0 ? `\n${tierName}` : ''}`
   const watered = v.waters > 0 ? `\nwatered x${v.waters}` : ''
   return `${spill}${v.rarityTier > 0 ? `${tierName} ` : ''}seed${watered}`
+}
+
+/** Minutes → "2h 05m" / "12m" (the bed sign's timer line; minute resolution, so the sign text changes once a minute). */
+function fmtMins(mins: number): string {
+  if (mins <= 0) return 'opening…'
+  return mins >= 60 ? `${Math.floor(mins / 60)}h ${String(mins % 60).padStart(2, '0')}m` : `${mins}m`
+}
+
+/** The bed sign's third line (KJ 2026-10-02: the timer belongs on the sign by the name, not on the planter's board where it can't be read). */
+function bedTimerLine(bed: Bed, now: number): string {
+  let ready = 0, soonest = Infinity
+  for (const id of bed.boxIds) {
+    const v = views.get(id)
+    if (!v || !v.owner) continue
+    if (v.opened) ready++
+    else soonest = Math.min(soonest, Math.ceil(Math.max(0, v.opensLocalAt - now) / 60_000))
+  }
+  if (soonest === Infinity) return ready > 0 ? 'ready to harvest' : ''
+  return ready > 0 ? `${ready} ready · next ${fmtMins(soonest)}` : `ready in ${fmtMins(soonest)}`
 }
 
 function countdown(v: BoxView, now: number): string {
@@ -380,7 +400,7 @@ function setPlantVisual(v: BoxView, pos: PlanterPos): void {
  *  the tick at ~13 fps, so only the nearest 8 were allowed to move and the rest sagged low under text
  *  that stayed up high. Static = every balloon at the right height, zero per-frame cost. */
 function setBalloonVisual(v: BoxView, pos: PlanterPos): void {
-  if (!v.owner) { if (v.balloon !== null) hideBalloon(v); return }
+  if (!v.owner || !v.opened) { if (v.balloon !== null) hideBalloon(v); return }   // a balloon means READY; the grow timer is on the board (labelFor)
   if (v.balloon === null) createBalloon(v, pos)
   const tr = Transform.getMutable(v.balloon!)
   const k = v.animSlot >= 0 ? 0 : BOX_MODEL_SCALE   // an animated balloon is standing in — keep the static one hidden
@@ -550,7 +570,7 @@ function tryPlant(v: BoxView): void {
     if (!verdict.ok) {
       showToast(verdict.reason === 'plot_taken'
         ? (verdict.full ? 'The garden is full right now - every plot is taken. Try again soon' : `That is ${verdict.ownerName}'s plot - plant in a bed of your own`)
-        : `You have a bed with room - plant in Bed ${verdict.bed} first`, TOAST_MS, false)
+        : 'Your plot has room - plant in the planter marked "Plant here" first', TOAST_MS, false)
       return
     }
   }
@@ -563,6 +583,16 @@ function tryPlant(v: BoxView): void {
     showToast('No seeds yet — catch some from a bloom', TOAST_MS, false)
     return
   }
+  // More than one kind of seed in the pouch: the tap opens the seed menu so the player picks which one (KJ 2026-10-02). One kind plants straight away.
+  if (!adminUnlimited && pouch.filter(n => n > 0).length > 1) {
+    openSeedMenuForPlanter(v.boxId, t => sendPlant(v, t))
+    return
+  }
+  sendPlant(v, tier)
+}
+
+function sendPlant(v: BoxView, tier: number): void {
+  if (v.owner) return   // taken while the menu was open
   console.log(`[Boxes] planting tier-${tier} seed in ${v.boxId}`)
   room.send('plantSeed', { boxId: v.boxId, rarityTier: tier })
 }
@@ -810,7 +840,7 @@ function createBedSigns(): void {
     // depth order from the back: panel, avatar (a plain SQUARE — the explorer ignores a separate mask on it), the
     // brown frame with a circular hole that crops it, then the tinted ring as the outline.
     const panel = engine.addEntity()
-    Transform.create(panel, { parent: root, position: { x: 0, y: 0, z: 0.02 }, scale: { x: 4.3, y: 1.3, z: 1 } })
+    Transform.create(panel, { parent: root, position: { x: 0, y: 0, z: 0.08 }, scale: { x: 4.3, y: 1.6, z: 1 } })
     MeshRenderer.setPlane(panel)
     Material.setPbrMaterial(panel, {
       texture: Material.Texture.Common({ src: PANEL_TEX }), alphaTexture: Material.Texture.Common({ src: PANEL_TEX }),
@@ -821,7 +851,7 @@ function createBedSigns(): void {
     Transform.create(face, { parent: root, position: { x: -1.55, y: 0, z: 0.0 }, scale: { x: 0, y: 0, z: 0 } })
     MeshRenderer.setPlane(face)
     const frame = engine.addEntity()
-    Transform.create(frame, { parent: root, position: { x: -1.55, y: 0, z: -0.006 }, scale: { x: 1.15, y: 1.15, z: 1.15 } })
+    Transform.create(frame, { parent: root, position: { x: -1.55, y: 0, z: -0.05 }, scale: { x: 1.15, y: 1.15, z: 1.15 } })
     MeshRenderer.setPlane(frame)
     Material.setPbrMaterial(frame, {
       texture: Material.Texture.Common({ src: CIRCLE_FRAME }), alphaTexture: Material.Texture.Common({ src: CIRCLE_FRAME }),
@@ -829,15 +859,15 @@ function createBedSigns(): void {
       transparencyMode: MaterialTransparencyMode.MTM_ALPHA_BLEND, castShadows: false,
     })
     const ring = engine.addEntity()
-    Transform.create(ring, { parent: root, position: { x: -1.55, y: 0, z: -0.012 }, scale: { x: 1.15, y: 1.15, z: 1.15 } })
+    Transform.create(ring, { parent: root, position: { x: -1.55, y: 0, z: -0.10 }, scale: { x: 1.15, y: 1.15, z: 1.15 } })
     MeshRenderer.setPlane(ring)
     const text = engine.addEntity()
     // A TextShape's position is the CENTRE of its box, not its left edge: the box spans x -0.6 .. 2.0: a 0.4 m gap after the picture's ring.
     // Font units are small: fontSize 1.15 came out ~0.06 m per character, so 3.4 makes "KJwalker3D's" ~2.4 m wide.
-    Transform.create(text, { parent: root, position: { x: 0.7, y: 0, z: -0.01 } })
+    Transform.create(text, { parent: root, position: { x: 0.7, y: 0, z: -0.12 } })
     TextShape.create(text, {
-      text: '', fontSize: 3.0, textColor: BED_TEXT_FREE, textAlign: TextAlignMode.TAM_MIDDLE_LEFT,
-      width: 2.6, height: 1.2, textWrapping: true, outlineWidth: 0.12, outlineColor: { r: 0.1, g: 0.06, b: 0.03 },
+      text: '', fontSize: 2.5, textColor: BED_TEXT_FREE, textAlign: TextAlignMode.TAM_MIDDLE_LEFT,
+      width: 2.6, height: 1.5, textWrapping: true, outlineWidth: 0.12, outlineColor: { r: 0.1, g: 0.06, b: 0.03 },
     })
     bedSigns.push({ bed, root, text, face, ring, text_: '', faceOwner: '\u0000', near: false })
   }
@@ -854,6 +884,7 @@ function setBedRing(ring: Entity, c: { r: number; g: number; b: number }): void 
 
 function updateBeds(): void {
   const me = localId()
+  updatePlantHere(me)
   const pos = Transform.getOrNull(engine.PlayerEntity)?.position
   for (const bs of bedSigns) {
     const owner = bedOwner(bs.bed, bedInfo)
@@ -861,7 +892,8 @@ function updateBeds(): void {
     // "Name's plot" for everyone, including me (KJ 2026-09-25: my name, not "Your plot")
     // …and how many of its planters are still free (KJ 2026-09-29: show what the bed has left to use)
     const freeN = bs.bed.boxIds.filter(id => { const v = views.get(id); return !v || !v.owner }).length
-    const text = owner ? `${owner.ownerName}'s\nplot · ${freeN === 0 ? 'full' : `${freeN} free`}` : 'Free plot'
+    const timer = owner ? bedTimerLine(bs.bed, Date.now()) : ''
+    const text = owner ? `${owner.ownerName}'s\nplot · ${freeN === 0 ? 'full' : `${freeN} free`}${timer ? `\n${timer}` : ''}` : 'Free plot'
     if (text !== bs.text_) {
       bs.text_ = text
       const ts = TextShape.getMutable(bs.text)
@@ -888,10 +920,42 @@ function updateBeds(): void {
       const v = views.get(id)
       if (!v || v.owner) continue
       const verdict = checkPlant(beds, bedInfo, me, id)
-      setHoverText(v, verdict.ok ? 'Plant seed' : verdict.reason === 'plot_taken' ? (verdict.full ? 'Garden full' : `${verdict.ownerName}'s plot`) : `Plant in Bed ${verdict.bed}`)
+      setHoverText(v, verdict.ok ? (v.boxId === plantHereBox ? 'Plant here' : 'Plant seed') : verdict.reason === 'plot_taken' ? (verdict.full ? 'Garden full' : `${verdict.ownerName}'s plot`) : 'Fill your own plot first')
     }
   }
 }
+// "Plant here" marker (KJ 2026-10-02 playtest: "error message isn't clear about the bed or where to put the seed"). Beds carry no visible number, so
+// "plant in Bed 1" meant nothing. Your plot is a PAIR: once one planter is yours, the other must be filled before you start a new plot, so that
+// free planter wears a floating "Plant here" while you hold seeds. One entity, moved.
+const PLANT_HERE_LIFT = 1.15
+const PLANT_HERE_RANGE = 25   // m — the marker only shows when you are near enough to act on it
+let plantHere: Entity | null = null
+let plantHereBox = ''   // the planter wearing the marker, '' = none
+function updatePlantHere(me: string): void {
+  let box = ''
+  if (me && pouch.some(n => n > 0) && !(isBoxCapKnown() && myBoxCount() >= getBoxCap())) {
+    for (const bs of bedSigns) {
+      if (bedOwner(bs.bed, bedInfo)?.owner !== me) continue
+      const free = bs.bed.boxIds.find(id => { const v = views.get(id); return v && !v.owner && !deleted.has(id) && layout.has(id) })
+      const pos = free ? layout.get(free) : undefined
+      const mePos = Transform.getOrNull(engine.PlayerEntity)?.position
+      if (free && pos && mePos && Math.hypot(pos.x - mePos.x, pos.z - mePos.z) <= PLANT_HERE_RANGE) { box = free; break }
+    }
+  }
+  if (box === plantHereBox) return
+  plantHereBox = box
+  if (box === '') { if (plantHere !== null) Transform.getMutable(plantHere).scale = { x: 0, y: 0, z: 0 }; return }
+  const pos = layout.get(box)!
+  const at = { x: pos.x, y: BOX_MODEL_RIM_Y + PLANT_HERE_LIFT, z: pos.z }
+  if (plantHere === null) {
+    plantHere = engine.addEntity()
+    Transform.create(plantHere, { position: at })
+    Billboard.create(plantHere, { billboardMode: BillboardMode.BM_Y })
+    TextShape.create(plantHere, { text: 'Plant here', fontSize: 2.4, textColor: BED_TEXT_MINE, outlineWidth: 0.2, outlineColor: { r: 0.1, g: 0.06, b: 0.03 } })
+  }
+  Transform.createOrReplace(plantHere, { position: at, scale: { x: 1, y: 1, z: 1 } })
+}
+
 function setHoverText(v: BoxView, text: string): void {
   const pe = PointerEvents.getMutableOrNull(v.hit)?.pointerEvents[0]?.eventInfo
   if (pe && pe.hoverText !== text) pe.hoverText = text
@@ -1069,7 +1133,7 @@ function balloonPoolSystem(dt: number): void {
   const me = Transform.getOrNull(engine.PlayerEntity)?.position
   if (!me) return
   const near = [...views.values()]
-    .filter(v => v.owner && v.balloon !== null)
+    .filter(v => v.owner && v.opened && v.balloon !== null)
     .map(v => { const p = layout.get(v.boxId); return { v, p, d: p ? Math.hypot(p.x - me.x, p.z - me.z) : Infinity } })
     .filter(r => r.d <= BALLOON_ANIM_M)
     .sort((a, b) => a.d - b.d)

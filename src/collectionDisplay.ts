@@ -275,11 +275,18 @@ const GRID_W = COLS * TP
 const GRID_H = ROWS * TP
 const GRID_BOTTOM = 0.5
 const GRID_TOP = GRID_BOTTOM + GRID_H
-// Eight rarity tabs in TWO rows of four, so a label can be ~20 cm tall (the first pass had one row of eight at
-// ~10 cm, unreadable from spawn — KJ 2026-09-25 "too small and hard to read").
-const TAB_COLS = 4
-const TAB_W = GRID_W / TAB_COLS
-const TAB_H = 0.8
+// Eight rarity tabs in a vertical RAIL down the left of the grid (KJ 2026-10-02: the two rows of four sat high on the wall and were hard to hit;
+// a column of wide, row-shaped targets is easier to click and reads as navigation). The rail spans the grid's height, so the wall is
+// ~1.9 m shorter than with the tab rows on top, and ~2 m wider.
+const WALL_SCALE = 0.85   // KJ 2026-10-02: "a bit smaller overall" — the whole wall (tabs, tiles, text, tap areas) scales about its base
+const RAIL_W = 2.0
+const PANEL_W = GRID_W + 0.6 + RAIL_W
+const GRID_CX = RAIL_W / 2                 // the grid is centred right of the wall's middle
+const TAB_X = -PANEL_W / 2 + RAIL_W / 2    // the rail's centre line
+const TAB_W = RAIL_W - 0.3
+const TAB_PITCH = GRID_H / N
+const TAB_H = TAB_PITCH - 0.07
+const tabY = (i: number): number => GRID_TOP - TAB_PITCH * (i + 0.5)
 
 interface Tile { e: Entity; found: boolean; speciesId: string }
 interface Tab  { bg: Entity; name: Entity; count: Entity; tier: number }
@@ -288,6 +295,8 @@ let tabs: Tab[] = []
 let selTier = 0
 let aSig = ''
 let aTotal: Entity
+let aView: Entity        // "Showing Epic" under the stamp total
+let tabFrame: Entity     // gold frame behind the selected rarity tab (one entity, moved)
 
 function tileList(tier: number): ReadonlyArray<PlantSpecies> {
   const pool = bespokePool(tier)
@@ -298,13 +307,12 @@ function setupAlmanacWall(): void {
   const o = PROP_LAYOUT['AlmanacWall']
   const pos = o ? { x: o.x, y: o.y, z: o.z } : WALL_POS
   const root = engine.addEntity()
-  Transform.create(root, { position: pos, rotation: Quaternion.fromEulerDegrees(0, o?.rotY ?? YAW, 0) })
+  Transform.create(root, { position: pos, rotation: Quaternion.fromEulerDegrees(0, o?.rotY ?? YAW, 0), scale: { x: WALL_SCALE, y: WALL_SCALE, z: WALL_SCALE } })
   Name.create(root, { value: 'AlmanacWall' })
   registerStreamedTree('collectionWall', root)   // 76 textured tiles: hidden while you are across the garden (streaming.ts)
 
-  const panelW = GRID_W + 0.6
-  const tabsTop = GRID_TOP + 0.15 + 2 * (TAB_H + 0.08)
-  const panelTop = tabsTop + 1.3
+  const panelW = PANEL_W
+  const panelTop = GRID_TOP + 1.45   // title bar (1.2) + a 0.25 margin above the grid
   // The wall backdrop is UNLIT and one fixed colour (KJ 2026-09-30): lit, it went mauve at golden hour and near-black under the
   // night sky, so the (transparent) plant thumbnails sat on a different colour depending on the time of day.
   const wall = engine.addEntity()
@@ -313,22 +321,25 @@ function setupAlmanacWall(): void {
   Material.setBasicMaterial(wall, { diffuseColor: Color4.create(0.82, 0.76, 0.64, 1) })
   ;[-1, 1].forEach(sd => box(root, { x: sd * (panelW / 2 + 0.06), y: panelTop / 2, z: 0.05 }, { x: 0.14, y: panelTop, z: 0.14 }, WOOD_D, 0.3))
   box(root, { x: 0, y: panelTop - 0.6, z: 0.0 }, { x: panelW, y: 1.2, z: 0.05 }, PLATE, 0.3)                          // title bar
-  label(root, { x: -panelW / 2 + 1.9, y: panelTop - 0.6, z: -0.06 }, 'COLLECTION', 1.7, GOLD, 3.4, 0.7)
-  aTotal = label(root, { x: panelW / 2 - 2.3, y: panelTop - 0.6, z: -0.06 }, '', 1.1, CREAM, 4.3, 0.5)
+  // Title bar, two lines each side (KJ 2026-10-02 playtest feedback: players took the tab numbers for plain stats and never found out the
+  // tabs are tappable): left = the title and a plain "tap a rarity" hint; right = the stamp total and which rarity is showing.
+  label(root, { x: -panelW / 2 + 1.9, y: panelTop - 0.38, z: -0.06 }, 'COLLECTION', 1.7, GOLD, 3.4, 0.7)
+  label(root, { x: -panelW / 2 + 2.45, y: panelTop - 0.9, z: -0.06 }, 'Tap a rarity on the left to browse', 0.85, CREAM, 4.6, 0.4)
+  aTotal = label(root, { x: panelW / 2 - 2.3, y: panelTop - 0.38, z: -0.06 }, '', 1.1, CREAM, 4.3, 0.5)
+  aView = label(root, { x: panelW / 2 - 2.3, y: panelTop - 0.9, z: -0.06 }, '', 0.95, GOLD, 4.3, 0.45)
   tapArea(root, { x: panelW / 2 - 2.3, y: panelTop - 0.6, z: -0.05 }, { x: 4.3, y: 1.0, z: 0.1 }, 'Open your Collection', () => openSeedMenuFlowers())
 
-  // rarity tabs: 2 rows x 4
+  // rarity tabs: one column, down the left
   tabs = []
+  tabFrame = box(root, { x: TAB_X, y: 0, z: 0.0 }, { x: TAB_W + 0.1, y: TAB_H + 0.1, z: 0.04 }, GOLD, 1.0)
   for (let i = 0; i < N; i++) {
-    const col = i % TAB_COLS, row = Math.floor(i / TAB_COLS)
-    const x = (col - (TAB_COLS - 1) / 2) * TAB_W
-    const y = tabsTop - TAB_H / 2 - row * (TAB_H + 0.08) - 0.05
+    const y = tabY(i)
     const t = rarityTierById(i)
     const c = Color4.create(t.seedColor.r, t.seedColor.g, t.seedColor.b, 1)
-    const bg = box(root, { x, y, z: -0.02 }, { x: TAB_W - 0.08, y: TAB_H, z: 0.06 }, c, 0.7)
-    const nameLbl = label(root, { x, y: y + 0.2, z: -0.07 }, t.name, 1.0, INK, TAB_W - 0.1, 0.34)
-    const count = label(root, { x, y: y - 0.2, z: -0.07 }, '', 0.9, INK, TAB_W - 0.1, 0.3)
-    tapArea(root, { x, y, z: -0.06 }, { x: TAB_W - 0.08, y: TAB_H, z: 0.1 }, `${t.name} stamps`, () => { selTier = i; aSig = ''; playSfx('seedCatch') })
+    const bg = box(root, { x: TAB_X, y, z: -0.02 }, { x: TAB_W, y: TAB_H, z: 0.06 }, c, 0.7)
+    const nameLbl = label(root, { x: TAB_X - 0.33, y, z: -0.07 }, t.name, 0.9, INK, 1.05, TAB_H - 0.06)
+    const count = label(root, { x: TAB_X + 0.55, y, z: -0.07 }, '', 0.8, INK, 0.7, TAB_H - 0.06)
+    tapArea(root, { x: TAB_X, y, z: -0.06 }, { x: TAB_W, y: TAB_H, z: 0.1 }, `${t.name} stamps`, () => { selTier = i; aSig = ''; playSfx('seedCatch') })
     tabs.push({ bg, name: nameLbl, count, tier: i })
   }
 
@@ -336,7 +347,7 @@ function setupAlmanacWall(): void {
   tiles = []
   for (let t = 0; t < COLS * ROWS; t++) {
     const col = t % COLS, row = Math.floor(t / COLS)
-    const x = (col - (COLS - 1) / 2) * TP
+    const x = GRID_CX + (col - (COLS - 1) / 2) * TP
     const y = GRID_TOP - TP * (row + 0.5)
     const e = engine.addEntity()
     Transform.create(e, { parent: root, position: { x, y, z: -0.03 }, scale: ZERO })
@@ -371,6 +382,8 @@ function refreshAlmanac(): void {
   aSig = sig
 
   TextShape.getMutable(aTotal).text = `${stampsFound()} of ${stampTotal()} stamps`
+  TextShape.getMutable(aView).text = `Showing ${rarityTierById(selTier).name}`
+  Transform.getMutable(tabFrame).position = { x: TAB_X, y: tabY(selTier), z: 0.0 }
 
   for (const tab of tabs) {
     const l = tileList(tab.tier)
@@ -382,7 +395,7 @@ function refreshAlmanac(): void {
     const k = on ? 1 : 0.5
     const c = Color4.create(tc.r * k, tc.g * k, tc.b * k, 1)
     Material.setPbrMaterial(tab.bg, { albedoColor: c, emissiveColor: c, emissiveIntensity: on ? 0.9 : 0.4, metallic: 0, roughness: 1 })
-    setScale(tab.bg, { x: TAB_W - 0.08, y: on ? TAB_H + 0.1 : TAB_H, z: 0.06 })
+    setScale(tab.bg, { x: on ? TAB_W + 0.04 : TAB_W, y: TAB_H, z: 0.06 })
     const ink = on ? INK : CREAM   // dark text on the lit tab, light text on the dimmed ones
     TextShape.getMutable(tab.name).textColor = ink
     TextShape.getMutable(tab.count).textColor = ink

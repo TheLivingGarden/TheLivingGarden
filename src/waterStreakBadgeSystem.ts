@@ -29,8 +29,8 @@ const PLATE_Y      = 0.10
 // Layer depths in the billboarded carrier's local space (-z = toward the camera): pill at 0, icon in front of it, text in front of both.
 // They were 6 / 12 / 20 mm apart, which z-fights (and sorts wrongly among the transparent layers) at any real distance; 3 cm steps are
 // invisible as parallax at nametag range but give the depth buffer and the transparency sort something to work with.
-const Z_FLAIR      = -0.03
-const Z_TEXT       = -0.07
+const Z_FLAIR      = -0.07
+const Z_TEXT       = -0.14
 const NAME_FONT    = 0.95
 const STREAK_FONT  = 0.8
 const PILL_H       = 0.32

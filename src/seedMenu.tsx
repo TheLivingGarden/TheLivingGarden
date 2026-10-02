@@ -36,12 +36,15 @@ let giftPage = 0          // week-2 playtest: "only get a choice of the same 5 p
 const GIFT_PAGE = 5
 let page = 0              // Flowers page (pagination — scrolling isn't verified on both explorers)
 let avenueSlot: string | null = null   // set when opened by tapping an empty Avenue planter: Display goes THERE
+let plantTarget: { boxId: string; plant: (tier: number) => void } | null = null   // set when opened by tapping an empty planter: a seed tile plants THERE
 
 export function isSeedMenuOpen(): boolean { return open }
-export function toggleSeedMenu(): void { open = !open; if (!open) { selectedKey = ''; giftMode = false; giftPage = 0; page = 0; almanacPage = 0; almanacSel = null; tierFilter = null; avenueSlot = null } }
+export function toggleSeedMenu(): void { open = !open; if (!open) { selectedKey = ''; giftMode = false; giftPage = 0; page = 0; almanacPage = 0; almanacSel = null; tierFilter = null; avenueSlot = null; plantTarget = null } }
 export function openSeedMenu(): void { open = true }
 /** Opened from the world seed rack's gift board: the Flowers tab, where a kept flower is picked and given. */
 export function openSeedMenuFlowers(): void { open = true; tab = 'flowers'; selectedKey = ''; giftMode = false; page = 0 }
+/** Tapped an empty planter while holding more than one kind of seed (KJ 2026-10-02): the Seeds tab asks which to plant, and the tile you tap plants it there. */
+export function openSeedMenuForPlanter(boxId: string, plant: (tier: number) => void): void { open = true; tab = 'seeds'; plantTarget = { boxId, plant }; selectedKey = ''; giftMode = false; page = 0 }
 /** Tapped an empty Avenue planter with nothing in hand: open Flowers so they can pick one for it. */
 export function openSeedMenuForAvenue(slotId: string): void { open = true; tab = 'flowers'; avenueSlot = slotId; selectedKey = ''; giftMode = false; page = 0; armAvenuePlacement(null) }
 
@@ -401,11 +404,15 @@ export function SeedMenuUi(props: { px: (n: number) => number; fs: (n: number) =
 
       {/* ── SEEDS TAB — one tile per rarity tier you hold, in ONE row; tap to choose what plants next */}
       <UiEntity uiTransform={{ display: tab === 'seeds' ? 'flex' : 'none', width: '100%', flexDirection: 'column' }}>
-        <Label value={total > 0 ? 'Planting next' : 'No seeds yet - catch some during a bloom'} fontSize={fs(15)} color={DIM} textAlign="middle-left" uiTransform={{ width: '100%', height: fs(26), margin: { top: px(4), bottom: px(6) } }} />
+        <Label value={total > 0 ? (plantTarget !== null ? 'Plant which seed here?' : 'Planting next') : 'No seeds yet - catch some during a bloom'} fontSize={fs(15)} color={DIM} textAlign="middle-left" uiTransform={{ width: '100%', height: fs(26), margin: { top: px(4), bottom: px(6) } }} />
         <UiEntity uiTransform={{ display: total > 0 ? 'flex' : 'none', width: '100%', flexDirection: 'row', flexWrap: 'wrap' }}>
           {pouchGroups.map((g, i) => tile(
             `pouch-${g.tier}`, i, g.tier, g.count,
-            next === g.tier, () => { setPreferredTier(g.tier); holdSeed(g.tier) },
+            next === g.tier, () => {
+              setPreferredTier(g.tier)
+              if (plantTarget !== null) { const t = plantTarget; plantTarget = null; open = false; t.plant(g.tier); return }
+              holdSeed(g.tier)
+            },
           ))}
         </UiEntity>
       </UiEntity>
