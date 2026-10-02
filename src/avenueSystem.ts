@@ -34,7 +34,7 @@ import { showToast } from './notifications'
 import { attachPlantVfx, detachPlantVfx } from './plantVfx'
 import { retirePlant } from './boxSystem'
 import { getHeld, heldFlowerIndex, registerAvenueApi, getArmedAvenueFlower, armAvenuePlacement, keepsakeIdentity } from './playerInventory'
-import { openSeedMenuForAvenue } from './seedMenu'
+import { openSeedMenuForAvenue, isSeedMenuOpen } from './seedMenu'
 import { createSign, moveSign, Sign } from './signs'
 import { showAvenueCard, closeAvenueCard, isAvenueCardOpen } from './avenueCard'
 import { playSfx } from './sounds'
@@ -72,6 +72,7 @@ const QUESTION_BOB_M   = 0.07  // float amplitude (the bob is one yoyo tween on 
 const QUESTION_BOB_MS  = 1800
 const QUESTION_GLOW    = 1.5   // soft gold glow sprite behind the glyph, m
 const QUESTION_RANGE_M = 16    // a "?" pops in as you come within this of its stand, and drops out again past +3 m
+const QUESTION_NEAR_M  = 3     // closer than this (or with the seed menu open) the "?" goes away: up close it fills the screen as a flat blob (KJ 2026-10-02)
 const QUESTION_POP_MS  = 350   // same ease as the plants' pop (boxSystem POP_MS / EASEOUTBACK)
 // Pooled like boxSystem's: signs.ts shows the nearest 8 within 9 m anyway
 const PLAQUE_POOL    = 8
@@ -239,7 +240,8 @@ function questionPopSystem(dt: number): void {
     const e = v.plant
     if (v.owner || e === null || !Transform.has(e)) continue
     const d = Math.hypot(v.pos.x - me.x, v.pos.z - me.z)
-    if (!questionShown.has(e) && d <= QUESTION_RANGE_M) {
+    const hide = d < QUESTION_NEAR_M || isSeedMenuOpen()
+    if (!questionShown.has(e) && d <= QUESTION_RANGE_M && !hide) {
       questionShown.add(e)
       Tween.setScale(e, { x: 0.001, y: 0.001, z: 0.001 }, { x: 1, y: 1, z: 1 }, QUESTION_POP_MS, EasingFunction.EF_EASEOUTBACK)
       const bob = questionKids.get(e)?.bob
@@ -247,7 +249,7 @@ function questionPopSystem(dt: number): void {
         Tween.setMove(bob, { x: 0, y: -QUESTION_BOB_M, z: 0 }, { x: 0, y: QUESTION_BOB_M, z: 0 }, QUESTION_BOB_MS, EasingFunction.EF_EASESINE)
         TweenSequence.create(bob, { sequence: [], loop: TweenLoop.TL_YOYO })
       }
-    } else if (questionShown.has(e) && d > QUESTION_RANGE_M + 3) {
+    } else if (questionShown.has(e) && (d > QUESTION_RANGE_M + 3 || hide)) {
       questionShown.delete(e)
       Tween.deleteFrom(e)
       const bob = questionKids.get(e)?.bob

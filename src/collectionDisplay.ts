@@ -25,6 +25,7 @@ import {
   RARITY_TIERS, PLANT_SPECIES, PlantSpecies, rarityTierById, plantSpeciesById, bespokePool, stampTotal, withArticle,
 } from './shared/config'
 import { PROP_LAYOUT } from './shared/layout'
+import { ARROW_MODEL_SRC, ARROW_SCALE, ARROW_FORWARD_YAW } from './shared/config'
 import { getDiscovered, getFlowers, getHeld, holdFlower, stampsFound, gardenersHere } from './playerInventory'
 import { groupFlowers, Group, openSeedMenuFlowers } from './seedMenu'
 import { showToast } from './notifications'
@@ -64,33 +65,21 @@ let fGroups: Group[] = []
 let fPage = 0
 let fSig = ''
 let fTitle: Entity, fSubtitle: Entity
-let giftBoard: { root: Entity; text: Entity; tap: Entity } | null = null
-// Rarity tabs (KJ 2026-09-29: "I'd like to be able to see my flowers of different rarities" —
-// 188 kept sorted rarest-first put the Commons on page 11). A rail on top of the sign: "All" plus
-// one tab per tier in its rarity colour, each with how many you hold; tap one to show only that
-// rarity. FIXED positions, unowned tiers dimmed rather than hidden (the Almanac rule: a row that
-// never moves can be learned, and a gap reads as a gap).
-const RTAB_TIERS = [-1, ...RARITY_TIERS.map(t => t.id)]   // -1 = All
-const RTAB_PITCH = 0.42, RTAB_W = 0.36, RTAB_H = 0.24, RTAB_Y = 3.55
-interface RarityTab { tier: number; pill: Entity; count: Entity; tap: Entity; owned: boolean | null }
-let rarityTabs: RarityTab[] = []
-let rarityTabMarker: Entity | null = null
+let giftHint: Entity | null = null   // "Gift a flower - 2 here" under the sign (replaces the dark gift board)
+// Rarity filter (KJ 2026-10-02: the tab strip on top of the shelf was tiny, half hidden behind the plants and did not look tappable). It is now one
+// "Showing: All" line under the sign: tap it to step through the rarities you own (All -> rarest ... -> All). Same wording as the Collection wall.
 let fFilter = -1   // -1 = All, else a rarity tier id
 let giftKey = ''
 
-/** The gift board: hidden with no flowers; "Gift a flower" while another gardener is here. */
+/** The gift hint under the sign: empty with no flowers; "Gift a flower - N here" while another gardener is here. */
 function refreshGiftBoard(): void {
-  if (!giftBoard) return
+  if (!giftHint) return
   const flowers = getFlowers().length
   const others = gardenersHere().length
   const key = `${flowers}|${others}`
   if (key === giftKey) return
   giftKey = key
-  if (flowers === 0) { setScale(giftBoard.root, ZERO); return }
-  setScale(giftBoard.root, { x: 1, y: 1, z: 1 })
-  TextShape.getMutable(giftBoard.text).text = others > 0 ? `Gift a flower\n${others} here` : `Your flowers\n${flowers} kept`
-  TextShape.getMutable(giftBoard.text).textColor = others > 0 ? GOLD : CREAM
-  setHover(giftBoard.tap, others > 0 ? 'Gift a flower' : 'Your flowers')
+  TextShape.getMutable(giftHint).text = flowers > 0 && others > 0 ? `Gift a flower - ${others} here` : ''
 }
 
 function setupFlowerShelf(): void {
@@ -104,36 +93,15 @@ function setupFlowerShelf(): void {
   const w = F_PER_ROW * F_PITCH + 0.3
   // (No cabinet geometry: the shelf is modelled in Blender now — KJ 2026-09-30. Items, labels and tabs stay.)
   fTitle = label(root, { x: 0, y: 3.1, z: 0.22 }, 'MY FLOWERS', FONT_SIGN, GOLD, w * 0.6, 0.5)
-  fSubtitle = label(root, { x: 0, y: 2.8, z: 0.22 }, '', 0.75, CREAM, w * 0.8, 0.25)
+  fSubtitle = label(root, { x: SHELF_SIDE_X, y: SHELF_RAIL_Y, z: SHELF_TEXT_Z }, '', 0.75, CREAM, 1.5, 0.3)
   tapArea(root, { x: 0, y: 3.0, z: 0.2 }, { x: w * 0.5, y: 0.7, z: 0.1 }, 'Open all your flowers', () => openSeedMenuFlowers())
-  // Gift board: stands at the shelf's right end; prompts gifting when another gardener is here.
-  // (Moved here from the seed rack 2026-09-27 — it is about flowers, so it lives with them.)
-  const gRoot = engine.addEntity()
-  Transform.create(gRoot, { parent: root, position: { x: w / 2 + 1.25, y: 1.6, z: 0.3 }, scale: ZERO })
-  box(gRoot, { x: 0, y: 0, z: 0 }, { x: 2.0, y: 1.0, z: 0.07 }, PLATE)
-  box(gRoot, { x: 0, y: -1.1, z: 0 }, { x: 0.14, y: 2.2, z: 0.14 }, WOOD_D)   // post to the ground
-  const gText = label(gRoot, { x: 0, y: 0, z: -0.05 }, '', 0.5, GOLD, 1.9, 0.9)
-  const gTap = tapArea(gRoot, { x: 0, y: 0, z: -0.04 }, { x: 2.0, y: 1.0, z: 0.1 }, 'Your flowers', () => openSeedMenuFlowers())
-  giftBoard = { root: gRoot, text: gText, tap: gTap }
-
-  // page arrows at the sign's ends
-  ;([[-1, '<', -1], [1, '>', 1]] as const).forEach(([sd, glyph, dir]) => {
-    label(root, { x: sd * w * 0.38, y: 3.0, z: 0.22 }, glyph, 1.2, GOLD, 0.5, 0.5)
-    tapArea(root, { x: sd * w * 0.38, y: 3.0, z: 0.2 }, { x: 0.7, y: 0.7, z: 0.1 }, dir < 0 ? 'Previous page' : 'Next page', () => turnFlowerPage(dir))
-  })
-
-  // Rarity tab rail, sitting on top of the sign board (the board's top edge is y 3.35).
-  box(root, { x: 0, y: RTAB_Y, z: 0.28 }, { x: RTAB_TIERS.length * RTAB_PITCH + 0.12, y: RTAB_H + 0.12, z: 0.07 }, PLATE, 0.3)
-  rarityTabs = RTAB_TIERS.map((tier, i) => {
-    const x = (i - (RTAB_TIERS.length - 1) / 2) * RTAB_PITCH
-    const pill = box(root, { x, y: RTAB_Y, z: 0.23 }, { x: RTAB_W, y: RTAB_H, z: 0.02 }, CREAM, 0.4)
-    const count = label(root, { x, y: RTAB_Y, z: 0.2 }, '', 0.6, INK, RTAB_W, RTAB_H)
-    const name = tier < 0 ? 'All' : rarityTierById(tier).name
-    const tap = tapArea(root, { x, y: RTAB_Y, z: 0.19 }, { x: RTAB_W, y: RTAB_H + 0.06, z: 0.1 }, `Show ${name}`, () => setFilter(tier))
-    return { tier, pill, count, tap, owned: null }
-  })
-  // The selected tab's gold underline — one entity, moved.
-  rarityTabMarker = box(root, { x: 0, y: RTAB_Y - RTAB_H / 2 - 0.045, z: 0.22 }, { x: RTAB_W, y: 0.035, z: 0.02 }, GOLD, 1.2)
+  // Gift hint, a line under the sign (it was a big dark board at the shelf's right end with tiny text).
+  giftHint = label(root, { x: -SHELF_SIDE_X, y: SHELF_RAIL_Y, z: SHELF_TEXT_Z }, '', 0.75, GOLD, 1.5, 0.3)
+  tapArea(root, { x: -SHELF_SIDE_X, y: SHELF_RAIL_Y, z: SHELF_TEXT_Z }, { x: 1.5, y: 0.4, z: 0.1 }, 'Open your flowers to gift one', () => openSeedMenuFlowers())
+  // "Showing: All" — tap to step through the rarities you own.
+  tapArea(root, { x: SHELF_SIDE_X, y: SHELF_RAIL_Y, z: SHELF_TEXT_Z }, { x: 1.5, y: 0.4, z: 0.1 }, 'Change rarity', () => cycleFilter())
+  // Page arrows: the scene's own 3D arrow, standing at the sign's two ends (like the podium's pagers), tip pointing the way the page turns.
+  ;([-1, 1] as const).forEach(dir => makeShelfArrow(root, dir, w))
 
   fSlots = []
   for (let i = 0; i < F_PAGE; i++) {
@@ -153,8 +121,8 @@ function setupFlowerShelf(): void {
     MeshRenderer.setBox(plate)
     Material.setBasicMaterial(plate, { diffuseColor: Color4.create(0.82, 0.76, 0.64, 1) })
     // Name and rarity on separate lines, now close together (was 0.4 m apart to leave room for a wrapped two-line name).
-    const nameY = row === 0 ? 0.5 : 1.8
-    const subY  = row === 0 ? 0.3 : 1.6
+    const nameY = row === 0 ? 0.66 : 1.96   // KJ 2026-10-02: higher and closer together, so both lines sit on the dark band under their row
+    const subY  = row === 0 ? 0.52 : 1.82
     const plateZ = row === 0 ? -0.29 : -0.28
     const name = label(root, { x, y: nameY, z: plateZ }, '', 0.72, CREAM, F_PITCH, 0.26)
     const sub  = label(root, { x, y: subY, z: plateZ }, '', 0.62, CREAM, F_PITCH, 0.16)
@@ -163,41 +131,44 @@ function setupFlowerShelf(): void {
   }
 }
 
-function setFilter(tier: number): void {
-  if (tier >= 0 && !groupFlowers().some(g => g.rarityTier === tier)) return   // an unowned tier's hover already says so
-  if (fFilter === tier) return
-  fFilter = tier
+// The "Showing: …" line (right) and the gift line (left) sit on the shelf's TOP RAIL, either side of the Blender sign, z in FRONT of the plates
+// (KJ 2026-10-02: under the sign they hid behind the first row's backdrops — a label at z 0.22 is farther from the viewer than a plate at 0.12).
+const SHELF_SIDE_X = 1.4
+const SHELF_RAIL_Y = 3.1
+const SHELF_TEXT_Z = -0.3
+const SHELF_ARROW_Y = 3.0          // arrow height, level with the sign
+const SHELF_ARROW_X = 0.55         // how far past the sign's end the arrows stand (w/2 + this)
+const SHELF_ARROW_ROLL = 90        // stands the flat chevron up toward the viewer; flip the sign of this if the arrow faces the wall
+
+/** One page arrow, a child of the shelf so it follows the prop editor. The viewer faces +z in shelf-local space (the labels read from -z), so
+ *  previous sits at -x pointing -x and next at +x pointing +x. Same two-entity recipe as podium.ts: the parent yaws the flat chevron along
+ *  +-x, the child rolls it about its own tip axis to turn its face from up to the viewer. */
+function makeShelfArrow(root: Entity, dir: -1 | 1, w: number): void {
+  const x = dir * (w / 2 + SHELF_ARROW_X)
+  const yaw = Math.atan2(dir, 0) * 180 / Math.PI + ARROW_FORWARD_YAW
+  const pivot = engine.addEntity()
+  Transform.create(pivot, { parent: root, position: { x, y: SHELF_ARROW_Y, z: 0.1 }, rotation: Quaternion.fromEulerDegrees(0, yaw, 0) })
+  const e = engine.addEntity()
+  Transform.create(e, { parent: pivot, rotation: Quaternion.fromEulerDegrees(0, 0, dir * SHELF_ARROW_ROLL), scale: { x: ARROW_SCALE, y: ARROW_SCALE, z: ARROW_SCALE } })
+  GltfContainer.create(e, { src: ARROW_MODEL_SRC, visibleMeshesCollisionMask: ColliderLayer.CL_NONE, invisibleMeshesCollisionMask: ColliderLayer.CL_NONE })
+  tapArea(root, { x, y: SHELF_ARROW_Y, z: 0.1 }, { x: 1.1, y: 0.8, z: 0.4 }, dir < 0 ? 'Previous page' : 'Next page', () => turnFlowerPage(dir))
+}
+
+/** Step the rarity filter: All -> each rarity you own, rarest first -> All. */
+function cycleFilter(): void {
+  const owned = [...new Set(groupFlowers().map(g => g.rarityTier))].sort((a, b) => b - a)
+  const order = [-1, ...owned]
+  const next = order[(order.indexOf(fFilter) + 1) % order.length]
+  if (next === fFilter) return
+  fFilter = next
   fPage = 0
   fSig = ''
   playSfx('tutorialTap')
 }
 
-/** Counts per tier, the dim/lit state of each tab, and where the underline sits. */
-function refreshTabs(all: Group[]): void {
-  const byTier = new Map<number, number>()
-  for (const g of all) byTier.set(g.rarityTier, (byTier.get(g.rarityTier) ?? 0) + g.count)
-  const total = all.reduce((n, g) => n + g.count, 0)
-  for (const t of rarityTabs) {
-    const n = t.tier < 0 ? total : (byTier.get(t.tier) ?? 0)
-    TextShape.getMutable(t.count).text = t.tier < 0 ? `All ${n}` : `${n}`
-    const owned = n > 0
-    if (owned !== t.owned) {
-      t.owned = owned
-      const base = t.tier < 0 ? { r: 0.9, g: 0.85, b: 0.7 } : rarityTierById(t.tier).seedColor
-      const k = owned ? 1 : 0.28   // unowned: a dark swatch of its colour
-      const c = Color4.create(base.r * k, base.g * k, base.b * k, 1)
-      Material.setPbrMaterial(t.pill, { albedoColor: c, emissiveColor: c, emissiveIntensity: owned ? 0.5 : 0.1, metallic: 0, roughness: 1 })
-      TextShape.getMutable(t.count).textColor = owned ? INK : CREAM
-      setHover(t.tap, t.tier < 0 ? 'Show all your flowers' : owned ? `Show your ${rarityTierById(t.tier).name} flowers` : `No ${rarityTierById(t.tier).name} flowers yet`)
-    }
-  }
-  // A filtered tier you no longer hold (gifted / displayed away) falls back to All.
-  if (fFilter >= 0 && !byTier.get(fFilter)) { fFilter = -1; fPage = 0 }
-  if (rarityTabMarker) {
-    const i = RTAB_TIERS.indexOf(fFilter)
-    const t = Transform.getMutable(rarityTabMarker)
-    t.position = { ...t.position, x: (i - (RTAB_TIERS.length - 1) / 2) * RTAB_PITCH }
-  }
+/** A filtered rarity you no longer hold (gifted / displayed away) falls back to All. */
+function dropEmptyFilter(all: Group[]): void {
+  if (fFilter >= 0 && !all.some(g => g.rarityTier === fFilter)) { fFilter = -1; fPage = 0 }
 }
 
 function turnFlowerPage(dir: number): void {
@@ -220,16 +191,15 @@ function refreshFlowerShelf(): void {
   const all = groupFlowers()
   const sig = `${fFilter}|${fPage}|${getFlowers().length}|${all.map(g => g.key + g.count).join(',')}`
   if (sig === fSig) return
-  refreshTabs(all)   // may drop a filter that no longer has flowers
+  dropEmptyFilter(all)   // a filter that no longer has flowers falls back to All
   fGroups = fFilter < 0 ? all : all.filter(g => g.rarityTier === fFilter)
   const pages = Math.max(1, Math.ceil(fGroups.length / F_PAGE))
   if (fPage >= pages) fPage = pages - 1
   fSig = `${fFilter}|${fPage}|${getFlowers().length}|${all.map(g => g.key + g.count).join(',')}`
 
-  const shown = fGroups.reduce((n, g) => n + g.count, 0)
   TextShape.getMutable(fSubtitle).text = all.length === 0
     ? 'grow a flower in a planter'
-    : `${fFilter < 0 ? 'All' : rarityTierById(fFilter).name}   -   page ${fPage + 1} of ${pages}   -   ${shown} kept`
+    : `Showing: ${fFilter < 0 ? 'All' : rarityTierById(fFilter).name}  ${fPage + 1}/${pages}`
 
   for (let i = 0; i < F_PAGE; i++) {
     const s = fSlots[i]
@@ -267,18 +237,24 @@ function refreshFlowerShelf(): void {
 // ALMANAC WALL
 // ===============================================================
 
-const COLS = 12
-const ROWS = 7
+const COLS = 14   // KJ 2026-10-02: wider and shorter (14 x 6 = 84 slots for the 76 species; the board is no longer 12 x 7)
+const ROWS = 6
 const TILE = 0.48
 const TP   = 0.54   // tile pitch
 const GRID_W = COLS * TP
 const GRID_H = ROWS * TP
-const GRID_BOTTOM = 0.5
+const GRID_BOTTOM = 0.7   // the footer strip (0 .. 0.6) sits under the grid
 const GRID_TOP = GRID_BOTTOM + GRID_H
 // Eight rarity tabs in a vertical RAIL down the left of the grid (KJ 2026-10-02: the two rows of four sat high on the wall and were hard to hit;
 // a column of wide, row-shaped targets is easier to click and reads as navigation). The rail spans the grid's height, so the wall is
 // ~1.9 m shorter than with the tab rows on top, and ~2 m wider.
-const WALL_SCALE = 0.85   // KJ 2026-10-02: "a bit smaller overall" — the whole wall (tabs, tiles, text, tap areas) scales about its base
+// Fitted to KJ's Blender frame (measured from scene.glb, 2026-10-02): posts' inner faces 7.92 m apart (z 45.70 / 53.62), the top beam's underside at y 6.00,
+// and the lower crossbar KJ kept as a base — its top is at about y 2.76. The board is 10.16 x 4.09 m at scale 1 (no title bar: KJ paints COLLECTION and the
+// hint in Blender; the two live numbers are a footer), so scale 0.77 fills the width and height together. The board's bottom edge sits at the AlmanacWall
+// layout y (2.8 since KJ's 2026-10-02 bake), so there is no extra lift any more.
+const WALL_SCALE = 0.77
+const WALL_BOTTOM = 0      // the board's bottom edge, in board metres
+const WALL_LIFT_Y = 0
 const RAIL_W = 2.0
 const PANEL_W = GRID_W + 0.6 + RAIL_W
 const GRID_CX = RAIL_W / 2                 // the grid is centred right of the wall's middle
@@ -307,27 +283,24 @@ function setupAlmanacWall(): void {
   const o = PROP_LAYOUT['AlmanacWall']
   const pos = o ? { x: o.x, y: o.y, z: o.z } : WALL_POS
   const root = engine.addEntity()
-  Transform.create(root, { position: pos, rotation: Quaternion.fromEulerDegrees(0, o?.rotY ?? YAW, 0), scale: { x: WALL_SCALE, y: WALL_SCALE, z: WALL_SCALE } })
+  Transform.create(root, { position: { x: pos.x, y: pos.y + WALL_LIFT_Y, z: pos.z }, rotation: Quaternion.fromEulerDegrees(0, o?.rotY ?? YAW, 0), scale: { x: WALL_SCALE, y: WALL_SCALE, z: WALL_SCALE } })
   Name.create(root, { value: 'AlmanacWall' })
   registerStreamedTree('collectionWall', root)   // 76 textured tiles: hidden while you are across the garden (streaming.ts)
 
   const panelW = PANEL_W
-  const panelTop = GRID_TOP + 1.45   // title bar (1.2) + a 0.25 margin above the grid
+  const panelTop = GRID_TOP + 0.15   // a small margin above the grid; no title bar any more
   // The wall backdrop is UNLIT and one fixed colour (KJ 2026-09-30): lit, it went mauve at golden hour and near-black under the
   // night sky, so the (transparent) plant thumbnails sat on a different colour depending on the time of day.
   const wall = engine.addEntity()
-  Transform.create(wall, { parent: root, position: { x: 0, y: (0.2 + panelTop) / 2, z: 0.05 }, scale: { x: panelW, y: panelTop - 0.2, z: 0.08 } })
+  Transform.create(wall, { parent: root, position: { x: 0, y: (WALL_BOTTOM + panelTop) / 2, z: 0.05 }, scale: { x: panelW, y: panelTop - WALL_BOTTOM, z: 0.08 } })
   MeshRenderer.setBox(wall)
   Material.setBasicMaterial(wall, { diffuseColor: Color4.create(0.82, 0.76, 0.64, 1) })
-  ;[-1, 1].forEach(sd => box(root, { x: sd * (panelW / 2 + 0.06), y: panelTop / 2, z: 0.05 }, { x: 0.14, y: panelTop, z: 0.14 }, WOOD_D, 0.3))
-  box(root, { x: 0, y: panelTop - 0.6, z: 0.0 }, { x: panelW, y: 1.2, z: 0.05 }, PLATE, 0.3)                          // title bar
-  // Title bar, two lines each side (KJ 2026-10-02 playtest feedback: players took the tab numbers for plain stats and never found out the
-  // tabs are tappable): left = the title and a plain "tap a rarity" hint; right = the stamp total and which rarity is showing.
-  label(root, { x: -panelW / 2 + 1.9, y: panelTop - 0.38, z: -0.06 }, 'COLLECTION', 1.7, GOLD, 3.4, 0.7)
-  label(root, { x: -panelW / 2 + 2.45, y: panelTop - 0.9, z: -0.06 }, 'Tap a rarity on the left to browse', 0.85, CREAM, 4.6, 0.4)
-  aTotal = label(root, { x: panelW / 2 - 2.3, y: panelTop - 0.38, z: -0.06 }, '', 1.1, CREAM, 4.3, 0.5)
-  aView = label(root, { x: panelW / 2 - 2.3, y: panelTop - 0.9, z: -0.06 }, '', 0.95, GOLD, 4.3, 0.45)
-  tapArea(root, { x: panelW / 2 - 2.3, y: panelTop - 0.6, z: -0.05 }, { x: 4.3, y: 1.0, z: 0.1 }, 'Open your Collection', () => openSeedMenuFlowers())
+  // (No side posts: the Blender frame around the wall has them.)
+  // Footer: the two live numbers, spread left and right (the title and the "tap a rarity" hint are modelled in Blender now).
+  box(root, { x: 0, y: 0.3, z: 0.0 }, { x: panelW, y: 0.6, z: 0.05 }, PLATE, 0.3)
+  aTotal = label(root, { x: -panelW / 4, y: 0.3, z: -0.06 }, '', 2.0, CREAM, panelW / 2 - 0.3, 0.55)
+  aView = label(root, { x: panelW / 4, y: 0.3, z: -0.06 }, '', 2.0, GOLD, panelW / 2 - 0.3, 0.55)
+  tapArea(root, { x: -panelW / 4, y: 0.3, z: -0.05 }, { x: panelW / 2 - 0.3, y: 0.6, z: 0.1 }, 'Open your Collection', () => openSeedMenuFlowers())
 
   // rarity tabs: one column, down the left
   tabs = []
@@ -337,8 +310,8 @@ function setupAlmanacWall(): void {
     const t = rarityTierById(i)
     const c = Color4.create(t.seedColor.r, t.seedColor.g, t.seedColor.b, 1)
     const bg = box(root, { x: TAB_X, y, z: -0.02 }, { x: TAB_W, y: TAB_H, z: 0.06 }, c, 0.7)
-    const nameLbl = label(root, { x: TAB_X - 0.33, y, z: -0.07 }, t.name, 0.9, INK, 1.05, TAB_H - 0.06)
-    const count = label(root, { x: TAB_X + 0.55, y, z: -0.07 }, '', 0.8, INK, 0.7, TAB_H - 0.06)
+    const nameLbl = label(root, { x: TAB_X - 0.3, y, z: -0.07 }, t.name, 1.25, INK, 1.2, TAB_H - 0.02)
+    const count = label(root, { x: TAB_X + 0.5, y, z: -0.07 }, '', 1.15, INK, 0.8, TAB_H - 0.02)
     tapArea(root, { x: TAB_X, y, z: -0.06 }, { x: TAB_W, y: TAB_H, z: 0.1 }, `${t.name} stamps`, () => { selTier = i; aSig = ''; playSfx('seedCatch') })
     tabs.push({ bg, name: nameLbl, count, tier: i })
   }

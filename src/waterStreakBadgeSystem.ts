@@ -135,10 +135,15 @@ function paintPill(p: Plate, fade: number): void {
   Material.setPbrMaterial(p.pill, {
     texture:           tex,
     alphaTexture:      tex,
-    albedoColor:       Color4.create(0, 0, 0, 0.85 * fade),
+    albedoColor:       Color4.create(0, 0, 0, fade),
     emissiveColor:     Color3.Black(),
     emissiveIntensity: 0,
-    transparencyMode:  MaterialTransparencyMode.MTM_ALPHA_BLEND,
+    // ALPHA TEST, not blend (KJ 2026-10-02: the flair icon flickered against the pill, worst from above and when the camera turns). Blended
+    // quads are drawn back-to-front by distance to their CENTRES, and the icon sits off-centre, so which of the two drew last flipped with the
+    // camera angle — and from the top no z offset helps. A cut-out pill writes depth and is drawn first; the icon and text, 7 and 14 cm in
+    // front of it, are then depth-tested against it every time. The pill drops out once `fade` falls under the cutoff (about 17 m).
+    transparencyMode:  MaterialTransparencyMode.MTM_ALPHA_TEST,
+    alphaTest:         0.5,
     specularIntensity: 0,
     metallic:  0,
     roughness: 1,

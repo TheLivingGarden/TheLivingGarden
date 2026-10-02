@@ -37,16 +37,18 @@ const GIFT_PAGE = 5
 let page = 0              // Flowers page (pagination — scrolling isn't verified on both explorers)
 let avenueSlot: string | null = null   // set when opened by tapping an empty Avenue planter: Display goes THERE
 let plantTarget: { boxId: string; plant: (tier: number) => void } | null = null   // set when opened by tapping an empty planter: a seed tile plants THERE
+// A confirmation page before the two irreversible-feeling world actions (KJ 2026-10-02): planting a seed into a planter, and putting a flower on a Gallery stand.
+let confirm: { kind: 'plant'; tier: number } | { kind: 'display'; key: string } | null = null
 
 export function isSeedMenuOpen(): boolean { return open }
-export function toggleSeedMenu(): void { open = !open; if (!open) { selectedKey = ''; giftMode = false; giftPage = 0; page = 0; almanacPage = 0; almanacSel = null; tierFilter = null; avenueSlot = null; plantTarget = null } }
+export function toggleSeedMenu(): void { open = !open; if (!open) { selectedKey = ''; giftMode = false; giftPage = 0; page = 0; almanacPage = 0; almanacSel = null; tierFilter = null; avenueSlot = null; plantTarget = null; confirm = null } }
 export function openSeedMenu(): void { open = true }
 /** Opened from the world seed rack's gift board: the Flowers tab, where a kept flower is picked and given. */
 export function openSeedMenuFlowers(): void { open = true; tab = 'flowers'; selectedKey = ''; giftMode = false; page = 0 }
 /** Tapped an empty planter while holding more than one kind of seed (KJ 2026-10-02): the Seeds tab asks which to plant, and the tile you tap plants it there. */
-export function openSeedMenuForPlanter(boxId: string, plant: (tier: number) => void): void { open = true; tab = 'seeds'; plantTarget = { boxId, plant }; selectedKey = ''; giftMode = false; page = 0 }
+export function openSeedMenuForPlanter(boxId: string, plant: (tier: number) => void): void { open = true; tab = 'seeds'; plantTarget = { boxId, plant }; selectedKey = ''; giftMode = false; page = 0; confirm = null }
 /** Tapped an empty Avenue planter with nothing in hand: open Flowers so they can pick one for it. */
-export function openSeedMenuForAvenue(slotId: string): void { open = true; tab = 'flowers'; avenueSlot = slotId; selectedKey = ''; giftMode = false; page = 0; armAvenuePlacement(null) }
+export function openSeedMenuForAvenue(slotId: string): void { open = true; tab = 'flowers'; avenueSlot = slotId; selectedKey = ''; giftMode = false; page = 0; confirm = null; armAvenuePlacement(null) }
 
 /** The keepsake index the menu currently has selected for gifting, or null if none —
  *  the world tap-a-player shortcut reuses this instead of guessing "the newest one". */
@@ -90,7 +92,7 @@ const RAIL_GAP   = 14
  *  to work out how many grid rows fit this canvas. */
 const CHROME_WIDE   = 210
 const CHROME_NARROW = 330
-const FLOWER_ROW_H     = 134
+const FLOWER_ROW_H     = 146
 const FLOWER_MAX_ROWS  = 2
 
 /** A keepsake written before the 8-tier migration can carry a missing or out-of-range
@@ -172,7 +174,7 @@ export function SeedMenuUi(props: { px: (n: number) => number; fs: (n: number) =
   const eligible = avenueSlot !== null ? allGroups.filter(g => g.rarityTier >= AVENUE_MIN_TIER) : allGroups
   const groups = tierFilter === null ? eligible : eligible.filter(g => g.rarityTier === tierFilter)
   // Rows that fit the height, so the pager never lands off the bottom edge.
-  const rows       = Math.max(1, Math.min(wide ? FLOWER_MAX_ROWS : 3, Math.floor((props.maxH - px(wide ? CHROME_WIDE : CHROME_NARROW)) / px(FLOWER_ROW_H))))
+  const rows       = Math.max(1, Math.min(wide ? (avenueSlot !== null ? 3 : FLOWER_MAX_ROWS) : 3, Math.floor((props.maxH - px(wide ? CHROME_WIDE : CHROME_NARROW)) / px(FLOWER_ROW_H))))
   const pageTiles  = rows * TILE_COLS
   const pages  = Math.max(1, Math.ceil(groups.length / pageTiles))
   page         = Math.min(page, pages - 1)   // collection shrank (gift / tidy / filter) — stay in range
@@ -189,7 +191,11 @@ export function SeedMenuUi(props: { px: (n: number) => number; fs: (n: number) =
   const selSpecies   = almanacSel ? almanacAll.find(e => e.id === almanacSel) ?? null : null
   const goal         = nextMilestone(speciesFound)
   const earnedTitle  = milestoneTitle(speciesFound)
+  // Opened from a Gallery stand: pre-select the rarest eligible flower, so the Display button is already there (it was hidden until a tile was tapped).
+  if (avenueSlot !== null && !selectedKey && groups.length > 0) selectedKey = groups[0].key
   const sel    = groups.find(g => g.key === selectedKey) ?? null
+  const contextual = plantTarget !== null || avenueSlot !== null   // a single-purpose dialog: no tabs, no collection stats
+  const flowersIn  = (t: number) => eligible.filter(g => g.rarityTier === t).reduce((a, g) => a + g.count, 0)
   const here   = giftMode ? gardenersHere() : []
   const giftPages = Math.max(1, Math.ceil(here.length / GIFT_PAGE))
   if (giftPage > giftPages - 1) giftPage = giftPages - 1   // someone left mid-page
@@ -227,7 +233,7 @@ export function SeedMenuUi(props: { px: (n: number) => number; fs: (n: number) =
   const flowerTile = (g: Group, i: number) => (
     <UiEntity
       key={g.key}
-      uiTransform={{ width: tileW, height: px(126), margin: { right: (i % TILE_COLS) === TILE_COLS - 1 ? 0 : px(8), bottom: px(8) }, flexDirection: 'column', alignItems: 'center', justifyContent: 'flex-start', padding: { top: px(8), left: px(4), right: px(4), bottom: px(4) }, borderRadius: px(14), borderWidth: px(3), borderColor: g.key === selectedKey ? OUTLINE : NO_LINE }}
+      uiTransform={{ width: tileW, height: px(138), margin: { right: (i % TILE_COLS) === TILE_COLS - 1 ? 0 : px(8), bottom: px(8) }, flexDirection: 'column', alignItems: 'center', justifyContent: 'flex-start', padding: { top: px(8), left: px(4), right: px(4), bottom: px(4) }, borderRadius: px(14), borderWidth: px(3), borderColor: g.key === selectedKey ? OUTLINE : NO_LINE }}
       uiBackground={{ color: tileBg(g.rarityTier) }}
       onMouseDown={() => { selectedKey = selectedKey === g.key ? '' : g.key; giftMode = false }}
     >
@@ -242,6 +248,7 @@ export function SeedMenuUi(props: { px: (n: number) => number; fs: (n: number) =
       <UiEntity uiTransform={{ width: '100%', flexGrow: 1, alignItems: 'center', justifyContent: 'center', margin: { top: px(4) } }}>
         <Label value={g.count > 1 ? `${speciesName(g.flower)} x${g.count}` : speciesName(g.flower)} fontSize={fs(11)} color={WHITE} textAlign="middle-center" textWrap="wrap" uiTransform={{ width: '100%' }} />
       </UiEntity>
+      <Label value={rarityTierById(g.rarityTier).name} fontSize={fs(10)} color={{ ...rarityTierById(g.rarityTier).seedColor, a: 1 }} textAlign="middle-center" textWrap="nowrap" uiTransform={{ width: '100%', height: fs(14) }} />
       <Label value="in hand" fontSize={fs(10)} color={{ ...MOSS, g: 0.8 }} textAlign="middle-center" textWrap="nowrap" uiTransform={{ display: isHeld(g) ? 'flex' : 'none', width: '100%', height: fs(13) }} />
     </UiEntity>
   )
@@ -390,11 +397,19 @@ export function SeedMenuUi(props: { px: (n: number) => number; fs: (n: number) =
   const panel = (
     <UiEntity uiTransform={{ width: W, flexDirection: 'column', padding: { top: PAD, bottom: PAD, left: PAD, right: PAD }, borderRadius: px(20) }} uiBackground={{ color: DARK }}>
 
-      {/* tabs — Fin reached for these expecting them to switch sections */}
+      {contextual ? (
+        <UiEntity uiTransform={{ width: '100%', height: px(46), flexDirection: 'row', alignItems: 'center', margin: { bottom: px(4) } }}>
+          <Label value={confirm ? 'Are you sure?' : plantTarget !== null ? 'Plant a seed here' : 'Put a flower on this stand'} fontSize={fs(20)} color={CREAM} textAlign="middle-left" textWrap="nowrap" uiTransform={{ flexGrow: 1, height: '100%' }} />
+          <UiEntity uiTransform={{ width: px(40), height: px(40), alignItems: 'center', justifyContent: 'center', borderRadius: px(20) }} uiBackground={{ color: RAISED }} onMouseDown={() => toggleSeedMenu()}>
+            <Label value="x" fontSize={fs(18)} color={DIM} textAlign="middle-center" textWrap="nowrap" uiTransform={{ width: '100%', height: '100%' }} />
+          </UiEntity>
+        </UiEntity>
+      ) : (
+      /* tabs — Fin reached for these expecting them to switch sections */
       <UiEntity uiTransform={{ width: '100%', height: px(46), flexDirection: 'row', alignItems: 'center', margin: { bottom: px(4) } }}>
         {tabButton('seeds',   `Seeds${total > 0 ? `  ${total}` : ''}`)}
         {tabButton('flowers', `Flowers${allGroups.length > 0 ? `  ${getFlowers().length}` : ''}`)}
-        {tabButton('almanac', `Collection  ${speciesFound}/${PLANT_SPECIES.length}`)}
+        {tabButton('almanac', `Almanac  ${speciesFound}/${PLANT_SPECIES.length}`)}
         <UiEntity uiTransform={{ flexGrow: 1, height: '100%' }} />
         {/* Close: a bare floating "x" read as unfinished next to three pill tabs. */}
         <UiEntity uiTransform={{ width: px(40), height: px(40), alignItems: 'center', justifyContent: 'center', borderRadius: px(20) }} uiBackground={{ color: RAISED }} onMouseDown={() => toggleSeedMenu()}>
@@ -402,15 +417,59 @@ export function SeedMenuUi(props: { px: (n: number) => number; fs: (n: number) =
         </UiEntity>
       </UiEntity>
 
+      )}
+
+      {/* ── CONFIRMATION PAGE — planting a seed / putting a flower on a stand. Back returns to the choice; the action button does it. */}
+      <UiEntity uiTransform={{ display: confirm ? 'flex' : 'none', width: '100%', flexDirection: 'column', alignItems: 'center', margin: { top: px(8) } }}>
+        {(() => {
+          const cf = confirm
+          if (!cf) return null
+          const btn = (label: string, bg: { r: number; g: number; b: number; a: number }, txt: { r: number; g: number; b: number; a: number }, onClick: () => void) => (
+            <UiEntity key={`cf-${label}`} uiTransform={{ width: px(190), height: px(50), margin: { left: px(8), right: px(8) }, alignItems: 'center', justifyContent: 'center', borderRadius: px(25) }} uiBackground={{ color: bg }} onMouseDown={onClick}>
+              <Label value={label} fontSize={fs(18)} color={txt} textAlign="middle-center" textWrap="nowrap" uiTransform={{ height: '100%' }} />
+            </UiEntity>
+          )
+          if (cf.kind === 'plant') {
+            const t = rarityTierById(cf.tier)
+            const have = getPouch()[cf.tier] ?? 0
+            return (
+              <UiEntity uiTransform={{ width: '100%', flexDirection: 'column', alignItems: 'center' }}>
+                <UiEntity uiTransform={{ width: px(28), height: px(28), borderRadius: px(14), margin: { top: px(10), bottom: px(10) } }} uiBackground={{ color: { ...t.seedColor, a: 1 } }} />
+                <Label value={`Plant a ${t.name} seed here?`} fontSize={fs(22)} color={WHITE} textAlign="middle-center" textWrap="nowrap" uiTransform={{ width: '100%', height: fs(32) }} />
+                <Label value={`It opens in ${shortGrowTime(growMsForTier(cf.tier))}. You have ${have} ${t.name} seed${have === 1 ? '' : 's'}; planting uses one.`} fontSize={fs(15)} color={DIM} textAlign="middle-center" textWrap="wrap" uiTransform={{ width: '100%', height: fs(wide ? 24 : 44), margin: { bottom: px(14) } }} />
+                <UiEntity uiTransform={{ flexDirection: 'row', margin: { bottom: px(4) } }}>
+                  {btn('Back', RAISED, CREAM, () => { confirm = null })}
+                  {btn('Plant seed', MOSS, CREAM, () => { const c = confirm; const pt = plantTarget; confirm = null; plantTarget = null; open = false; if (c && pt) pt.plant(c.kind === 'plant' ? c.tier : 0) })}
+                </UiEntity>
+              </UiEntity>
+            )
+          }
+          const g = allGroups.find(x => x.key === cf.key)
+          if (!g) { confirm = null; return null }
+          const t = rarityTierById(g.rarityTier)
+          return (
+            <UiEntity uiTransform={{ width: '100%', flexDirection: 'column', alignItems: 'center' }}>
+              <UiEntity uiTransform={{ width: px(84), height: px(84), margin: { top: px(6), bottom: px(6) } }} uiBackground={{ textureMode: 'stretch', texture: { src: thumbSrc(g.flower) } }} />
+              <Label value={`Put your ${speciesName(g.flower)} on this stand?`} fontSize={fs(22)} color={WHITE} textAlign="middle-center" textWrap="nowrap" uiTransform={{ width: '100%', height: fs(32) }} />
+              <Label value={`${t.name} - it goes on show in the Gallery for everyone to see. You can take it back later.`} fontSize={fs(15)} color={DIM} textAlign="middle-center" textWrap="wrap" uiTransform={{ width: '100%', height: fs(wide ? 24 : 44), margin: { bottom: px(14) } }} />
+              <UiEntity uiTransform={{ flexDirection: 'row', margin: { bottom: px(4) } }}>
+                {btn('Back', RAISED, CREAM, () => { confirm = null })}
+                {btn('Display here', MOSS, CREAM, () => { const slot = avenueSlot; confirm = null; if (slot !== null) displayOnAvenue(slot, g.lastIndex); selectedKey = ''; avenueSlot = null; open = false })}
+              </UiEntity>
+            </UiEntity>
+          )
+        })()}
+      </UiEntity>
+
       {/* ── SEEDS TAB — one tile per rarity tier you hold, in ONE row; tap to choose what plants next */}
-      <UiEntity uiTransform={{ display: tab === 'seeds' ? 'flex' : 'none', width: '100%', flexDirection: 'column' }}>
-        <Label value={total > 0 ? (plantTarget !== null ? 'Plant which seed here?' : 'Planting next') : 'No seeds yet - catch some during a bloom'} fontSize={fs(15)} color={DIM} textAlign="middle-left" uiTransform={{ width: '100%', height: fs(26), margin: { top: px(4), bottom: px(6) } }} />
+      <UiEntity uiTransform={{ display: tab === 'seeds' && !confirm ? 'flex' : 'none', width: '100%', flexDirection: 'column' }}>
+        <Label value={total > 0 ? (plantTarget !== null ? 'Which seed do you want to plant?' : 'Planting next') : 'No seeds yet - catch some during a bloom'} fontSize={fs(15)} color={DIM} textAlign="middle-left" uiTransform={{ width: '100%', height: fs(26), margin: { top: px(4), bottom: px(6) } }} />
         <UiEntity uiTransform={{ display: total > 0 ? 'flex' : 'none', width: '100%', flexDirection: 'row', flexWrap: 'wrap' }}>
           {pouchGroups.map((g, i) => tile(
             `pouch-${g.tier}`, i, g.tier, g.count,
             next === g.tier, () => {
               setPreferredTier(g.tier)
-              if (plantTarget !== null) { const t = plantTarget; plantTarget = null; open = false; t.plant(g.tier); return }
+              if (plantTarget !== null) { confirm = { kind: 'plant', tier: g.tier }; return }
               holdSeed(g.tier)
             },
           ))}
@@ -418,7 +477,7 @@ export function SeedMenuUi(props: { px: (n: number) => number; fs: (n: number) =
       </UiEntity>
 
       {/* ── FLOWERS TAB */}
-      <UiEntity uiTransform={{ display: tab === 'flowers' ? 'flex' : 'none', width: '100%', flexDirection: 'column' }}>
+      <UiEntity uiTransform={{ display: tab === 'flowers' && !confirm ? 'flex' : 'none', width: '100%', flexDirection: 'column' }}>
         <UiEntity uiTransform={{ width: '100%', flexDirection: bodyDir, margin: { top: px(8) } }}>
 
           {/* left: the grid + its pager */}
@@ -432,12 +491,12 @@ export function SeedMenuUi(props: { px: (n: number) => number; fs: (n: number) =
 
           {/* right: counts, Gallery note, rarity filters (each on its own colour, so the row doubles as the legend) */}
           <UiEntity uiTransform={railT}>
-            <Label value={`${getFlowers().length} kept`} fontSize={fs(17)} color={WHITE} textAlign="middle-left" textWrap="nowrap" uiTransform={{ width: '100%', height: fs(26) }} />
-            <Label value={`${speciesFound}/${PLANT_SPECIES.length} species discovered`} fontSize={fs(14)} color={WHITE} textAlign="middle-left" textWrap="nowrap" uiTransform={{ width: '100%', height: fs(22), margin: { bottom: px(6) } }} />
+            <Label value={`${getFlowers().length} kept`} fontSize={fs(17)} color={WHITE} textAlign="middle-left" textWrap="nowrap" uiTransform={{ display: contextual ? 'none' : 'flex', width: '100%', height: fs(26) }} />
+            <Label value={`${speciesFound}/${PLANT_SPECIES.length} species discovered`} fontSize={fs(14)} color={WHITE} textAlign="middle-left" textWrap="nowrap" uiTransform={{ display: contextual ? 'none' : 'flex', width: '100%', height: fs(22), margin: { bottom: px(6) } }} />
             <Label value={avenueSlot === null ? '' : eligible.length > 0 ? `${eligible.length} of your flowers can go in the Gallery` : `None of your flowers qualify yet — ${rarityTierById(AVENUE_MIN_TIER).name} and up only`} fontSize={fs(14)} color={CREAM} textAlign="middle-left" textWrap="wrap" uiTransform={{ display: avenueSlot !== null ? 'flex' : 'none', width: '100%', height: fs(40), margin: { bottom: px(6) } }} />
             <UiEntity uiTransform={{ display: ownedTiers.length > 1 ? 'flex' : 'none', width: '100%', flexDirection: 'row', flexWrap: 'wrap', margin: { top: px(4) } }}>
-              {filterChip('all', 'All', null, CREAM)}
-              {ownedTiers.map(t => filterChip(`t${t}`, rarityTierById(t).name, t, { ...rarityTierById(t).seedColor, a: 1 }))}
+              {filterChip('all', `All ${eligible.reduce((a, g) => a + g.count, 0)}`, null, CREAM)}
+              {ownedTiers.map(t => filterChip(`t${t}`, `${rarityTierById(t).name} ${flowersIn(t)}`, t, { ...rarityTierById(t).seedColor, a: 1 }))}
             </UiEntity>
           </UiEntity>
         </UiEntity>
@@ -449,18 +508,17 @@ export function SeedMenuUi(props: { px: (n: number) => number; fs: (n: number) =
         <UiEntity uiTransform={{ display: sel && !giftMode ? 'flex' : 'none', width: '100%', flexDirection: wide ? 'row' : 'column', alignItems: wide ? 'center' : 'flex-start', margin: { top: px(6) } }}>
           <Label value={sel ? `${speciesName(sel.flower)}${sel.rarityTier > 0 ? ` (${rarityTierById(sel.rarityTier).name})` : ''}` : ''} fontSize={fs(16)} color={CREAM} textAlign="middle-left" textWrap="nowrap" uiTransform={wide ? { flexGrow: 1, height: fs(24) } : { width: '100%', height: fs(24), margin: { bottom: px(4) } }} />
           <UiEntity uiTransform={{ width: wide ? undefined : '100%', height: px(48), flexDirection: 'row', alignItems: 'center' }}>
-            {actionBtn(sel && isHeld(sel) ? 'Put away' : 'Hold', RAISED, CREAM, () => { if (sel) holdFlower(isHeld(sel) ? -1 : sel.lastIndex) }, false)}
-            {actionBtn('Gift', MOSS, CREAM, () => { giftMode = true; giftPage = 0 }, false)}
+            {avenueSlot === null ? actionBtn(sel && isHeld(sel) ? 'Put away' : 'Hold', RAISED, CREAM, () => { if (sel) holdFlower(isHeld(sel) ? -1 : sel.lastIndex) }, false) : null}
+            {avenueSlot === null ? actionBtn('Gift', MOSS, CREAM, () => { giftMode = true; giftPage = 0 }, false) : null}
             {actionBtn(avenueSlot ? 'Display here' : 'Display', sel && sel.rarityTier >= AVENUE_MIN_TIER ? MOSS : RAISED, sel && sel.rarityTier >= AVENUE_MIN_TIER ? CREAM : DIM, () => {
               if (!sel) return
               if (sel.rarityTier < AVENUE_MIN_TIER) { showToast(`The Rare Plant Gallery is for ${rarityTierById(AVENUE_MIN_TIER).name} flowers and up`, 4_000, false); return }
               // Opened FROM a slot: straight in, that slot was the choice. Opened from the
               // pouch: arm it and let them tap the spot they want (KJ 2026-09-22).
-              if (avenueSlot !== null) { displayOnAvenue(avenueSlot, sel.lastIndex) }
-              else {
-                armAvenuePlacement(sel.lastIndex)
-                showToast('Now tap the Gallery stand where you want it', 6_000, false)
-              }
+              // From a stand: confirm on a page of its own before it goes up.
+              if (avenueSlot !== null) { confirm = { kind: 'display', key: sel.key }; return }
+              armAvenuePlacement(sel.lastIndex)
+              showToast('Now tap the Gallery stand where you want it', 6_000, false)
               selectedKey = ''; avenueSlot = null; open = false
             }, true)}
           </UiEntity>
@@ -488,7 +546,7 @@ export function SeedMenuUi(props: { px: (n: number) => number; fs: (n: number) =
       {/* ── ALMANAC TAB — every species in the garden, found or not. This is the goal the
           collection is FOR: Fin 2026-09-21 had no idea how many flowers existed, so a new
           one could not feel like progress against anything. Grid left, progress rail right. */}
-      <UiEntity uiTransform={{ display: tab === 'almanac' ? 'flex' : 'none', width: '100%', flexDirection: bodyDir, margin: { top: px(8) } }}>
+      <UiEntity uiTransform={{ display: tab === 'almanac' && !confirm ? 'flex' : 'none', width: '100%', flexDirection: bodyDir, margin: { top: px(8) } }}>
 
         <UiEntity uiTransform={{ width: gridW, flexDirection: 'column' }}>
           {selSpecies ? almanacDetail(selSpecies) : null}
