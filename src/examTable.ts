@@ -20,7 +20,7 @@ import { PROP_LAYOUT } from './shared/layout'
 import { getHeld, getFlowers, heldFlowerIndex, Keepsake } from './playerInventory'
 import { box, label, tapArea, setHover, PLATE, CREAM } from './pouchRack'
 import { playSfx } from './sounds'
-import { registerStreamedTree } from './streaming'
+import { registerStreamedTree, registerStreamSource } from './streaming'
 import { openFlowerInspector } from './flowerInspector'
 import { attachPlantVfx, detachPlantVfx } from './plantVfx'
 import { retirePlant } from './boxSystem'
@@ -32,6 +32,7 @@ const DEFAULT_YAW = 0
 
 const TOP_Y     = 0.9            // table top height
 const TOP_W     = 1.6, TOP_D = 1.0
+const TAP_W = 0.9, TAP_D = 0.9, TAP_H = 0.7   // TUNING — the table's tap target: the turntable footprint, 0.7 m tall
 const SPECIMEN_M = 1.35          // the specimen's largest dimension (species models are ~0.55 m)
 const SPIN_DEG_S = 22            // turntable speed
 const SPIN_RANGE = 16            // m — only turn while someone could be looking
@@ -161,6 +162,12 @@ export function setupExamTable(): void {
   Transform.create(root, { position: pos, rotation: Quaternion.fromEulerDegrees(0, yaw, 0) })
   Name.create(root, { value: 'ExamTable' })
   registerStreamedTree('examTable', root)   // hidden while you are across the garden (streaming.ts)
+  // The specimen is created and replaced at runtime, after the tree above was collected (it only refreshes every 30 s), so it is streamed on its own:
+  // it hides with the rest of the table when you walk away and shows again on return. (Its effects pause themselves beyond ~12 m — plantVfx's budget.)
+  registerStreamSource('examSpecimen', () => {
+    const t = root ? Transform.getOrNull(root) : null
+    return specimen !== null && t ? [{ key: 'specimen', x: t.position.x, z: t.position.z, entities: [specimen] }] : []
+  })
 
   // (No table geometry — top, apron, legs: the table is modelled in Blender now, KJ 2026-09-30. The turntable, plaque and tap target stay.)
   // Turntable: a low dark disc the specimen stands on.
@@ -176,8 +183,9 @@ export function setupExamTable(): void {
   plaque = label(root, { x: 0, y: TOP_Y - 0.14, z: -TOP_D / 2 - 0.03 }, PLAQUE_EMPTY, 0.5, CREAM, 1.15, 0.3)
   label(root, { x: 0, y: TOP_Y + 0.02, z: -TOP_D / 2 + 0.06 }, 'Examination table', 0.4, CREAM, 1.2, 0.12)
 
-  // One generous tap target over the whole top, specimen included.
-  tap = tapArea(root, { x: 0, y: TOP_Y + 0.6, z: 0 }, { x: TOP_W, y: 1.3, z: TOP_D }, HOVER_EMPTY, examine)
+  // The tap target (KJ 2026-10-01: it was the whole table top and 1.3 m high, and got in the way of clicking other things): now just over the
+  // turntable — its footprint, from the top up to 0.7 m, enough to click the flower on it without reaching out over the rest of the table.
+  tap = tapArea(root, { x: 0, y: TOP_Y + TAP_H / 2, z: 0.05 }, { x: TAP_W, y: TAP_H, z: TAP_D }, HOVER_EMPTY, examine)
 
   engine.addSystem(spinSystem)
   console.log(`[ExamTable] ready at (${pos.x}, ${pos.y}, ${pos.z}) yaw ${yaw}`)

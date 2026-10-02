@@ -1542,14 +1542,48 @@ async function consolidateBeds(): Promise<void> {
       if (!target || count(target) < count(home)) continue   // only ever merge INTO the fuller (or equal, lower-numbered) bed
       if (count(target) === count(home) && target.id > home.id) continue
       const slot = target.boxIds.find(id => !boxes.get(id)?.owner && !reservationHolder(id))!
-      const timer = boxTimers.get(straggler.boxId)
-      if (timer) { timers.clearTimeout(timer); boxTimers.delete(straggler.boxId) }
-      const moving: BoxRecord = { ...straggler, boxId: slot }
-      boxes.set(slot, moving)
-      boxes.set(straggler.boxId, emptyBox(straggler.boxId))
-      scheduleOpen(moving)
+      relocatePlanter(straggler, slot)
       moved++
       console.log(`[Server] Consolidated ${straggler.ownerName}'s planter ${straggler.boxId} → ${slot} (Bed ${home.id} → Bed ${target.id})`)
+    }
+  }
+  if (moved > 0) { void saveBoxes(); for (const b of boxes.values()) sendBox(b) }
+}
+
+/** Move a planted planter's whole record into an empty planter slot (same gardener, same plant, same timers). */
+function relocatePlanter(from: BoxRecord, slot: string): void {
+  const timer = boxTimers.get(from.boxId)
+  if (timer) { timers.clearTimeout(timer); boxTimers.delete(from.boxId) }
+  const moving: BoxRecord = { ...from, boxId: slot }
+  boxes.set(slot, moving)
+  boxes.set(from.boxId, emptyBox(from.boxId))
+  scheduleOpen(moving)
+}
+
+/** Boot-time repair (KJ 2026-10-02: "Adventureland has no plot, they were put into carlosmu's"). The plant rules can no longer put two
+ *  gardeners in one bed (test/bedsFuzz.spec.ts), but beds filled under the OLD rules (beds of four, spill-over) still hold mixed pairs, and
+ *  consolidateBeds only ever merges a gardener into a bed they already own. Here every planter that is not its bed owner's moves to a
+ *  bed of its own: one the gardener already owns alone with room, else a completely empty, unheld bed. Offline gardeners only. */
+async function separateMixedBeds(): Promise<void> {
+  let moved = 0
+  for (const home of beds) {
+    const owner = bedOwner(home, bedInfo)
+    if (!owner) continue
+    for (const id of home.boxIds) {
+      const b = boxes.get(id)
+      if (!b || !b.owner || b.owner === owner.owner || isConnected(b.owner)) continue
+      const soleOwner = (x: Bed): string | null => {
+        const o = new Set(x.boxIds.map(i => boxes.get(i)?.owner).filter(Boolean))
+        return o.size === 1 ? [...o][0]! : null
+      }
+      const free = (x: Bed): string | undefined => x.boxIds.find(i => !boxes.get(i)?.owner && !reservationHolder(i))
+      const target = beds.find(x => x !== home && soleOwner(x) === b.owner && free(x))
+        ?? beds.find(x => x !== home && bedOwner(x, bedInfo) === null && x.boxIds.every(i => !reservationHolder(i)) && free(x))
+      const slot = target && free(target)
+      if (!target || !slot) { console.log(`[Server] Mixed Bed ${home.id}: no free bed for ${b.ownerName}'s ${b.boxId} (stays beside ${owner.ownerName})`); continue }
+      relocatePlanter(b, slot)
+      moved++
+      console.log(`[Server] Separated ${b.ownerName}'s planter ${b.boxId} from ${owner.ownerName}'s Bed ${home.id} → ${slot} (Bed ${target.id})`)
     }
   }
   if (moved > 0) { void saveBoxes(); for (const b of boxes.values()) sendBox(b) }
@@ -1993,6 +2027,7 @@ export async function server(): Promise<void> {
   const outcomes = await Promise.all(loads.map(([, load]) => load()))
   loads.forEach(([label, load], i) => { if (!outcomes[i]) scheduleReload(label, load) })
   await consolidateBeds()
+  await separateMixedBeds()
   await ensureFreePlanters()
   timers.setInterval(() => executeTask(ensureFreePlanters), 60 * 60 * 1000)   // owners age past the min-away while nobody joins
   const restoredCount = getWateredCount()

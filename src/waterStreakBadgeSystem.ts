@@ -26,6 +26,11 @@ import { flairIcon } from './shared/config'
 // camera distance so the plate keeps a near-constant screen size, then faded at
 // range — both behaviours copied from the explorer's own tag (and from CTC).
 const PLATE_Y      = 0.10
+// Layer depths in the billboarded carrier's local space (-z = toward the camera): pill at 0, icon in front of it, text in front of both.
+// They were 6 / 12 / 20 mm apart, which z-fights (and sorts wrongly among the transparent layers) at any real distance; 3 cm steps are
+// invisible as parallax at nametag range but give the depth buffer and the transparency sort something to work with.
+const Z_FLAIR      = -0.03
+const Z_TEXT       = -0.07
 const NAME_FONT    = 0.95
 const STREAK_FONT  = 0.8
 const PILL_H       = 0.32
@@ -92,14 +97,14 @@ function buildPlate(address: string, avatar: Entity): Plate {
   MeshRenderer.setPlane(pill)
 
   const nameT = engine.addEntity()
-  Transform.create(nameT, { parent: carrier, position: { x: 0, y: 0.062, z: -0.012 } })
+  Transform.create(nameT, { parent: carrier, position: { x: 0, y: 0.062, z: Z_TEXT } })
   TextShape.create(nameT, {
     text: '', fontSize: NAME_FONT, textColor: Color4.White(),
     outlineColor: Color4.Black(), outlineWidth: 0.12,
   })
 
   const streakT = engine.addEntity()
-  Transform.create(streakT, { parent: carrier, position: { x: 0, y: -0.075, z: -0.012 } })
+  Transform.create(streakT, { parent: carrier, position: { x: 0, y: -0.075, z: Z_TEXT } })
   TextShape.create(streakT, {
     text: '', fontSize: STREAK_FONT, textColor: Color4.White(),
     outlineColor: Color4.Black(), outlineWidth: 0.12,
@@ -107,7 +112,7 @@ function buildPlate(address: string, avatar: Entity): Plate {
 
   // Flair icon: same glyph set + tints as the boards and the "Watered by" labels (config flairIcon). A plane just in front of the pill.
   const flair = engine.addEntity()
-  Transform.create(flair, { parent: carrier, position: { x: 0, y: 0, z: -0.006 }, scale: { x: 0, y: 0, z: 0 } })
+  Transform.create(flair, { parent: carrier, position: { x: 0, y: 0, z: Z_FLAIR }, scale: { x: 0, y: 0, z: 0 } })
   MeshRenderer.setPlane(flair)
 
   return {
@@ -166,8 +171,8 @@ function renderPlate(p: Plate, info: StreakInfo): void {
   const hasFlair = flairIcon(info.tier) !== null
   const fsz = label ? FLAIR_SIZE : FLAIR_SIZE * 0.68   // a name-only pill is shorter, so its icon is too — it has to fit INSIDE the plate
   const slot = hasFlair ? fsz + 0.05 : 0
-  Transform.getMutable(p.nameT).position   = { x: slot / 2, y: label ? 0.05 : -0.004, z: -0.012 }
-  Transform.getMutable(p.streakT).position = { x: slot / 2, y: -0.085, z: -0.012 }
+  Transform.getMutable(p.nameT).position   = { x: slot / 2, y: label ? 0.05 : -0.004, z: Z_TEXT }
+  Transform.getMutable(p.streakT).position = { x: slot / 2, y: -0.085, z: Z_TEXT }
   const st = TextShape.getMutable(p.streakT)
   st.text = label
   st.textColor = STREAK_COLOR
@@ -179,7 +184,7 @@ function renderPlate(p: Plate, info: StreakInfo): void {
   const pillW = PILL_PER_CHAR * chars + PILL_PAD + slot
   p.tier = info.tier
   // The icon sits in the slot at the pill's left end, vertically on the name line.
-  Transform.getMutable(p.flair).position = { x: -pillW / 2 + slot / 2 + 0.025, y: label ? 0.05 : -0.004, z: -0.02 }
+  Transform.getMutable(p.flair).position = { x: -pillW / 2 + slot / 2 + 0.025, y: label ? 0.05 : -0.004, z: Z_FLAIR }
   Transform.getMutable(p.flair).scale = hasFlair ? { x: fsz, y: fsz, z: 1 } : { x: 0, y: 0, z: 0 }
   Transform.getMutable(p.pill).scale = {
     x: pillW,

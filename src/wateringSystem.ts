@@ -419,6 +419,34 @@ function playToHealthy(entity: Entity): void {
   }
 }
 
+// ── Water-FX governor (KJ 2026-10-01) ──────────────────────────
+// Each water starts a ripple, a sparkle burst (a new particle-system entity) and a tribute flight. Watering several plants in quick succession
+// stacked all of them at once. Each kind now has a minimum gap, so a quick run of waters shows a steady stream of effects instead of a pile-up
+// (the plant's own swap to healthy, the sounds and the server state are NOT limited).
+const fxLast = new Map<string, number>()
+function fxReady(kind: string, gapMs: number): boolean {
+  const now = Date.now()
+  if (now - (fxLast.get(kind) ?? 0) < gapMs) return false
+  fxLast.set(kind, now)
+  return true
+}
+const fxSparkle = (p: { x: number; y: number; z: number }): void => { if (fxReady('burst', 260)) triggerSparkle(p) }
+const fxRipple  = (p: { x: number; y: number; z: number }): void => { if (fxReady('ripple', 320)) triggerGroundRipple(p) }
+const fxTribute = (p: { x: number; y: number; z: number }): void => { if (fxReady('tribute', 450)) triggerWateringTribute(p) }
+
+// Remote waters (other players) get a much smaller budget than your own (KJ 2026-10-01: 10 players watering at once). Their sparkle/ripple/sound
+// only play when the plant is near YOU, and share slower gaps of their own, so the local player's effects are never starved by the crowd.
+const REMOTE_FX_RANGE_PHONE = 12
+const REMOTE_FX_RANGE_DESKTOP = 20
+function remoteFxNear(p: { x: number; y: number; z: number }): boolean {
+  const me = Transform.getOrNull(engine.PlayerEntity)?.position
+  if (!me) return false
+  return Math.hypot(p.x - me.x, p.z - me.z) <= (isMobile() ? REMOTE_FX_RANGE_PHONE : REMOTE_FX_RANGE_DESKTOP)
+}
+const remoteSparkle = (p: { x: number; y: number; z: number }): void => { if (remoteFxNear(p) && fxReady('rburst', 700)) triggerSparkle(p) }
+const remoteRipple  = (p: { x: number; y: number; z: number }): void => { if (remoteFxNear(p) && fxReady('rripple', 600)) triggerGroundRipple(p) }
+const remoteSound   = (p: { x: number; y: number; z: number }): void => { if (remoteFxNear(p) && fxReady('rsound', 350)) playClip(SND_WATERING, VOL_WATERING, p) }
+
 // Hover follows the plant's state (KJ 2026-09-30: a watered plant still said "Hold to water"). A watered plant only takes a pour again
 // inside its expiry tell (a top-up), so that is the one watered state that still invites a hold.
 let hoverSweepIn = 0
@@ -909,13 +937,22 @@ export function plantMovePair(name: string): { plant: Entity; anchor: Entity } |
   return reg ? { plant, anchor: reg.anchor } : null
 }
 
+// Click handling (KJ 2026-10-01 "lag when watering several flowers in quick succession"): the handlers were removed on every water and re-registered on
+// confirmation — pointer-event components deleted, created and re-created per plant per water. They are now registered ONCE per plant; "disabled"
+// just means locked (a pending pour), and the callback ignores clicks while locked. The hover text follows the plant's state (plantHoverSystem).
+const clickRegistered = new Set<Entity>()
+const clickLocked = new Set<Entity>()
+
 function enablePlantClick(entity: Entity) {
   const info = plantRegistry.get(entity)
   if (!info) return
-  PointerEvents.deleteFrom(info.clickTarget)   // drop the hover-only "Watered…" entry disablePlantClick leaves, so the two never stack
+  clickLocked.delete(entity)
+  if (clickRegistered.has(entity)) return
+  clickRegistered.add(entity)
   pointerEventsSystem.onPointerDown(
     { entity: info.clickTarget, opts: { button: InputAction.IA_POINTER, hoverText: HOLD_WATERING_ENABLED ? 'Hold to water' : 'Water', maxDistance: POINTER_MAX_DIST } },
     () => {
+      if (clickLocked.has(entity)) return   // a pour on this plant is still pending
       // Player-based reach gate — maxDistance above is camera-based and must stay
       // generous for mobile; this is the real "how far can I water from" limit.
       const plantPos  = Transform.getOrNull(entity)?.position
@@ -941,13 +978,7 @@ function enablePlantClick(entity: Entity) {
 }
 
 function disablePlantClick(entity: Entity) {
-  const info = plantRegistry.get(entity)
-  if (!info) return
-  pointerEventsSystem.removeOnPointerDown(info.clickTarget)
-  pointerEventsSystem.removeOnPointerHoverEnter(info.clickTarget)
-  PointerEvents.deleteFrom(info.clickTarget)
-  // Hover-only "Watered…" so a watered plant answers the pointer instead of going dead (KJ 2026-09-30). No handler: a tap does nothing.
-  PointerEvents.create(info.clickTarget, { pointerEvents: [{ eventType: PointerEventType.PET_DOWN, eventInfo: { button: InputAction.IA_POINTER, hoverText: 'Watered…', maxDistance: POINTER_MAX_DIST } }] })
+  if (plantRegistry.has(entity)) clickLocked.add(entity)
 }
 
 export function resetDailyLimit(): void {
@@ -1156,7 +1187,7 @@ function waterPlant(entity: Entity, plantId: string, sweet = false, fromHold = f
   if (!fromHold) triggerWateringEmote(entity)   // a hold already started it on the press
   if (sweet) {   // just-right pour: the plant answers with a flourish
     const at = Transform.getOrNull(entity)?.position
-    if (at) timers.setTimeout(() => { playMagicFXSound(); triggerSparkle(at) }, WATER_FX_MS)
+    if (at) timers.setTimeout(() => { playMagicFXSound(); fxSparkle(at) }, WATER_FX_MS)
     // (Notification pass 2026-09-27: the meter shows "Just right!" — no toast)
   }
 
@@ -1164,7 +1195,7 @@ function waterPlant(entity: Entity, plantId: string, sweet = false, fromHold = f
   timers.setTimeout(playWateringSound, WATER_FX_MS)
   timers.setTimeout(() => {
     const pos = Transform.getOrNull(entity)?.position
-    if (pos) triggerGroundRipple(pos)
+    if (pos) fxRipple(pos)
     triggerGroundLightBurst()
   }, WATER_FX_MS)
 
@@ -1180,8 +1211,8 @@ function waterPlant(entity: Entity, plantId: string, sweet = false, fromHold = f
       if (!sweet) playMagicFXSound()   // a perfect pour already chimed at WATER_FX_MS — one chime, not two
       const plantPos = Transform.getOrNull(entity)?.position
       if (plantPos) {
-        triggerSparkle(plantPos)
-        timers.setTimeout(() => triggerWateringTribute(plantPos), 650)
+        fxSparkle(plantPos)
+        timers.setTimeout(() => fxTribute(plantPos), 650)
       }
       // t=WATER_ANIM_MS + ANIM_TRANSITION_MS — switch to idle pose
       timers.setTimeout(() => {
@@ -1199,8 +1230,8 @@ function waterPlant(entity: Entity, plantId: string, sweet = false, fromHold = f
       if (!sweet) playMagicFXSound()
       const plantPos = Transform.getOrNull(entity)?.position
       if (plantPos) {
-        triggerSparkle(plantPos)
-        timers.setTimeout(() => triggerWateringTribute(plantPos), 650)
+        fxSparkle(plantPos)
+        timers.setTimeout(() => fxTribute(plantPos), 650)
       }
     }, WATER_ANIM_MS)
   }
@@ -1828,13 +1859,13 @@ export function setupWateringSystem(): void {
           playToHealthy(entity)
           triggerGroundLightBurst()
           if (plantPos) {
-            playClip(SND_WATERING, VOL_WATERING, plantPos)
-            triggerGroundRipple(plantPos)
+            remoteSound(plantPos)
+            remoteRipple(plantPos)
           }
           timers.setTimeout(() => {
             if (!PlantData.get(entity).isWatered) return
             Animator.playSingleAnimation(entity, ANIM_HEALTHY_STATE)
-            if (plantPos) triggerSparkle(plantPos)
+            if (plantPos) remoteSparkle(plantPos)
           }, ANIM_TRANSITION_MS)
         } else {
           // State recovery on join — snap to healthy, drop hidden

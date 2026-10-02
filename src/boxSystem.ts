@@ -25,6 +25,7 @@
 import {
   engine,
   Entity,
+  tweenSystem,
   Transform,
   MeshRenderer,
   Material,
@@ -995,6 +996,21 @@ function createBalloonPool(): void {
 }
 
 /** Bone.003's baked motion as looping renderer-side Tween sequences (one segment per track key). */
+// Finished one-shot tweens (pops, swells, seed drops, water drops) stay on their entity as a Tween component, and the SDK's tween
+// bookkeeping system re-serialises EVERY entity that carries one, every tick (ecs/dist/systems/tween.js). They pile up over a session — plants
+// stream in and out, every pop leaves one behind — so the scene's script time climbed with play time (KJ 2026-10-02 PERF: script 17 ms → 40 ms).
+// Looping tweens (they have a TweenSequence) are left alone. The scene's Transform already holds each tween's end value (the pops
+// are authored from the target scale), so dropping a finished tween changes nothing on screen.
+let tweenSweepAccum = 0
+function tweenSweepSystem(dt: number): void {
+  tweenSweepAccum += dt
+  if (tweenSweepAccum < 0.5) return
+  tweenSweepAccum = 0
+  for (const [e] of engine.getEntitiesWith(Tween)) {
+    if (!TweenSequence.has(e) && tweenSystem.tweenCompleted(e)) Tween.deleteFrom(e)
+  }
+}
+
 function trackSequence(kind: 'move' | 'rotate'): NonNullable<Parameters<typeof Tween.create>[1]>[] {
   const out: NonNullable<Parameters<typeof Tween.create>[1]>[] = []
   for (let i = 0; i + 1 < BALLOON_TEXT_TRACK.length; i++) {
@@ -1188,5 +1204,6 @@ export function setupBoxSystem(): void {
   engine.addSystem(boxTickSystem)
   engine.addSystem(plantRevealSystem)
   engine.addSystem(plaqueHomeSystem)
+  engine.addSystem(tweenSweepSystem)
   console.log(`[Boxes] ${views.size} seed boxes ready · boxState listeners=${room.listenerCount('boxState')}`)
 }

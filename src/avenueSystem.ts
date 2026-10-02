@@ -19,13 +19,14 @@
 // =============================================================
 
 import {
-  engine, Entity, Transform, GltfContainer, ColliderLayer, MeshCollider, TextShape, Billboard, BillboardMode, Tween, EasingFunction,
+  engine, Entity, Transform, GltfContainer, ColliderLayer, MeshCollider, TextShape, Billboard, BillboardMode, Tween, EasingFunction, TweenLoop, TweenSequence, MeshRenderer, Material, MaterialTransparencyMode,
   pointerEventsSystem, InputAction,
 } from '@dcl/sdk/ecs'
 import { Quaternion } from '@dcl/sdk/math'
 import { getPlayer } from '@dcl/sdk/players'
 import { room } from './shared/messages'
 import {
+  SPARKLE_SRC,
   AVENUE_POSITIONS, AVENUE_CUBE_FRONT_OFFSET, AVENUE_PLAQUE_OUT, AVENUE_PLAQUE_DROP, AVENUE_FLOWER_SCALE,
   AVENUE_MIN_TIER, plantSpeciesById, rarityTierById,
 } from './shared/config'
@@ -65,7 +66,11 @@ const PLAQUE_SIZE    = { w: 1.05, h: 0.34 }
 const PLAQUE_FONT    = 0.7   // TUNING — two short lines under the star
 // Empty stand: a floating "?" above the soil
 const QUESTION_LIFT  = 0.7
-const QUESTION_FONT  = 7
+const QUESTION_SRC   = 'assets/scene/Models/questionMark/questionMark.glb'
+const QUESTION_SCALE = 2.2     // questionMark.glb is 0.34 x 0.53 m, origin at its base
+const QUESTION_BOB_M   = 0.07  // float amplitude (the bob is one yoyo tween on a child, started when the mark pops in)
+const QUESTION_BOB_MS  = 1800
+const QUESTION_GLOW    = 1.5   // soft gold glow sprite behind the glyph, m
 const QUESTION_RANGE_M = 16    // a "?" pops in as you come within this of its stand, and drops out again past +3 m
 const QUESTION_POP_MS  = 350   // same ease as the plants' pop (boxSystem POP_MS / EASEOUTBACK)
 // Pooled like boxSystem's: signs.ts shows the nearest 8 within 9 m anyway
@@ -103,6 +108,7 @@ const views   = new Map<string, SlotView>()
 const plaques: Plaque[] = []
 const synced  = new Set<string>()   // had the join snapshot — no sounds for that one
 let   plaqueAccum = 0
+const questionKids = new Map<Entity, { bob: Entity; all: Entity[] }>()   // root -> its bobbing child + every child, for cleanup
 const questionShown = new Set<Entity>()   // "?" marks currently popped in
 let   questionAccum = 0
 
@@ -165,13 +171,39 @@ function labelFor(v: SlotView): string {
 }
 
 /** Empty slot: a floating gold "?" over the soil — a stand waiting for a flower. Decoration
- *  only, no attribution, removed the instant a player plants here. */
+ *  only, no attribution, removed the instant a player plants here. Root = pop-in scale + Y billboard;
+ *  children = the bobbing model and a soft glow sprite behind it. */
 function setWildBloom(v: SlotView): void {
   const e = engine.addEntity()
   Transform.create(e, { position: { x: v.pos.x, y: v.pos.y + QUESTION_LIFT, z: v.pos.z }, scale: { x: 0.001, y: 0.001, z: 0.001 } })   // popped in by questionPopSystem
-  TextShape.create(e, { text: '?', fontSize: QUESTION_FONT, textColor: { r: 0.94, g: 0.78, b: 0.32, a: 0.9 }, outlineWidth: 0.2, outlineColor: { r: 0.09, g: 0.08, b: 0.07 } })
   Billboard.create(e, { billboardMode: BillboardMode.BM_Y })
+  const bob = engine.addEntity()
+  Transform.create(bob, { parent: e })
+  const model = engine.addEntity()
+  Transform.create(model, { parent: bob, position: { x: 0, y: -0.265 * QUESTION_SCALE, z: 0 }, scale: { x: QUESTION_SCALE, y: QUESTION_SCALE, z: QUESTION_SCALE } })
+  GltfContainer.create(model, { src: QUESTION_SRC, visibleMeshesCollisionMask: ColliderLayer.CL_NONE, invisibleMeshesCollisionMask: ColliderLayer.CL_NONE })
+  const glow = engine.addEntity()
+  Transform.create(glow, { parent: bob, position: { x: 0, y: 0, z: 0.12 }, scale: { x: QUESTION_GLOW, y: QUESTION_GLOW, z: QUESTION_GLOW } })
+  MeshRenderer.setPlane(glow)
+  Material.setPbrMaterial(glow, {
+    texture:          Material.Texture.Common({ src: SPARKLE_SRC }),
+    alphaTexture:     Material.Texture.Common({ src: SPARKLE_SRC }),
+    transparencyMode: MaterialTransparencyMode.MTM_ALPHA_BLEND,
+    albedoColor:      { r: 1, g: 0.72, b: 0.3, a: 0.4 },
+    emissiveColor:    { r: 1, g: 0.6, b: 0.2 },
+    emissiveIntensity: 1.6,
+    castShadows:      false,
+  })
+  questionKids.set(e, { bob, all: [bob, model, glow] })
   v.plant = e
+}
+
+/** Take the "?" and its children down with the root (retirePlant removes only the entity it is handed). */
+function removeQuestion(root: Entity): void {
+  const kids = questionKids.get(root)
+  if (kids === undefined) return
+  questionKids.delete(root)
+  for (const k of kids.all) engine.removeEntity(k)
 }
 
 function setPlantVisual(v: SlotView): void {
@@ -182,7 +214,7 @@ function setPlantVisual(v: SlotView): void {
   // retirePlant (not a bare removeEntity): every Avenue flower is Rare+ and carries the
   // pulse GltfNodeModifiers override, and removing an entity with that still on makes the
   // Unity explorer's ResetMaterialSystem throw on every recall/tidy/replace (2026-09-28).
-  if (v.plant !== null) { questionShown.delete(v.plant); retirePlant(v.plant); v.plant = null }
+  if (v.plant !== null) { questionShown.delete(v.plant); removeQuestion(v.plant); retirePlant(v.plant); v.plant = null }
   if (!v.owner) { setWildBloom(v); return }
   const species = plantSpeciesById(v.flower)
   if (!species) return
@@ -210,9 +242,16 @@ function questionPopSystem(dt: number): void {
     if (!questionShown.has(e) && d <= QUESTION_RANGE_M) {
       questionShown.add(e)
       Tween.setScale(e, { x: 0.001, y: 0.001, z: 0.001 }, { x: 1, y: 1, z: 1 }, QUESTION_POP_MS, EasingFunction.EF_EASEOUTBACK)
+      const bob = questionKids.get(e)?.bob
+      if (bob) {
+        Tween.setMove(bob, { x: 0, y: -QUESTION_BOB_M, z: 0 }, { x: 0, y: QUESTION_BOB_M, z: 0 }, QUESTION_BOB_MS, EasingFunction.EF_EASESINE)
+        TweenSequence.create(bob, { sequence: [], loop: TweenLoop.TL_YOYO })
+      }
     } else if (questionShown.has(e) && d > QUESTION_RANGE_M + 3) {
       questionShown.delete(e)
       Tween.deleteFrom(e)
+      const bob = questionKids.get(e)?.bob
+      if (bob) { Tween.deleteFrom(bob); TweenSequence.deleteFrom(bob) }
       Transform.getMutable(e).scale = { x: 0.001, y: 0.001, z: 0.001 }
     }
   }

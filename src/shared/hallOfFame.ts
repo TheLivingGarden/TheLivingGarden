@@ -22,7 +22,7 @@
 // "floor minus 0.5" convention left every stand half a metre under it). Floors: single stand 0.5, .002 and .008 rows 0.549, .003 and .004 rows 0.049.
 export const HOF_MODULES: ReadonlyArray<{ x: number; y: number; z: number; rot: number }> = [
   // HallOfFame_Module
-  { x: 54.207, y: 0.5, z: 6.642, rot: 0 },
+  { x: 54.207, y: 0.049, z: 6.642, rot: 0 },
   // HallOfFame_Module.002
   { x: 33.178, y: 0.549, z: 3.885, rot: 180 },
   { x: 33.178, y: 0.549, z: 9.011, rot: 180 },

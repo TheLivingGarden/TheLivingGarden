@@ -428,6 +428,10 @@ function uiComponent() {
       {/* ── Test Panel — MOUNTED for v2 dev; comment out before production deploys ── */}
       <TestPanelUi />
       <DigitLabUi px={px} fs={fs} />
+      {/* Glyph warm-up (KJ 2026-10-01: digits are sometimes drawn small and black for a moment — "emoji numbers" — then resolve). A guess: the explorer
+          builds a glyph the first time it is drawn, and the first frame shows a placeholder. Every digit and the HUD's symbols are drawn here
+          from the start, invisible (alpha 0.01), so the real labels find them ready. */}
+      <Label value="0123456789 %:+-xX. STREAK ABCDEFGHIJKLMNOPQRSTUVWXYZ abcdefghijklmnopqrstuvwxyz" fontSize={10} color={{ r: 1, g: 1, b: 1, a: 0.01 }} uiTransform={{ positionType: 'absolute', position: { left: 0, bottom: 0 }, width: 600, height: 12 }} />
       <HitchHudUi px={px} />
       {/* Dev calibration line — SHOW_DEV_OVERLAY, off by default (KJ 2026-09-21) */}
       <Label

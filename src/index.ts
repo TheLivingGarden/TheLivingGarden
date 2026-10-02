@@ -13,6 +13,7 @@ import { setupExamTable } from './examTable'
 import { setupGalleryThreads } from './galleryThreads'
 import { setupWaterStreakBadges } from './waterStreakBadgeSystem'
 import { setGoldenHour } from './moonlight'
+import { installSystemProfiler } from './hitchHud'
 
 // Importing shared schemas + messages here ensures registerMessages()
 // and defineComponent() run on BOTH server and client before any
@@ -21,6 +22,7 @@ import './shared/schemas'
 import './shared/messages'
 
 export async function main() {
+  if (!isServer()) installSystemProfiler()   // must run before any engine.addSystem (it wraps them)
   if (isServer()) {
     const { server } = await import('./server/server')
     await server()
