@@ -92,14 +92,18 @@ export const SEED_ARC_H         = 4.0       // TUNING — m the arc rises above 
 export const SEED_FLIGHT_SCALE  = 3.0       // TUNING — seeds are this much bigger at launch, easing to normal on landing
 /** 2026-09-28 (KJ: "move bloom model and surrounding text forward, towards the spawn
  *  position", then "bloom model and text to go backwards (-x) by .5m") — the composite
- *  bakes the Bloom model's and its centerText GLBs' transforms, so this nudges them at
- *  setup instead of round-tripping through Blender/Creator Hub, the same reason
- *  PLANT_LAYOUT exists. The default spawn sits at higher X than the Bloom and looks back
- *  at it (see scene.json), so +X is toward the spawn. Net of both requests: +2 then -0.5.
- *  Applied to the 'Bloom', 'centerTextBloom', 'centerTextProgress' and
- *  'CenterTextInstructions.glb' entities directly (bloomSystem.ts / wateringSystem.ts),
- *  and folded into the two reference points below so every VFX/audio anchor keeps
- *  following the model. */
+ *  bakes the Bloom model's transform, so this nudges it at setup instead of round-tripping
+ *  through Blender/Creator Hub, the same reason PLANT_LAYOUT exists. The default spawn sits
+ *  at higher X than the Bloom and looks back at it (see scene.json), so +X is toward the
+ *  spawn. Net of both requests: +2 then -0.5. Applied to the 'Bloom' entity directly
+ *  (bloomSystem.ts) and folded into the two reference points below so every VFX/audio
+ *  anchor keeps following the model.
+ *  2026-10-05: the three centre-text GLBs (centerTextBloom / centerTextProgress /
+ *  CenterTextInstructions) were re-exported already positioned around the Bloom (ring of
+ *  four text nodes centred on the GLB origin), so they take no offset or nudge — they are
+ *  simply placed on BLOOM_CENTER (wateringSystem.ts). Verified in-world by KJ: the old +1.5 put the
+ *  ring too far toward the spawn, and the Bloom model's own origin (x 7.3) was too far back — the
+ *  rose's position is BLOOM_CENTER. */
 export const BLOOM_MODEL_OFFSET_X = 1.5
 
 /** Where seeds pour out of the Bloom: the crown of the flower, measured from Models/Bloom/Bloom.glb

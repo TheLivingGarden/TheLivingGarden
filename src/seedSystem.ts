@@ -61,6 +61,7 @@ import {
   rarityTierById,
   withArticle,
 } from './shared/config'
+import { seedSpotBlocked } from './shared/seedMask'
 import { showToast, showMoment, isTutorialActive } from './notifications'
 import { triggerSparkle } from './sparkleSystem'
 import { setupGoldenSeed } from './goldenSeed'
@@ -363,6 +364,7 @@ function startHop(seed: Seed, sx: number, sz: number, px: number, pz: number, no
     const tx = Math.max(SEED_LAND_BOUNDS.xMin + m, Math.min(SEED_LAND_BOUNDS.xMax - m, sx + Math.cos(a) * dist))
     const tz = Math.max(SEED_LAND_BOUNDS.zMin + m, Math.min(SEED_LAND_BOUNDS.zMax - m, sz + Math.sin(a) * dist))
     if (Math.hypot(tx - sx, tz - sz) < 1.5) continue   // squeezed by the bounds — try another angle
+    if (seedSpotBlocked(tx, tz)) continue                // would land in a pot / bench / planter (shared/seedMask)
     seed.hop = { fromX: sx, fromZ: sz, toX: tx, toZ: tz, startMs: now }
     seed.dodgesLeft--
     return

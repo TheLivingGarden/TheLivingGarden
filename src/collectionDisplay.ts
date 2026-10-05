@@ -240,10 +240,12 @@ function refreshFlowerShelf(): void {
 const COLS = 14   // KJ 2026-10-02: wider and shorter (14 x 6 = 84 slots for the 76 species; the board is no longer 12 x 7)
 const ROWS = 6
 const TILE = 0.48
-const TP   = 0.54   // tile pitch
+const TP   = 0.54   // tile pitch (columns)
+const ROW_PITCH = 0.62   // KJ 2026-10-05: rows are spaced wider than columns so the board fills the taller Blender frame without stretching the square tiles
 const GRID_W = COLS * TP
-const GRID_H = ROWS * TP
+const GRID_H = ROWS * ROW_PITCH
 const GRID_BOTTOM = 0.7   // the footer strip (0 .. 0.6) sits under the grid
+const PANEL_TOP_MARGIN = 0.315   // backdrop above the grid
 const GRID_TOP = GRID_BOTTOM + GRID_H
 // Eight rarity tabs in a vertical RAIL down the left of the grid (KJ 2026-10-02: the two rows of four sat high on the wall and were hard to hit;
 // a column of wide, row-shaped targets is easier to click and reads as navigation). The rail spans the grid's height, so the wall is
@@ -252,7 +254,10 @@ const GRID_TOP = GRID_BOTTOM + GRID_H
 // and the lower crossbar KJ kept as a base — its top is at about y 2.76. The board is 10.16 x 4.09 m at scale 1 (no title bar: KJ paints COLLECTION and the
 // hint in Blender; the two live numbers are a footer), so scale 0.77 fills the width and height together. The board's bottom edge sits at the AlmanacWall
 // layout y (2.8 since KJ's 2026-10-02 bake), so there is no extra lift any more.
-const WALL_SCALE = 0.77
+// KJ 2026-10-05 re-fit to the reworked frame (measured by ray-casting Shelf.009 in Blender): back panel 7.92 m wide (z 45.70-53.62, centre 49.66),
+// bottom shelf's top at y 2.34, top beam's underside at y 6.08. Board 10.16 x 4.735 at scale 0.775 = 7.87 x 3.67 m, bottom at y 2.38 (layout y), so it
+// sits on the shelf and stops just under the beam.
+const WALL_SCALE = 0.775
 const WALL_BOTTOM = 0      // the board's bottom edge, in board metres
 const WALL_LIFT_Y = 0
 const RAIL_W = 2.0
@@ -288,7 +293,7 @@ function setupAlmanacWall(): void {
   registerStreamedTree('collectionWall', root)   // 76 textured tiles: hidden while you are across the garden (streaming.ts)
 
   const panelW = PANEL_W
-  const panelTop = GRID_TOP + 0.15   // a small margin above the grid; no title bar any more
+  const panelTop = GRID_TOP + PANEL_TOP_MARGIN   // margin above the grid; no title bar any more
   // The wall backdrop is UNLIT and one fixed colour (KJ 2026-09-30): lit, it went mauve at golden hour and near-black under the
   // night sky, so the (transparent) plant thumbnails sat on a different colour depending on the time of day.
   const wall = engine.addEntity()
@@ -321,7 +326,7 @@ function setupAlmanacWall(): void {
   for (let t = 0; t < COLS * ROWS; t++) {
     const col = t % COLS, row = Math.floor(t / COLS)
     const x = GRID_CX + (col - (COLS - 1) / 2) * TP
-    const y = GRID_TOP - TP * (row + 0.5)
+    const y = GRID_TOP - ROW_PITCH * (row + 0.5)
     const e = engine.addEntity()
     Transform.create(e, { parent: root, position: { x, y, z: -0.03 }, scale: ZERO })
     MeshRenderer.setBox(e)

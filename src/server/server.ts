@@ -95,6 +95,7 @@ import {
   AVENUE_NEVER_TIDY_TIER,
   avenueSlotCap,
 } from '../shared/config'
+import { seedSpotBlocked } from '../shared/seedMask'
 
 // ---------------------------------------------------------------
 // State
@@ -851,11 +852,15 @@ function stratifiedSeedSpots(count: number): Array<{ x: number; z: number }> {
     ;[cells[i], cells[j]] = [cells[j], cells[i]]
   }
   return cells.slice(0, count).map(({ c, r }) => {
+    // Re-jitter inside the cell until the spot clears the Bloom's keep-out disc AND the scene's colliders (seedMask: pots, benches,
+    // planters, walls — KJ 2026-10-05: seeds were landing inside them). A cell that is all obstacle falls back to anywhere clear.
+    const clear = (x: number, z: number): boolean => Math.hypot(x - BLOOM_CENTER.x, z - BLOOM_CENTER.z) >= SEED_LAND_BLOOM_KEEPOUT_M && !seedSpotBlocked(x, z)
     let x = 0, z = 0
-    for (let t = 0; t < 12; t++) {   // re-jitter inside the cell until it clears the Bloom's keep-out disc
-      x = B.xMin + (c + Math.random()) * cellW
-      z = B.zMin + (r + Math.random()) * cellH
-      if (Math.hypot(x - BLOOM_CENTER.x, z - BLOOM_CENTER.z) >= SEED_LAND_BLOOM_KEEPOUT_M) break
+    for (let t = 0; t < 60; t++) {
+      const inCell = t < 30
+      x = B.xMin + (inCell ? (c + Math.random()) * cellW : Math.random() * (B.xMax - B.xMin))
+      z = B.zMin + (inCell ? (r + Math.random()) * cellH : Math.random() * (B.zMax - B.zMin))
+      if (clear(x, z)) break
     }
     return { x, z }
   })

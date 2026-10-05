@@ -135,7 +135,47 @@ const views  = new Map<string, BoxView>()
 // Beds (shared/beds.ts): two planters that belong to whoever planted in them. Derived from the baked layout
 // (BOX_POSITIONS) so the client and the server compute the same beds; owners come from the planters themselves.
 // ---------------------------------------------------------------
-const beds: Bed[] = makeBeds(BOX_POSITIONS, BED_FILL_ORIGIN, BEDS_EXPLICIT)
+// ── MOCK-UP (KJ 2026-10-05): "a bit more separation between the pairs of planter beds — also step them up at the back so it's easier
+// to see everything". CLIENT ONLY and visual: the server still knows planters by id and by their baked x/z (they move < 0.5 m here).
+//   pairs   — planters in a pair closer together (1.5 -> 1.3 m), pairs further apart (2.0 -> 2.3 m). Same strip, same 8 pairs.
+//   terrace — each strip further from the door axis stands MOCK_STEP_M higher, on a plain box plinth (the real strips are in scene.glb).
+// Set PLANTER_MOCK to false for the baked layout, exactly as before. NOT FOR DEPLOY while true.
+const PLANTER_MOCK = true
+const MOCK_PAIR_PITCH = 1.3, MOCK_PAIR_GAP = 2.3, MOCK_STEP_M = 0.25
+const MOCK_STRIP_MID_Z = 24, MOCK_DOOR_X = BED_FILL_ORIGIN.x
+/** Which way the terrace climbs: 1 = away from the door axis (the planters face it), -1 = towards it. */
+const MOCK_CLIMB = 1
+type BakedPos = { id: string; x: number; z: number; rot: number; y?: number }
+function mockLayout(src: ReadonlyArray<BakedPos>): BakedPos[] {
+  if (!PLANTER_MOCK) return [...src]
+  const strips = [...new Set(src.map(p => p.x))]
+  const rankOf = (x: number): number => {
+    const side = strips.filter(o => (o > MOCK_DOOR_X) === (x > MOCK_DOOR_X)).sort((a, b) => Math.abs(a - MOCK_DOOR_X) - Math.abs(b - MOCK_DOOR_X))
+    return MOCK_CLIMB > 0 ? side.indexOf(x) : side.length - 1 - side.indexOf(x)
+  }
+  return src.map(p => {
+    const i = src.filter(o => o.x === p.x).sort((a, b) => a.z - b.z).findIndex(o => o.id === p.id)
+    const pairs = src.filter(o => o.x === p.x).length / 2
+    const z = MOCK_STRIP_MID_Z + (Math.floor(i / 2) - (pairs - 1) / 2) * (MOCK_PAIR_PITCH + MOCK_PAIR_GAP) + ((i % 2) - 0.5) * MOCK_PAIR_PITCH
+    return { ...p, z, y: rankOf(p.x) * MOCK_STEP_M }
+  })
+}
+const BOXES: ReadonlyArray<BakedPos> = mockLayout(BOX_POSITIONS)
+/** A planter's height off the strip floor (0 everywhere but the terrace mock-up). */
+const ly = (p: { y?: number } | undefined): number => p?.y ?? 0
+function createMockPlinths(): void {
+  for (const x of new Set(BOXES.map(p => p.x))) {
+    const h = ly(BOXES.find(p => p.x === x))
+    if (h <= 0) continue
+    const e = engine.addEntity()
+    Transform.create(e, { position: { x, y: h / 2, z: MOCK_STRIP_MID_Z }, scale: { x: 1.38, y: h, z: 28.4 } })
+    MeshRenderer.setBox(e)
+    MeshCollider.setBox(e, ColliderLayer.CL_PHYSICS)
+    Material.setPbrMaterial(e, { albedoColor: { r: 0.55, g: 0.30, b: 0.16, a: 1 }, roughness: 0.9, metallic: 0 })
+  }
+}
+
+const beds: Bed[] = makeBeds(BOXES, BED_FILL_ORIGIN, BEDS_EXPLICIT)
 function bedInfo(id: string): { owner: string; ownerName: string; plantedAt: number } | undefined {
   const v = views.get(id)
   return v && v.owner ? { owner: v.owner.toLowerCase(), ownerName: v.ownerName, plantedAt: v.plantedAt } : undefined
@@ -171,8 +211,8 @@ let   tickAccum = 0
 /** Onboarding (Phase 2): the free planter nearest a point, and where it stands right
  *  now — `layout`, not BOX_POSITIONS, because the planter editor can have moved it.
  *  Null when every planter is taken. */
-export function nearestFreePlanter(from: { x: number; z: number }): { boxId: string; x: number; z: number; rot: number } | null {
-  let best: { boxId: string; x: number; z: number; rot: number } | null = null
+export function nearestFreePlanter(from: { x: number; z: number }): { boxId: string; x: number; z: number; rot: number; y: number } | null {
+  let best: { boxId: string; x: number; z: number; rot: number; y: number } | null = null
   let bestSq = Infinity
   const steer = steeredFreeBoxes()   // beds: point at my own bed first, else the lowest-numbered free bed
   for (const v of views.values()) {
@@ -183,7 +223,7 @@ export function nearestFreePlanter(from: { x: number; z: number }): { boxId: str
     const dx = p.x - from.x
     const dz = p.z - from.z
     const sq = dx * dx + dz * dz
-    if (sq < bestSq) { bestSq = sq; best = { boxId: v.boxId, x: p.x, z: p.z, rot: p.rot } }
+    if (sq < bestSq) { bestSq = sq; best = { boxId: v.boxId, x: p.x, z: p.z, rot: p.rot, y: ly(p) } }
   }
   return best
 }
@@ -192,40 +232,40 @@ export function nearestFreePlanter(from: { x: number; z: number }): { boxId: str
  *  nearest first. All of them, not just the nearest — a gardener at the planter cap can
  *  have several standing open and wants to find them all (Fin 2026-09-21: "we wanted 2
  *  and had 1 when we were looking for our plants"). */
-export function myOpenedPlanters(from: { x: number; z: number }): { boxId: string; x: number; z: number; rot: number }[] {
-  const mine: { boxId: string; x: number; z: number; rot: number; sq: number }[] = []
+export function myOpenedPlanters(from: { x: number; z: number }): { boxId: string; x: number; z: number; rot: number; y: number }[] {
+  const mine: { boxId: string; x: number; z: number; rot: number; y: number; sq: number }[] = []
   for (const v of views.values()) {
     if (!isMine(v) || !v.opened || deleted.has(v.boxId)) continue
     const p = layout.get(v.boxId)
     if (!p) continue
     const dx = p.x - from.x
     const dz = p.z - from.z
-    mine.push({ boxId: v.boxId, x: p.x, z: p.z, rot: p.rot, sq: dx * dx + dz * dz })
+    mine.push({ boxId: v.boxId, x: p.x, z: p.z, rot: p.rot, y: ly(p), sq: dx * dx + dz * dz })
   }
   mine.sort((a, b) => a.sq - b.sq)
-  return mine.map(m => ({ boxId: m.boxId, x: m.x, z: m.z, rot: m.rot }))
+  return mine.map(m => ({ boxId: m.boxId, x: m.x, z: m.z, rot: m.rot, y: m.y }))
 }
 
 /** The nearest of them — the one the tutorial trail points at. */
-export function myOpenedPlanter(from: { x: number; z: number }): { boxId: string; x: number; z: number; rot: number } | null {
+export function myOpenedPlanter(from: { x: number; z: number }): { boxId: string; x: number; z: number; rot: number; y: number } | null {
   return myOpenedPlanters(from)[0] ?? null
 }
 
 /** EVERY planter I own, growing or opened — the always-on highlight (onboarding.ts) uses
  *  this so a returning player can find their own planters among 50+ look-alikes at any
  *  time, not just during the first-time tutorial (KJ 2026-09-22: "impossible to find"). */
-export function myPlanters(from: { x: number; z: number }): { boxId: string; x: number; z: number; rot: number }[] {
-  const mine: { boxId: string; x: number; z: number; rot: number; sq: number }[] = []
+export function myPlanters(from: { x: number; z: number }): { boxId: string; x: number; z: number; rot: number; y: number }[] {
+  const mine: { boxId: string; x: number; z: number; rot: number; y: number; sq: number }[] = []
   for (const v of views.values()) {
     if (!isMine(v) || deleted.has(v.boxId)) continue
     const p = layout.get(v.boxId)
     if (!p) continue
     const dx = p.x - from.x
     const dz = p.z - from.z
-    mine.push({ boxId: v.boxId, x: p.x, z: p.z, rot: p.rot, sq: dx * dx + dz * dz })
+    mine.push({ boxId: v.boxId, x: p.x, z: p.z, rot: p.rot, y: ly(p), sq: dx * dx + dz * dz })
   }
   mine.sort((a, b) => a.sq - b.sq)
-  return mine.map(m => ({ boxId: m.boxId, x: m.x, z: m.z, rot: m.rot }))
+  return mine.map(m => ({ boxId: m.boxId, x: m.x, z: m.z, rot: m.rot, y: m.y }))
 }
 
 /** Perf test (potStressTest): hide/show every planter — base, plant, balloon and plaque —
@@ -242,11 +282,11 @@ export function setAllPlantersVisible(visible: boolean): void {
 
 /** Where one planter stands, for the highlight shell to sit exactly on it. Null once
  *  the planter is taken or deleted — the caller should stop pointing at it. */
-export function freePlanterPos(boxId: string): { x: number; z: number; rot: number } | null {
+export function freePlanterPos(boxId: string): { x: number; z: number; rot: number; y: number } | null {
   const v = views.get(boxId)
   if (!v || v.owner || deleted.has(boxId)) return null
   const p = layout.get(boxId)
-  return p ? { x: p.x, z: p.z, rot: p.rot } : null
+  return p ? { x: p.x, z: p.z, rot: p.rot, y: ly(p) } : null
 }
 
 function localId(): string { return (getPlayer()?.userId ?? '').toLowerCase() }
@@ -341,7 +381,7 @@ export function retirePlant(e: Entity): void {
   timers.setTimeout(() => engine.removeEntity(e), PLANT_RETIRE_MS)
 }
 
-type PlanterPos = { x: number; z: number; rot: number }
+type PlanterPos = { x: number; z: number; rot: number; y?: number }
 
 /** A point given in the planter's own frame (lx right, lz front) → world x/z. Same
  *  convention as Quaternion.fromEulerDegrees(0, rot, 0): rot 90 turns the front to +x. */
@@ -363,7 +403,7 @@ function setPlantVisual(v: BoxView, pos: PlanterPos): void {
     // everything above it borrows the rare variant until per-tier seedling art exists.
     v.stage = stageFor(v, Date.now())
     const k = SEEDLING_SCALE * GROW_STAGES[v.stage].scale
-    Transform.create(e, { position: { x: pos.x, y: BOX_MODEL_RIM_Y - SEEDLING_MODEL_MIN_Y * k, z: pos.z }, rotation: planterRotation(pos), scale: { x: k, y: k, z: k } })
+    Transform.create(e, { position: { x: pos.x, y: ly(pos) + BOX_MODEL_RIM_Y - SEEDLING_MODEL_MIN_Y * k, z: pos.z }, rotation: planterRotation(pos), scale: { x: k, y: k, z: k } })
     const src = v.rarityTier > 0 ? SEEDLING_MODEL_SRC_RARE : SEEDLING_MODEL_SRC_NORMAL
     GltfContainer.create(e, { src, visibleMeshesCollisionMask: ColliderLayer.CL_NONE, invisibleMeshesCollisionMask: ColliderLayer.CL_NONE })
     GltfNodeModifiers.create(e, { modifiers: [{ path: '', castShadows: false }] })   // (plantVfx re-supplies this when it takes the node over)
@@ -377,14 +417,14 @@ function setPlantVisual(v: BoxView, pos: PlanterPos): void {
   const species = plantSpeciesById(v.flower)
   if (species) {
     const at = planterPoint(pos, species.offsetX, species.offsetZ)   // footprint-centring offset turns with the planter
-    Transform.create(e, { position: { x: at.x, y: BOX_MODEL_RIM_Y + species.baseYOffset, z: at.z }, rotation: planterRotation(pos), scale: { x: species.scale, y: species.scale, z: species.scale } })
+    Transform.create(e, { position: { x: at.x, y: ly(pos) + BOX_MODEL_RIM_Y + species.baseYOffset, z: at.z }, rotation: planterRotation(pos), scale: { x: species.scale, y: species.scale, z: species.scale } })
     GltfContainer.create(e, { src: species.modelSrc, visibleMeshesCollisionMask: ColliderLayer.CL_NONE, invisibleMeshesCollisionMask: ColliderLayer.CL_NONE })
     GltfNodeModifiers.create(e, { modifiers: [{ path: '', castShadows: false }] })
-    attachPlantVfx(v.boxId, e, species.id, v.rarityTier, { x: pos.x, y: BOX_MODEL_RIM_Y, z: pos.z })
+    attachPlantVfx(v.boxId, e, species.id, v.rarityTier, { x: pos.x, y: ly(pos) + BOX_MODEL_RIM_Y, z: pos.z })
   } else {
     // Species id not in the catalog (shouldn't happen) — fall back to a tinted sphere.
     const k = FLOWER_SCALE
-    Transform.create(e, { position: { x: pos.x, y: BOX_MODEL_RIM_Y + k / 2, z: pos.z }, scale: { x: k, y: k, z: k } })
+    Transform.create(e, { position: { x: pos.x, y: ly(pos) + BOX_MODEL_RIM_Y + k / 2, z: pos.z }, scale: { x: k, y: k, z: k } })
     MeshRenderer.setSphere(e)
     const c = rarityTierById(v.rarityTier).seedColor
     Material.setPbrMaterial(e, { albedoColor: { ...c, a: 1 }, emissiveColor: c, emissiveIntensity: 0.8 })
@@ -416,7 +456,7 @@ function hideBalloon(v: BoxView): void {
 
 function createBalloon(v: BoxView, pos: PlanterPos): void {
   const balloon = engine.addEntity()
-  Transform.create(balloon, { position: { x: pos.x, y: 0, z: pos.z }, rotation: planterRotation(pos), scale: { x: 0, y: 0, z: 0 } })
+  Transform.create(balloon, { position: { x: pos.x, y: ly(pos), z: pos.z }, rotation: planterRotation(pos), scale: { x: 0, y: 0, z: 0 } })
   GltfContainer.create(balloon, { src: BALLOON_MODEL_SRC, visibleMeshesCollisionMask: ColliderLayer.CL_NONE, invisibleMeshesCollisionMask: ColliderLayer.CL_NONE })
   GltfNodeModifiers.create(balloon, { modifiers: [{ path: '', castShadows: false }] })   // 96 balloons: no shadow pass (KJ 2026-10-01 perf pass)
   // The countdown / "Ready to Harvest" text rides on the balloon's dark disc, facing out.
@@ -485,7 +525,7 @@ function playPlantBeat(v: BoxView): void {
   held.add(v.boxId)
   const seed = engine.addEntity()
   const k = SEED_WORLD_H / SEED_MODEL_HEIGHT
-  const rim = BOX_MODEL_RIM_Y + 0.15
+  const rim = ly(pos) + BOX_MODEL_RIM_Y + 0.15
   Transform.create(seed, { position: { x: pos.x, y: rim + SEED_DROP_H, z: pos.z }, scale: { x: k, y: k, z: k } })
   GltfContainer.create(seed, { src: seedModelSrc(v.rarityTier), visibleMeshesCollisionMask: ColliderLayer.CL_NONE, invisibleMeshesCollisionMask: ColliderLayer.CL_NONE })
   Tween.setMove(seed, { x: pos.x, y: rim + SEED_DROP_H, z: pos.z }, { x: pos.x, y: rim, z: pos.z }, SEED_DROP_MS, EasingFunction.EF_EASEINQUAD)
@@ -507,7 +547,7 @@ function playRevealBeat(v: BoxView): void {
     Tween.setScale(v.plant, { x: k, y: k, z: k }, { x: k * SWELL_MULT, y: k * SWELL_MULT, z: k * SWELL_MULT }, SWELL_MS, EasingFunction.EF_EASEINSINE)
   }
   timers.setTimeout(() => {
-    triggerSparkle({ x: pos.x, y: BOX_MODEL_RIM_Y, z: pos.z })
+    triggerSparkle({ x: pos.x, y: ly(pos) + BOX_MODEL_RIM_Y, z: pos.z })
     playSfx('flowerOpen', { x: pos.x, y: 1, z: pos.z })
     popIn.add(v.boxId)
     releaseHold(v)
@@ -541,7 +581,7 @@ function setSeedlingDrop(v: BoxView, pos: PlanterPos): void {
   if (!wantsDrop(v)) { removeSeedlingDrop(v); return }
   if (v.drop !== null) return
   const e = engine.addEntity()
-  Transform.create(e, { position: { x: pos.x, y: BOX_MODEL_RIM_Y + SEEDLING_DROP_Y, z: pos.z } })
+  Transform.create(e, { position: { x: pos.x, y: ly(pos) + BOX_MODEL_RIM_Y + SEEDLING_DROP_Y, z: pos.z } })
   GltfContainer.create(e, { src: WATER_DROP_MODEL_SRC, visibleMeshesCollisionMask: ColliderLayer.CL_NONE, invisibleMeshesCollisionMask: ColliderLayer.CL_NONE })
   Animator.create(e, { states: [{ clip: 'Bob', playing: true, loop: true, speed: 0.85 + Math.random() * 0.3 }] })
   v.drop = e
@@ -606,7 +646,7 @@ function sendPlant(v: BoxView, tier: number): void {
 function tendOnto(v: BoxView): void {
   if (isHolding() || isWateringEmoteActive()) return   // one water at a time: the previous can animation has to finish (KJ 2026-09-30)
   const pos = layout.get(v.boxId)
-  const at = pos ? { x: pos.x, y: BOX_MODEL_RIM_Y, z: pos.z } : { x: 0, y: 0, z: 0 }
+  const at = pos ? { x: pos.x, y: ly(pos) + BOX_MODEL_RIM_Y, z: pos.z } : { x: 0, y: 0, z: 0 }
   beginHold((outcome) => {
     if (outcome === 'tap' || outcome === 'over') return   // meter itself says why; no send
     console.log(`[Boxes] tending ${v.boxId}`)
@@ -654,7 +694,7 @@ function createBox(p: PlanterPos & { id: string }): BoxView {
   // Before 2026-10-01 the template had no _collider mesh and its visible meshes carried pointer + physics collision: 96 × 1,577-tri mesh
   // colliders tested on every pointer raycast and physics step. A box collider per planter replaced that; now the model has a 12-tri one of its own.
   const base = engine.addEntity()
-  Transform.create(base, { position: { x: p.x, y: 0, z: p.z }, rotation: planterRotation(p), scale: { x: BOX_MODEL_SCALE, y: BOX_MODEL_SCALE, z: BOX_MODEL_SCALE } })
+  Transform.create(base, { position: { x: p.x, y: ly(p), z: p.z }, rotation: planterRotation(p), scale: { x: BOX_MODEL_SCALE, y: BOX_MODEL_SCALE, z: BOX_MODEL_SCALE } })
   GltfContainer.create(base, {
     src: BOX_MODEL_SRC,
     visibleMeshesCollisionMask: ColliderLayer.CL_NONE,
@@ -699,13 +739,13 @@ export function setPlanterPose(id: string, pose: PlanterPos): void {
   if (!v) return
   layout.set(id, pose)
   const base = Transform.getMutable(v.base)
-  base.position = { x: pose.x, y: 0, z: pose.z }
+  base.position = { x: pose.x, y: ly(pose), z: pose.z }
   base.rotation = planterRotation(pose)
   const pl = plaques.find(q => q.boxId === id)
   if (pl) placePlaque(pl, pose)
   if (v.balloon !== null) {
     const b = Transform.getMutable(v.balloon)
-    b.position = { x: pose.x, y: 0, z: pose.z }
+    b.position = { x: pose.x, y: ly(pose), z: pose.z }
     b.rotation = planterRotation(pose)
   }
   if (!carrying.has(id) && v.plant !== null) { v.plantKey = ''; pendingPlant.add(v) }
@@ -834,7 +874,7 @@ const PANEL_TEX   = 'assets/images/roundedPanel.png'
 function createBedSigns(): void {
   for (const bed of beds) {
     const root = engine.addEntity()
-    Transform.create(root, { position: { x: bed.cx, y: BED_SIGN_Y, z: bed.cz }, scale: { x: 0, y: 0, z: 0 } })
+    Transform.create(root, { position: { x: bed.cx, y: BED_SIGN_Y + ly(BOXES.find(b => b.id === bed.boxIds[0])), z: bed.cz }, scale: { x: 0, y: 0, z: 0 } })
     Billboard.create(root, { billboardMode: BillboardMode.BM_Y })
     // Brown plaque, the owner's picture in a circle at the left, the text to its right. The viewer is on the -Z side, so
     // depth order from the back: panel, avatar (a plain SQUARE — the explorer ignores a separate mask on it), the
@@ -946,7 +986,7 @@ function updatePlantHere(me: string): void {
   plantHereBox = box
   if (box === '') { if (plantHere !== null) Transform.getMutable(plantHere).scale = { x: 0, y: 0, z: 0 }; return }
   const pos = layout.get(box)!
-  const at = { x: pos.x, y: BOX_MODEL_RIM_Y + PLANT_HERE_LIFT, z: pos.z }
+  const at = { x: pos.x, y: ly(pos) + BOX_MODEL_RIM_Y + PLANT_HERE_LIFT, z: pos.z }
   if (plantHere === null) {
     plantHere = engine.addEntity()
     Transform.create(plantHere, { position: at })
@@ -1008,9 +1048,9 @@ function growTo(v: BoxView, stage: number): void {
   const k = SEEDLING_SCALE * GROW_STAGES[stage].scale
   v.stage = stage
   // Keep the base in the soil: the seedling's geometry starts SEEDLING_MODEL_MIN_Y*k above its origin.
-  Transform.getMutable(v.plant).position.y = BOX_MODEL_RIM_Y - SEEDLING_MODEL_MIN_Y * k
+  Transform.getMutable(v.plant).position.y = ly(pos) + BOX_MODEL_RIM_Y - SEEDLING_MODEL_MIN_Y * k
   Tween.setScale(v.plant, { x: from, y: from, z: from }, { x: k, y: k, z: k }, GROW_POP_MS, EasingFunction.EF_EASEOUTBACK)
-  if (isMine(v)) triggerSparkle({ x: pos.x, y: BOX_MODEL_RIM_Y, z: pos.z })
+  if (isMine(v)) triggerSparkle({ x: pos.x, y: ly(pos) + BOX_MODEL_RIM_Y, z: pos.z })
 }
 
 /** Write a balloon's text only when it changed ("Ready to Harvest" never does; a countdown
@@ -1102,7 +1142,7 @@ function assignSlot(v: BoxView, pos: PlanterPos, i: number): void {
   slot.boxId = v.boxId
   v.animSlot = i
   const tr = Transform.getMutable(slot.balloon)
-  tr.position = { x: pos.x, y: 0, z: pos.z }
+  tr.position = { x: pos.x, y: ly(pos), z: pos.z }
   tr.rotation = planterRotation(pos)
   tr.scale = { x: BOX_MODEL_SCALE, y: BOX_MODEL_SCALE, z: BOX_MODEL_SCALE }
   setSlotText(v, Date.now())
@@ -1157,7 +1197,7 @@ let plaqueAccum = 0
 
 function placePlaque(pl: Plaque, pose: PlanterPos): void {
   const at = planterPoint(pose, 0, PLAQUE_OFFSET_Z)   // on the planter's front board
-  moveSign(pl.sign, { x: at.x, y: PLAQUE_Y, z: at.z })
+  moveSign(pl.sign, { x: at.x, y: PLAQUE_Y + ly(pose), z: at.z })
   Transform.getMutable(pl.sign.root).rotation = Quaternion.fromEulerDegrees(0, (180 + pose.rot) % 360, 0)
 }
 
@@ -1204,7 +1244,8 @@ function plaqueHomeSystem(dt: number): void {
 /** Register handlers — MUST be called after wateringSystem's room.clear(). */
 export function setupBoxSystem(): void {
   for (let i = 0; i < PLAQUE_POOL; i++) plaques.push({ sign: createSign({ x: 0, y: -50, z: 0 }, 0, PLAQUE_SIZE, PLAQUE_FONT, false), boxId: null })
-  for (const p of BOX_POSITIONS) { layout.set(p.id, { x: p.x, z: p.z, rot: p.rot }); views.set(p.id, createBox(p)) }
+  for (const p of BOXES) { layout.set(p.id, { x: p.x, z: p.z, rot: p.rot, y: p.y }); views.set(p.id, createBox(p)) }
+  if (PLANTER_MOCK) createMockPlinths()
   createBedSigns()
   // Distance streaming (streaming.ts): far planters + their balloon / plant / drop are hidden. Never mine, and never the ones the
   // tutorial or bed steering is pointing at (their shell + arrow would float over an invisible planter).

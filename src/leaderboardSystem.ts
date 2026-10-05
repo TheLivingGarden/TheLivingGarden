@@ -41,7 +41,6 @@ import { flairIcon, almanacTitleByRank } from './shared/config'
 // Found with the node-transformed bbox scan (thin vertical panels >= 3 m wide) - re-run it
 // if the panels move again.
 
-interface BoardTitle { x: number; y: number; z: number; rotationY: number; font: number }
 /** One column's four local x positions: flair icon, rank (right-aligned), name (left-
  *  aligned), waters (right-aligned). A gold rank in its own column reads far better than
  *  "1.  Name" inside the white name string (KJ 2026-09-22: "needs some love"). */
@@ -62,7 +61,6 @@ interface BoardLayout {
   /** "YOU · #23" pinned under the last row — where the reader stands even when they are
    *  nowhere near the top ten. null = no such row on this board. */
   you:        { y: number; font: number } | null
-  title:      BoardTitle
 }
 
 // Both read from the garden side (-Z), text 0.16 m in front of the panel face, one column using the whole
@@ -70,35 +68,37 @@ interface BoardLayout {
 // KJ 2026-10-05: the block sat 0.25 m left of the panel's centre (it ran -3.50..3.00 on a panel that is +-3.705), the title was
 // well inside the panel and the YOU row was 0.2 m off the bottom edge. Now: symmetric (-3.30..3.30), title up in the top margin,
 // rows 0.28 m higher, and the YOU row lifted onto its own cream band.
+// No title text here: "Leaderboard" / "Weekly Leaderboard" are modelled into the beams in Blender now (KJ 2026-10-05), so the old
+// ALL TIME / THIS WEEK titles (and the weekly "resets in …" countdown that rode in the weekly one) were removed.
 const LB_COLUMN: BoardColumn = { flairX: -3.20, rankX: -2.75, nameX: -2.55, scoreX: 3.30 }
 const LB_BOARDS: ReadonlyArray<BoardLayout> = [
   {
     kind: 'allTime',
     position: { x: 10.43, y: 4.47, z: 55.39 }, rotationY: 0,
     columns: [LB_COLUMN],
-    rows: 10, startY: 1.30, rowStep: 0.32, fontEntry: 1.5,
-    header: { y: 1.72, font: 1.5 },
+    rows: 10, startY: 1.70, rowStep: 0.36, fontEntry: 1.5,   // 2026-10-05: up into the space the title left, rows a touch further apart
+    header: { y: 2.14, font: 1.5 },
     you: { y: -2.02, font: 1.5 },
-    title: { x: 10.43, y: 4.47 + 2.20, z: 55.47, rotationY: 0, font: 2.0 },
   },
   {
     kind: 'weekly',
     position: { x: 23.41, y: 4.47, z: 55.39 }, rotationY: 0,
     columns: [LB_COLUMN],
-    rows: 10, startY: 1.30, rowStep: 0.32, fontEntry: 1.5,
-    header: { y: 1.72, font: 1.5 },
+    rows: 10, startY: 1.70, rowStep: 0.36, fontEntry: 1.5,   // 2026-10-05: up into the space the title left, rows a touch further apart
+    header: { y: 2.14, font: 1.5 },
     you: { y: -2.02, font: 1.5 },
-    title: { x: 23.41, y: 4.47 + 2.20, z: 55.47, rotationY: 0, font: 2.0 },
   },
 ]
 
 const LB_DEPTH = 0.08              // local Z lift off the board face — increase if text clips into the mesh
-const LB_TITLE_WEEKLY   = 'THIS WEEK'
-const LB_TITLE_ALL_TIME = 'ALL TIME'
 const LB_HEADER_NAME    = 'NAME'
 const LB_HEADER_SCORE   = 'WATERS'
-const LB_COUNTDOWN_TICK_MS = 30_000
 const LB_FLAIR_SIZE = 0.2
+// The weekly reset time rides on the weekly board's cream YOU band (KJ 2026-10-05: the beam titles that used to carry it went to Blender).
+// Right-aligned just left of the waters column, so it never meets the name on the left.
+const LB_COUNTDOWN_TICK_MS = 30_000
+const LB_RESET_X = 2.35
+const LB_RESET_FONT = 1.2
 
 // ── Colours  (r/g/b/a each 0–1) ──────────────────────────────
 const LB_COLOR_HEADER = { r: 1,   g: 0.84, b: 0.1,  a: 1 }  // gold
@@ -134,7 +134,7 @@ const LB_MOCK_DATA: BoardEntry[] = [
 interface Row { rank: Entity; name: Entity; score: Entity; flair: Entity }
 const boardRows: Row[][] = []             // per board, rows in rank order
 const youRows: (Row | null)[] = []        // per board, the pinned "YOU" row (null if none)
-const titleLabels: Entity[] = []          // one per board, same order as LB_BOARDS
+let   resetLabel: Entity | null = null    // "resets in 2d 18h" on the weekly board's YOU band
 let   weeklyResetAt = 0                   // epoch ms; 0 = unknown (mock)
 let   countdownAccum = 0
 
@@ -164,25 +164,17 @@ function formatCountdown(ms: number): string {
   return d > 0 ? `${d}d ${h}h` : h > 0 ? `${h}h ${m}m` : `${Math.max(1, m)}m`
 }
 
-function titleFor(kind: 'weekly' | 'allTime'): string {
-  if (kind === 'allTime') return LB_TITLE_ALL_TIME
-  if (!weeklyResetAt) return LB_TITLE_WEEKLY
+function refreshReset(): void {
+  if (!resetLabel) return
   const left = weeklyResetAt - Date.now()
-  return left > 0 ? `${LB_TITLE_WEEKLY}  -  resets in ${formatCountdown(left)}` : `${LB_TITLE_WEEKLY}  -  resetting`
-}
-
-function refreshTitles(): void {
-  for (let b = 0; b < LB_BOARDS.length; b++) {
-    const t = titleLabels[b]
-    if (t) TextShape.getMutable(t).text = titleFor(LB_BOARDS[b].kind)
-  }
+  TextShape.getMutable(resetLabel).text = !weeklyResetAt ? '' : left > 0 ? `resets in ${formatCountdown(left)}` : 'resetting'
 }
 
 function countdownSystem(dt: number): void {
   countdownAccum += dt * 1_000
   if (countdownAccum < LB_COUNTDOWN_TICK_MS) return
   countdownAccum = 0
-  refreshTitles()
+  refreshReset()
 }
 
 /** Build one flair/rank/name/score row at a local y in a column. */
@@ -206,12 +198,6 @@ export function setupLeaderboardBoards(): void {
   for (const def of LB_BOARDS) {
     const board = engine.addEntity()
     Transform.create(board, { position: def.position, rotation: Quaternion.fromEulerDegrees(0, def.rotationY, 0) })
-
-    // Title — its own world placement (the podium's is on the screen above the stand)
-    const title = engine.addEntity()
-    Transform.create(title, { position: { x: def.title.x, y: def.title.y, z: def.title.z }, rotation: Quaternion.fromEulerDegrees(0, def.title.rotationY, 0) })
-    TextShape.create(title, { text: titleFor(def.kind), fontSize: def.title.font, textColor: LB_COLOR_HEADER, textAlign: TextAlignMode.TAM_MIDDLE_CENTER })
-    titleLabels.push(title)
 
     if (def.header) {
       for (const col of def.columns) {
@@ -237,6 +223,11 @@ export function setupLeaderboardBoards(): void {
       Transform.create(band, { parent: board, position: { x: 0, y: def.you.y, z: LB_DEPTH + 0.04 }, scale: { x: LB_YOU_BAND.w, y: LB_YOU_BAND.h, z: 0.01 } })
       MeshRenderer.setBox(band)
       Material.setBasicMaterial(band, { diffuseColor: Color4.create(LB_COLOR_YOU_BAND.r, LB_COLOR_YOU_BAND.g, LB_COLOR_YOU_BAND.b, 1) })
+      if (def.kind === 'weekly') {
+        resetLabel = engine.addEntity()
+        Transform.create(resetLabel, { position: { x: LB_RESET_X, y: def.you.y, z: LB_DEPTH }, parent: board })
+        TextShape.create(resetLabel, { text: '', fontSize: LB_RESET_FONT, textColor: LB_COLOR_YOU, textAlign: TextAlignMode.TAM_MIDDLE_RIGHT })
+      }
     }
     youRows.push(def.you ? makeRow(board, def.columns[0], def.you.y, def.you.font, LB_COLOR_YOU, true) : null)
   }
@@ -257,7 +248,7 @@ function refreshYouRows(): void {
     const rank  = standing ? (weekly ? standing.weeklyRank  : standing.allTimeRank)  : 0
     const count = standing ? (weekly ? standing.weeklyCount : standing.allTimeCount) : 0
     TextShape.getMutable(row.rank).text  = rank > 0 ? `${rank}.` : ''
-    TextShape.getMutable(row.name).text  = rank > 0 ? 'YOU' : 'YOU  -  water a plant to join the board'
+    TextShape.getMutable(row.name).text  = rank > 0 ? 'YOU' : 'YOU  -  water a plant to join'   // (shorter than before, KJ 2026-10-05: the reset time sits on the same band)
     TextShape.getMutable(row.score).text = rank > 0 ? `${count}` : ''
   }
 }
@@ -280,6 +271,6 @@ export function updateLeaderboardDisplay(data: BoardData): void {
       setRowFlair(row.flair, entry?.tier ?? 0)
     }
   }
-  refreshTitles()
+  refreshReset()
   refreshYouRows()
 }

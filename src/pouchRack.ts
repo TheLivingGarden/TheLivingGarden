@@ -40,8 +40,16 @@ const DEFAULT_YAW = 180
 // Two shelves of four, so every slot has room for text big enough to read on a phone (the first
 // prototype was one row of eight at 0.46 m; its counts were ~5 cm tall). The rarest four sit on the top shelf.
 const PER_ROW     = 4
-const PITCH       = 0.95          // m between slots
+const PITCH       = 0.95          // m between slots (the sign's width still keys off this)
+// KJ 2026-10-05, against the reworked Blender shelf: the far-right seeds were cut off by the post and the seeds floated over their ledge. The shelf opening is
+// ~3.2 m wide and centred ~0.2 m toward the left of the rack's origin, so the four slots pull in to SLOT_PITCH and shift left; SEED_DROP sets the seeds,
+// their discs and tap areas down onto the plank (the name/count text, which sits on the front strip, stays put). TUNING.
+const SLOT_PITCH   = 0.76
+const SLOT_SHIFT_X = -0.2
+const SEED_DROP    = 0.07      // top shelf
+const SEED_DROP_LOW = 0.12     // bottom shelf: KJ 2026-10-05 "a bit more" — its seeds still floated
 const SEED_WORLD_H = 0.44         // m — a seed's height on the shelf
+const SEED_MODEL_MIN_Y = 0.385    // m at scale 1 — how far the seed GLBs reach below their origin (all eight tiers)
 export const LEDGE_LO    = 0.85
 export const LEDGE_HI    = 2.05
 export const TAP_M       = 9
@@ -148,11 +156,14 @@ export function setupPouchRack(): void {
   for (let i = 0; i < N; i++) {
     const row = i < PER_ROW ? 0 : 1
     const col = i % PER_ROW
-    const x = (col - (PER_ROW - 1) / 2) * PITCH
-    const L = row === 0 ? LEDGE_LO : LEDGE_HI
+    const x = (col - (PER_ROW - 1) / 2) * SLOT_PITCH + SLOT_SHIFT_X
+    const L = row === 0 ? LEDGE_LO - SEED_DROP_LOW : LEDGE_HI - SEED_DROP
     const t = rarityTierById(i)
     const c = Color4.create(t.seedColor.r, t.seedColor.g, t.seedColor.b, 1)
-    const seedY = L + 0.02 + SEED_WORLD_H / 2
+    // The seed models are NOT centred on their origin: they run -0.385..+0.557 m at scale 1. Placing the origin at half the seed's
+    // height left every seed floating ~6 cm over its disc (KJ 2026-10-05); stand the model's lowest point on the ledge instead.
+    const seedY = L + 0.008 + SEED_MODEL_MIN_Y * (SEED_WORLD_H / SEED_MODEL_HEIGHT)
+    const ghostY = L + 0.17   // the empty-slot ghost is a 0.34 m ellipsoid, centred
 
     const glow = engine.addEntity()
     Transform.create(glow, { parent: root, position: { x, y: L + 0.004, z: 0 }, scale: ZERO })
@@ -170,7 +181,7 @@ export function setupPouchRack(): void {
     GltfContainer.create(seed, { src: seedModelSrc(i), visibleMeshesCollisionMask: ColliderLayer.CL_NONE, invisibleMeshesCollisionMask: ColliderLayer.CL_NONE })
 
     const ghost = engine.addEntity()
-    Transform.create(ghost, { parent: root, position: { x, y: seedY, z: 0 }, scale: { x: 0.26, y: 0.34, z: 0.26 } })
+    Transform.create(ghost, { parent: root, position: { x, y: ghostY, z: 0 }, scale: { x: 0.26, y: 0.34, z: 0.26 } })
     MeshRenderer.setSphere(ghost)
     Material.setPbrMaterial(ghost, { albedoColor: Color4.create(0.30, 0.26, 0.24, 1), metallic: 0, roughness: 1 })
 
@@ -180,7 +191,7 @@ export function setupPouchRack(): void {
     const lineY = row === 0 ? 0.46 : 1.78
     const plateZ = row === 0 ? -0.29 : -0.28
     const count = label(root, { x, y: lineY, z: plateZ }, `0 ${t.name}`, FONT_LINE, Color4.create(c.r, c.g, c.b, 0.5), PITCH, 0.3)
-    const tap = tapArea(root, { x, y: L + 0.3, z: 0 }, { x: PITCH * 0.92, y: 0.7, z: 0.5 }, `${t.name} seeds`, () => holdTier(i))
+    const tap = tapArea(root, { x, y: L + 0.3, z: 0 }, { x: SLOT_PITCH * 0.92, y: 0.7, z: 0.5 }, `${t.name} seeds`, () => holdTier(i))
     slots.push({ tier: i, glow, seed, ghost, ring, count, tap })
   }
 

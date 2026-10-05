@@ -4,8 +4,9 @@
 // KJ 2026-09-27: "a big examination table where you can see a bigger version of the plant and
 // inspect it, in the potting shed". A table beside the flower shelf: hold a flower (from the
 // shelf or the pouch), tap the table, and a big version of it turns slowly on the turntable with
-// a plaque in front — name, rarity, who grew it, when it opened. One tap, no extra screen: the
-// examination happens in the world, in the shed, where the flowers live.
+// no sign or label of its own (KJ 2026-10-05: at exam size most species are wider than the table, so
+// nothing mounted on it stays clear; tapping opens the inspector with the name, rarity, who grew it and
+// when it opened). One tap: the examination happens in the world, in the shed, where the flowers live.
 //
 // Client-only: each player examines their own flower on their own screen (like the shelf).
 // No toasts (notification pass 2026-09-27) — the table's hover text says what to do.
@@ -13,12 +14,12 @@
 // editor ("ExamTable"); PROP_LAYOUT['ExamTable'] bakes it.
 // =============================================================
 
-import { engine, Entity, Transform, GltfContainer, ColliderLayer, MeshRenderer, Material, Name, TextShape } from '@dcl/sdk/ecs'
-import { Color4, Quaternion } from '@dcl/sdk/math'
-import { plantSpeciesById, rarityTierById } from './shared/config'
+import { engine, Entity, Transform, GltfContainer, ColliderLayer, MeshRenderer, Material, Name } from '@dcl/sdk/ecs'
+import { Quaternion } from '@dcl/sdk/math'
+import { plantSpeciesById } from './shared/config'
 import { PROP_LAYOUT } from './shared/layout'
 import { getHeld, getFlowers, heldFlowerIndex, Keepsake } from './playerInventory'
-import { box, label, tapArea, setHover, PLATE, CREAM } from './pouchRack'
+import { tapArea, setHover, PLATE } from './pouchRack'
 import { playSfx } from './sounds'
 import { registerStreamedTree, registerStreamSource } from './streaming'
 import { openFlowerInspector } from './flowerInspector'
@@ -31,7 +32,7 @@ const DEFAULT_POS = { x: -24.3, y: 1.5, z: 50.8 }
 const DEFAULT_YAW = 0
 
 const TOP_Y     = 0.9            // table top height
-const TOP_W     = 1.6, TOP_D = 1.0
+const TOP_W     = 1.6
 const TAP_W = 0.9, TAP_D = 0.9, TAP_H = 0.7   // TUNING — the table's tap target: the turntable footprint, 0.7 m tall
 const SPECIMEN_M = 1.35          // the specimen's largest dimension (species models are ~0.55 m)
 const SPIN_DEG_S = 22            // turntable speed
@@ -39,7 +40,6 @@ const SPIN_RANGE = 16            // m — only turn while someone could be looki
 
 let spinner: Entity | null = null   // turntable root the specimen hangs off; rotated by spinSystem
 let specimen: Entity | null = null
-let plaque: Entity | null = null
 let tap: Entity | null = null
 let root: Entity | null = null
 let yawNow = 0
@@ -47,13 +47,6 @@ let shownKey = ''
 
 const HOVER_EMPTY = 'Pick a flower from the shelf to examine it here'
 const HOVER_HELD  = 'Inspect this flower'
-const PLAQUE_EMPTY = 'Pick a flower from the shelf'
-
-function fmtDate(ms?: number): string {
-  if (!ms) return ''
-  const d = new Date(ms)
-  return `${['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][d.getMonth()]} ${d.getDate()}`
-}
 
 /** The keepsake in the hand, with its provenance when the collection has it. */
 function heldKeepsake(): Keepsake | null {
@@ -88,17 +81,12 @@ function clearSpecimen(): void {
 /** Put the held flower on the turntable (or clear it). The shelf's click is what holds it — KJ 2026-09-30: click a flower on the shelf and it goes
  *  into your hand AND onto this table; click it again and it goes back. Runs twice a second; only rebuilds when the flower changes. */
 function syncSpecimen(): void {
-  if (!spinner || !plaque) return
+  if (!spinner) return
   const k = heldKeepsake()
   const sp = k ? plantSpeciesById(k.flower) : undefined
   if (!k || !sp) {
     clearSpecimen()
-    if (shownKey !== '') {
-      shownKey = ''
-      const ts = TextShape.getMutable(plaque)
-      ts.text = PLAQUE_EMPTY
-      ts.textColor = CREAM
-    }
+    shownKey = ''
     return
   }
   const key = `${k.flower}:${k.rarityTier}:${k.at}`
@@ -117,13 +105,6 @@ function syncSpecimen(): void {
   // The flower's rarity effects (glints, glow, pulse, sway) — the same attach the planters and the Gallery use (KJ 2026-09-30: "why don't I see
   // its effects?": the specimen was a bare model, so nothing above Common ever showed). `soil` = the turntable's centre in world space.
   attachPlantVfx(SPECIMEN_VFX_KEY, specimen, sp.id, k.rarityTier, turntableWorld())
-  const tier = rarityTierById(k.rarityTier)
-  const lines = [sp.name, tier.name]
-  const who = [k.grownBy ? `grown by ${k.grownBy}` : '', k.from ? `a gift from ${k.from}` : '', fmtDate(k.openedAt ?? k.at)].filter(Boolean).join(' - ')
-  if (who) lines.push(who)
-  const ts = TextShape.getMutable(plaque)
-  ts.text = lines.join('\n')
-  ts.textColor = k.rarityTier > 0 ? Color4.create(tier.seedColor.r, tier.seedColor.g, tier.seedColor.b, 1) : CREAM
   playSfx('flowerOpen')   // the same chime as a flower opening in its planter
 }
 
@@ -169,7 +150,7 @@ export function setupExamTable(): void {
     return specimen !== null && t ? [{ key: 'specimen', x: t.position.x, z: t.position.z, entities: [specimen] }] : []
   })
 
-  // (No table geometry — top, apron, legs: the table is modelled in Blender now, KJ 2026-09-30. The turntable, plaque and tap target stay.)
+  // (No table geometry — top, apron, legs: the table is modelled in Blender now, KJ 2026-09-30. The turntable and tap target stay; the plaque, title and floating label were all removed, KJ 2026-10-05.)
   // Turntable: a low dark disc the specimen stands on.
   const disc = engine.addEntity()
   Transform.create(disc, { parent: root, position: { x: 0, y: TOP_Y + 0.03, z: 0.05 }, scale: { x: 0.85, y: 0.05, z: 0.85 } })
@@ -177,11 +158,6 @@ export function setupExamTable(): void {
   Material.setPbrMaterial(disc, { albedoColor: PLATE, emissiveColor: PLATE, emissiveIntensity: 0.3, metallic: 0, roughness: 0.8 })
   spinner = engine.addEntity()
   Transform.create(spinner, { parent: root, position: { x: 0, y: TOP_Y + 0.06, z: 0.05 } })
-
-  // Plaque on the front edge (viewer on -Z, signs.ts rule) and a small title board.
-  box(root, { x: 0, y: TOP_Y - 0.14, z: -TOP_D / 2 - 0.01 }, { x: 1.2, y: 0.3, z: 0.02 }, PLATE, 0.3)
-  plaque = label(root, { x: 0, y: TOP_Y - 0.14, z: -TOP_D / 2 - 0.03 }, PLAQUE_EMPTY, 0.5, CREAM, 1.15, 0.3)
-  label(root, { x: 0, y: TOP_Y + 0.02, z: -TOP_D / 2 + 0.06 }, 'Examination table', 0.4, CREAM, 1.2, 0.12)
 
   // The tap target (KJ 2026-10-01: it was the whole table top and 1.3 m high, and got in the way of clicking other things): now just over the
   // turntable — its footprint, from the top up to 0.7 m, enough to click the flower on it without reaching out over the rest of the table.

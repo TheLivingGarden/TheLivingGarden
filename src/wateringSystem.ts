@@ -61,7 +61,7 @@ import { playClip } from './sounds'
 import { hasReceivedPouch } from './playerInventory'
 import { isMobile } from '@dcl/sdk/platform'
 import { room }                             from './shared/messages'
-import { TOTAL_PLANTS, BLOOM_THRESHOLD, BLOOM_CENTER, DAILY_WATER_LIMIT, PLANT_NAMES, FAST_PLANT_NAMES, FAST_PLANT_EXPIRY_MS, BLOOM_RESET_DELAY_MS, DROP_RANGE, DROP_RANGE_OUT, BLOOM_TRIGGER_COOLDOWN_MS, EXPIRY_TELL_MS, WATER_DROP_MODEL_SRC, BLOOM_MODEL_OFFSET_X } from './shared/config'
+import { TOTAL_PLANTS, BLOOM_THRESHOLD, BLOOM_CENTER, DAILY_WATER_LIMIT, PLANT_NAMES, FAST_PLANT_NAMES, FAST_PLANT_EXPIRY_MS, BLOOM_RESET_DELAY_MS, DROP_RANGE, DROP_RANGE_OUT, BLOOM_TRIGGER_COOLDOWN_MS, EXPIRY_TELL_MS, WATER_DROP_MODEL_SRC } from './shared/config'
 import { setupPlayerTrailSystem, startPlayerTrail, stopPlayerTrail } from './playerTrailSystem'
 import { setupSeedSystem } from './seedSystem'
 import { setupBoxSystem } from './boxSystem'
@@ -157,7 +157,7 @@ const VOL_HOVER    = 0.7
 const VOL_CLICK    = 0.4   // KJ 2026-10-02: the release click was too loud (was 0.9)
 const VOL_WATERING = 0.28   // KJ 2026-10-05: still too loud for the ambience at 0.45 (was 0.7 before 10-02)
 const VOL_MAGIC    = 0.55   // was 0.9
-const VOL_WILT     = 0.8
+const VOL_WILT     = 0.32   // KJ 2026-10-05: the droop was 0.8 — brought down by the same ratio as the watering pour (0.7 -> 0.28)
 const SND_INIT_POS = { x: 8, y: 1, z: 8 }   // initial transform — overwritten on play
 
 // ── Clickbox (optional alternative pointer target) ────────────
@@ -618,14 +618,18 @@ let _centerTextBloom:        Entity | null = null
 let _centerTextProgress:     Entity | null = null
 let _centerTextInstructions: Entity | null = null
 
-/** Nudge a composite-baked entity's position by BLOOM_MODEL_OFFSET_X (see its comment). */
-function offsetBloomText(e: Entity | null, extraX = 0): void {
+/** The three centre-text GLBs are authored around their own origin (a ring of text around the rose), so the entity just
+ *  has to sit on BLOOM_CENTER (x/z; height stays as main.composite has it) plus one small nudge. KJ 2026-10-05, tested
+ *  in-world: the old +BLOOM_MODEL_OFFSET_X (x 9.5) was too far forward, the Bloom model's origin (x 7.3) too far back,
+ *  BLOOM_CENTER (x 8.25) "a little further back still" → 0.35 m back (x 7.9), then "a bit further forward — the front text peeks
+ *  through the pedestal" → 0.15 m back (x 8.1), then "a bit further back: it clips through the back of the yellow bit" → 0.25 m
+ *  (x 8.0). TUNING — -X is away from the spawn. */
+const CENTER_TEXT_NUDGE_X = -0.25
+function centreOnBloom(e: Entity | null): void {
   if (!e) return
   const tf = Transform.getMutableOrNull(e)
-  if (tf) tf.position = { x: tf.position.x + BLOOM_MODEL_OFFSET_X + extraX, y: tf.position.y, z: tf.position.z }
+  if (tf) tf.position = { x: BLOOM_CENTER.x + CENTER_TEXT_NUDGE_X, y: tf.position.y, z: BLOOM_CENTER.z }
 }
-/** KJ 2026-10-01: the idle ("the Bloom is resting") text sits 0.36 m further back (0.25, 0.15 more, 0.05 back, 0.01 more) — away from the spawn, which is at higher X, so -X. TUNING. */
-const INSTRUCTIONS_TEXT_NUDGE_X = -0.36
 
 function resolveSceneAssets() {
   if (_sceneAssetsResolved) return
@@ -636,9 +640,9 @@ function resolveSceneAssets() {
   if (!_centerTextInstructions) console.log('[WateringSystem] CenterTextInstructions.glb entity not found')
   if (!_centerTextProgress)     console.log('[WateringSystem] centerTextProgress entity not found')
   if (!_centerTextBloom)        console.log('[WateringSystem] centerTextBloom entity not found')
-  offsetBloomText(_centerTextBloom)
-  offsetBloomText(_centerTextProgress)
-  offsetBloomText(_centerTextInstructions, INSTRUCTIONS_TEXT_NUDGE_X)
+  centreOnBloom(_centerTextBloom)
+  centreOnBloom(_centerTextProgress)
+  centreOnBloom(_centerTextInstructions)
 }
 
 function setVisible(entity: Entity | null, visible: boolean) {

@@ -210,14 +210,14 @@ function showChevrons(visible: boolean): void {
 
 /** Wear the gold shell on these planters. KJ 2026-09-20: the arrows point, but the
  *  highlight is what actually makes a planter findable among ninety-six of them. */
-function shellsOnPlanters(ps: ReadonlyArray<{ x: number; z: number; rot: number }>): void {
+function shellsOnPlanters(ps: ReadonlyArray<{ x: number; z: number; rot: number; y: number }>): void {
   const pool = ensureShells(ps.length)
   for (let i = 0; i < pool.length; i++) {
     const on = i < ps.length
     VisibilityComponent.getMutable(pool[i]).visible = on
     if (!on) continue
     const t = Transform.getMutable(pool[i])
-    t.position = Vector3.create(ps[i].x, 0, ps[i].z)
+    t.position = Vector3.create(ps[i].x, ps[i].y, ps[i].z)   // y: the planter's own height (0 unless terraced)
     t.rotation = Quaternion.fromEulerDegrees(0, ps[i].rot, 0)
   }
 }
@@ -567,10 +567,10 @@ function tutorialSystem(dt: number): void {
   shellAccum -= dt
   if (player && shellAccum <= 0) {
     shellAccum = ONBOARDING_REPICK_S
-    const wanted: Array<{ x: number; z: number; rot: number }> = myPlanters(player)
+    const wanted: Array<{ x: number; z: number; rot: number; y: number }> = myPlanters(player)
     if (active && step() === 'plot' && (heldBoxId || pickedBoxId)) {
       const p = freePlanterPos(heldBoxId || pickedBoxId)
-      if (p) wanted.push({ x: p.x, z: p.z, rot: p.rot })
+      if (p) wanted.push({ x: p.x, z: p.z, rot: p.rot, y: p.y })
     }
     shellsOnPlanters(wanted)
     showAvenueArrow(getArmedAvenueFlower() !== null ? nearestFreeAvenueSlot(player) : null)
