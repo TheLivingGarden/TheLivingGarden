@@ -183,8 +183,8 @@ function timingFor(g: Group): [number, number] {
 // ── Emission levels (single-model groups, emissiveGlow.ts) ────
 // The model's emissive look as exported — the override re-supplies it at a scaled strength (values read from the High GLBs: base 0.8 grey,
 // metallic 0, roughness 0.5, emissive orange, no glTF emissive strength).
-// `off`: the unlit look the old Off models had (base 0.31/0.35/0.40) — the High model itself now plays the off state, so there is no Off model to go out of date.
-const GLOW_LOOK    = { color: { r: 1, g: 0.5647, b: 0.0056 }, albedo: { r: 0.8, g: 0.8, b: 0.8 }, metallic: 0, roughness: 0.5, unit: 1, off: { albedo: { r: 0.308, g: 0.348, b: 0.403 }, roughness: 0.8 } }   // unit: TUNING
+// `off`: the unlit look — warm cream since 2026-10-05 (KJ: the old Off models' dark grey 0.31/0.35/0.40 read as holes in the floor) — the High model itself now plays the off state, so there is no Off model to go out of date.
+const GLOW_LOOK    = { color: { r: 1, g: 0.5647, b: 0.0056 }, albedo: { r: 0.8, g: 0.8, b: 0.8 }, metallic: 0, roughness: 0.5, unit: 1, off: { albedo: { r: 0.90, g: 0.82, b: 0.68 }, roughness: 0.8 } }   // unit: TUNING
 const GLOW_LOW     = 0.25    // fraction of full emission per level — exactly what the old Low / Mid exports had (emissive 0.25 / 0.5 of High)
 const GLOW_MID     = 0.5
 const GLOW_TAU_S   = 0.25    // ease time constant: ~0.75 s to settle

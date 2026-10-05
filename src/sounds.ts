@@ -12,6 +12,8 @@ import { engine, Entity, Transform, AudioSource } from '@dcl/sdk/ecs'
 
 const SFX = {
   seedCatch:  { src: 'assets/scene/Sounds/sfx/seedCatch.mp3',  volume: 0.6 },
+  // Catching a Bloom seed (KJ 2026-10-05: seedCatch was lacklustre for it). Generator: empty for claude/tools/seed_sfx.py.
+  seedPickup: { src: 'assets/scene/Sounds/sfx/seedPickup.wav', volume: 0.75 },
   plant:      { src: 'assets/scene/Sounds/sfx/plant.mp3',      volume: 0.8 },
   harvest:    { src: 'assets/scene/Sounds/sfx/harvest.mp3',    volume: 0.8 },
   gift:       { src: 'assets/scene/Sounds/sfx/gift.mp3',       volume: 0.9 },

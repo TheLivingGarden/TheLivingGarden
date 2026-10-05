@@ -29,8 +29,10 @@ const PLATE_Y      = 0.10
 // Layer depths in the billboarded carrier's local space (-z = toward the camera): pill at 0, icon in front of it, text in front of both.
 // They were 6 / 12 / 20 mm apart, which z-fights (and sorts wrongly among the transparent layers) at any real distance; 3 cm steps are
 // invisible as parallax at nametag range but give the depth buffer and the transparency sort something to work with.
-const Z_FLAIR      = -0.07
-const Z_TEXT       = -0.14
+// 2026-10-05: with the carrier now a FULL billboard (see buildPlate) the layers are stacked along the view direction, so a small gap is
+// enough and gives no parallax; the 7 / 14 cm gaps under BM_Y slid the name and the icon off the pill whenever the camera looked down.
+const Z_FLAIR      = -0.02
+const Z_TEXT       = -0.04
 const NAME_FONT    = 0.95
 const STREAK_FONT  = 0.8
 const PILL_H       = 0.32
@@ -88,9 +90,9 @@ function buildPlate(address: string, avatar: Entity): Plate {
 
   const carrier = engine.addEntity()
   Transform.create(carrier, { parent: root, position: { x: 0, y: PLATE_Y, z: 0 } })
-  // Y-AXIS ONLY (BM_Y), not BM_ALL — the default tilts with camera pitch, so the plate would
-  // hang at an angle whenever the mobile camera looks down. Real nametags stay upright.
-  Billboard.create(carrier, { billboardMode: BillboardMode.BM_Y })
+  // Full billboard, as Clean The Club's plate ended up (KJ 2026-10-05: "copy the placement logic from CTC"): always square to the
+  // camera. BM_Y (yaw only) kept the plate upright but skewed it away as the camera pitched, and pulled the layers apart.
+  Billboard.create(carrier, { billboardMode: BillboardMode.BM_ALL })
 
   const pill = engine.addEntity()
   Transform.create(pill, { parent: carrier })

@@ -60,7 +60,9 @@ function cardStage(now: number, tier: number): 0 | 1 | 2 | 3 {
 function rollTier(ageInRoll: number, tier: number): { shown: number; tick: number } {
   const u = Math.min(1, Math.max(0, ageInRoll / rollMs(tier)))
   const n = 12 + 2 * tier
-  const tick = Math.floor(n * (1 - Math.pow(1 - u, 3)))
+  // n + 1 slices, capped at n: the LAST slice shows the real tier. With n slices the real tier only appeared at u = 1, so the
+  // slow end of the roll sat on tier - 1 and read as "settled on Epic" before the lock jumped to Legendary (KJ 2026-10-05).
+  const tick = Math.min(n, Math.floor((n + 1) * (1 - Math.pow(1 - u, 3))))
   const count = 8
   return { shown: (((tier - (n - tick)) % count) + count) % count, tick }
 }

@@ -492,7 +492,7 @@ export function setupSeedSystem(): void {
     const localId = getPlayer()?.userId ?? ''
     if (localId && data.byAddress.toLowerCase() === localId.toLowerCase()) {
       // No emoji — the Unity client does not render them yet (PNG glyph in the FX pass)
-      playSfx('seedCatch')
+      playSfx('seedPickup')
       // Every catch says what it was and where it went (KJ 2026-09-22 playtest 2: seeds
       // should read as coming from the bloom and piling up). pouchUpdate lands before
       // seedGathered on the wire, so the store already counts this one.

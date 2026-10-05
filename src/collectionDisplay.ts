@@ -122,7 +122,7 @@ function setupFlowerShelf(): void {
     Material.setBasicMaterial(plate, { diffuseColor: Color4.create(0.82, 0.76, 0.64, 1) })
     // Name and rarity on separate lines, now close together (was 0.4 m apart to leave room for a wrapped two-line name).
     const nameY = row === 0 ? 0.66 : 1.96   // KJ 2026-10-02: higher and closer together, so both lines sit on the dark band under their row
-    const subY  = row === 0 ? 0.52 : 1.82
+    const subY  = row === 0 ? 0.565 : 1.865   // KJ 2026-10-05: rarity tucked right under the name (was 0.14 m below it)
     const plateZ = row === 0 ? -0.29 : -0.28
     const name = label(root, { x, y: nameY, z: plateZ }, '', 0.72, CREAM, F_PITCH, 0.26)
     const sub  = label(root, { x, y: subY, z: plateZ }, '', 0.62, CREAM, F_PITCH, 0.16)

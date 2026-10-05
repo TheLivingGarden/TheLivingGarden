@@ -155,7 +155,7 @@ const SND_MAGIC    = 'assets/scene/Sounds/MagicFX_short.wav'
 const SND_WILT     = 'assets/scene/Sounds/PlantWiltSound.mp3'
 const VOL_HOVER    = 0.7
 const VOL_CLICK    = 0.4   // KJ 2026-10-02: the release click was too loud (was 0.9)
-const VOL_WATERING = 0.45   // KJ 2026-10-02: was 0.7 — overshadowed the music
+const VOL_WATERING = 0.28   // KJ 2026-10-05: still too loud for the ambience at 0.45 (was 0.7 before 10-02)
 const VOL_MAGIC    = 0.55   // was 0.9
 const VOL_WILT     = 0.8
 const SND_INIT_POS = { x: 8, y: 1, z: 8 }   // initial transform — overwritten on play
@@ -246,6 +246,7 @@ let roomReady               = false
 let preBloomEffectsActive = false  // true once startPreBloomEffects has been called for this cycle
 let bloomActive           = false  // true from startBloomPhases() until end of startBloomCooldown()
 let emoteActive          = false
+let emoteGen             = 0   // bumped per pour — a previous pour's timers must not stop this one (see triggerWateringEmote)
 let lastSyncRequestMs    = 0
 let readyAtMs = 0   // when the room last reported ready (0 = not yet)
 const SYNC_REQUEST_MIN_MS = 5_000   // don't flood server with requestFullSync on rapid reloads
@@ -1042,13 +1043,17 @@ function triggerWateringEmote(_plantEntity: Entity) {
   // movePlayerTo retired (Clean The Club precedent) — teleport-stepping players
   // to the plant put them inside geometry; the emote now plays where they stand.
   emoteActive = true
+  // Each pour owns its timers. They used to test only `emoteActive`, so pour 1's end-of-clip timer fired in the middle of
+  // pour 2 (watering several plants in a row): the can's emote was cut and the seed came back into the hand while still
+  // pouring (KJ 2026-10-05).
+  const gen = ++emoteGen
   syncMyHand()   // one thing in the hand at a time: the can replaces the seed / keepsake
 
   timers.setTimeout(() => {
-    if (!emoteActive) return
+    if (!emoteActive || gen !== emoteGen) return
     triggerSceneEmote({ src: EMOTE_SRC, loop: false })
     timers.setTimeout(() => {
-      stopWateringEmote()
+      if (gen === emoteGen) stopWateringEmote()
     }, EMOTE_TOTAL_MS)
   }, EMOTE_TRIGGER_MS)
 }

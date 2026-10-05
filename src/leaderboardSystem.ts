@@ -67,24 +67,28 @@ interface BoardLayout {
 
 // Both read from the garden side (-Z), text 0.16 m in front of the panel face, one column using the whole
 // panel: title, header, ten rows, then the YOU row above the bottom edge (panel bottom is world y 1.99).
+// KJ 2026-10-05: the block sat 0.25 m left of the panel's centre (it ran -3.50..3.00 on a panel that is +-3.705), the title was
+// well inside the panel and the YOU row was 0.2 m off the bottom edge. Now: symmetric (-3.30..3.30), title up in the top margin,
+// rows 0.28 m higher, and the YOU row lifted onto its own cream band.
+const LB_COLUMN: BoardColumn = { flairX: -3.20, rankX: -2.75, nameX: -2.55, scoreX: 3.30 }
 const LB_BOARDS: ReadonlyArray<BoardLayout> = [
   {
     kind: 'allTime',
     position: { x: 10.43, y: 4.47, z: 55.39 }, rotationY: 0,
-    columns: [{ flairX: -3.40, rankX: -2.95, nameX: -2.75, scoreX: 3.0 }],
-    rows: 10, startY: 1.02, rowStep: 0.32, fontEntry: 1.5,
-    header: { y: 1.5, font: 1.5 },
-    you: { y: -2.28, font: 1.5 },
-    title: { x: 10.43, y: 4.47 + 2.03, z: 55.47, rotationY: 0, font: 2.0 },
+    columns: [LB_COLUMN],
+    rows: 10, startY: 1.30, rowStep: 0.32, fontEntry: 1.5,
+    header: { y: 1.72, font: 1.5 },
+    you: { y: -2.02, font: 1.5 },
+    title: { x: 10.43, y: 4.47 + 2.20, z: 55.47, rotationY: 0, font: 2.0 },
   },
   {
     kind: 'weekly',
     position: { x: 23.41, y: 4.47, z: 55.39 }, rotationY: 0,
-    columns: [{ flairX: -3.40, rankX: -2.95, nameX: -2.75, scoreX: 3.0 }],
-    rows: 10, startY: 1.02, rowStep: 0.32, fontEntry: 1.5,
-    header: { y: 1.5, font: 1.5 },
-    you: { y: -2.28, font: 1.5 },
-    title: { x: 23.41, y: 4.47 + 2.03, z: 55.47, rotationY: 0, font: 2.0 },
+    columns: [LB_COLUMN],
+    rows: 10, startY: 1.30, rowStep: 0.32, fontEntry: 1.5,
+    header: { y: 1.72, font: 1.5 },
+    you: { y: -2.02, font: 1.5 },
+    title: { x: 23.41, y: 4.47 + 2.20, z: 55.47, rotationY: 0, font: 2.0 },
   },
 ]
 
@@ -101,7 +105,9 @@ const LB_COLOR_HEADER = { r: 1,   g: 0.84, b: 0.1,  a: 1 }  // gold
 const LB_COLOR_NAME   = { r: 1,   g: 1,    b: 1,    a: 1 }  // white
 const LB_COLOR_SCORE  = { r: 0.6, g: 1,    b: 0.6,  a: 1 }  // soft green
 const LB_COLOR_RANK   = { r: 1,   g: 0.78, b: 0.36, a: 1 }  // warm gold, quieter than the header
-const LB_COLOR_YOU    = { r: 0.75, g: 0.92, b: 1,   a: 1 }  // cool blue — "this row is you"
+const LB_COLOR_YOU    = { r: 0.30, g: 0.13, b: 0.09, a: 1 }  // dark wood ink on the cream band — "this row is you"
+const LB_COLOR_YOU_BAND = { r: 0.96, g: 0.88, b: 0.70, a: 1 }
+const LB_YOU_BAND = { w: 6.9, h: 0.40 }
 
 // ── Mock data ─────────────────────────────────────────────────
 // Shown immediately on load until the server sends real data.
@@ -180,19 +186,19 @@ function countdownSystem(dt: number): void {
 }
 
 /** Build one flair/rank/name/score row at a local y in a column. */
-function makeRow(board: Entity, col: BoardColumn, y: number, font: number, nameColor: typeof LB_COLOR_NAME): Row {
+function makeRow(board: Entity, col: BoardColumn, y: number, font: number, nameColor: typeof LB_COLOR_NAME, oneColor = false): Row {
   const flair = engine.addEntity()
   Transform.create(flair, { position: { x: col.flairX, y, z: LB_DEPTH }, scale: { x: 0, y: 0, z: 0 }, parent: board })
   MeshRenderer.setPlane(flair)
   const rank = engine.addEntity()
   Transform.create(rank, { position: { x: col.rankX, y, z: LB_DEPTH }, parent: board })
-  TextShape.create(rank, { text: '', fontSize: font, textColor: LB_COLOR_RANK, textAlign: TextAlignMode.TAM_MIDDLE_RIGHT })
+  TextShape.create(rank, { text: '', fontSize: font, textColor: oneColor ? nameColor : LB_COLOR_RANK, textAlign: TextAlignMode.TAM_MIDDLE_RIGHT })
   const name = engine.addEntity()
   Transform.create(name, { position: { x: col.nameX, y, z: LB_DEPTH }, parent: board })
   TextShape.create(name, { text: '', fontSize: font, textColor: nameColor, textAlign: TextAlignMode.TAM_MIDDLE_LEFT })
   const score = engine.addEntity()
   Transform.create(score, { position: { x: col.scoreX, y, z: LB_DEPTH }, parent: board })
-  TextShape.create(score, { text: '', fontSize: font, textColor: LB_COLOR_SCORE, textAlign: TextAlignMode.TAM_MIDDLE_RIGHT })
+  TextShape.create(score, { text: '', fontSize: font, textColor: oneColor ? nameColor : LB_COLOR_SCORE, textAlign: TextAlignMode.TAM_MIDDLE_RIGHT })
   return { rank, name, score, flair }
 }
 
@@ -225,7 +231,14 @@ export function setupLeaderboardBoards(): void {
       }
     }
     boardRows.push(rows)
-    youRows.push(def.you ? makeRow(board, def.columns[0], def.you.y, def.you.font, LB_COLOR_YOU) : null)
+    if (def.you) {
+      // The band sits between the panel face and the text (text is read from -Z, so "behind" is +Z).
+      const band = engine.addEntity()
+      Transform.create(band, { parent: board, position: { x: 0, y: def.you.y, z: LB_DEPTH + 0.04 }, scale: { x: LB_YOU_BAND.w, y: LB_YOU_BAND.h, z: 0.01 } })
+      MeshRenderer.setBox(band)
+      Material.setBasicMaterial(band, { diffuseColor: Color4.create(LB_COLOR_YOU_BAND.r, LB_COLOR_YOU_BAND.g, LB_COLOR_YOU_BAND.b, 1) })
+    }
+    youRows.push(def.you ? makeRow(board, def.columns[0], def.you.y, def.you.font, LB_COLOR_YOU, true) : null)
   }
 
   // Mock data so the boards look populated before the first leaderboardUpdate lands
