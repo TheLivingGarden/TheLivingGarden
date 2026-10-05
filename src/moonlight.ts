@@ -22,6 +22,7 @@ import {
 import { isMobile } from '@dcl/sdk/platform'
 import { GARDEN_BOUNDS, BLOOM_CENTER, SPARKLE_SRC, GOLDEN_HOUR_S } from './shared/config'
 import { fx } from './perfTier'
+import { setSunShafts } from './ambientFX'
 
 const NIGHT_TIME_S   = 0        // seconds since 00:00 — midnight
 const WISP_COUNT     = () => fx(10, 6)   // TUNING — pooled, billboard planes (KJ 2026-10-01: fewer and bigger; was 28 at 0.22-0.55)
@@ -180,6 +181,7 @@ export function startMoonlight(): void {
   SkyboxTime.createOrReplace(engine.RootEntity, { fixedTime: NIGHT_TIME_S, transitionMode: TransitionMode.TM_FORWARD })
   if (active) return
   active = true
+  setSunShafts(false)
   ramp   = 0
   glowT  = 0
   if (wisps.length === 0) createWisps()
@@ -200,6 +202,7 @@ export function stopMoonlight(): void {
   if (!active) return
   active = false
   setGoldenHour()
+  setSunShafts(true)
   engine.removeSystem(SYSTEM_NAME)
   setBillboards(false)
   for (const w of wisps) {

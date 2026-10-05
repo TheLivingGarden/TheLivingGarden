@@ -5,6 +5,7 @@
 //   Shockwave      — concentric expanding rings at bloom trigger
 //   Fireflies      — small emissive spheres wandering on sine paths
 //   Ground ripple  — expanding ring at plant base on watering
+//   Arrival        — sun shafts over the Bloom, seen from the entrance ledge
 // =============================================================
 
 import {
@@ -276,6 +277,58 @@ function tickRipples(dt: number) {
 }
 
 // =============================================================
+// SECTION 5 — Arrival: sun shafts over the Bloom
+//
+// What a player sees in the first seconds (KJ 2026-10-03, "the spawn moment"). They land on
+// the entrance ledge (scene.json GardenLedgeArrival, x 29-31) facing the Bloom down -X:
+// static, soft planes facing the ledge, hung over the Bloom. No system, no tweens, no material
+// writes; put away for the Moonlit Bloom (setSunShafts). The texture's top half is one long
+// fade-in, so the shafts dissolve into the sky instead of starting at a line (KJ 2026-10-03).
+// (A petal emitter at the arch was tried and dropped the same day — it read as a second,
+// weaker copy of the Bloom's 3D petal rain.)
+// =============================================================
+
+const SHAFT_SRC       = 'assets/scene/Images/sunShaft.png'
+const SHAFT_X         = BLOOM_CENTER.x + 1.4   // just on the ledge side of the Bloom, so the shafts fall across it
+const SHAFT_BOTTOM_Y  = 1.5                    // the texture has faded to nothing well above this — nobody walks through light
+const SHAFT_HEIGHT    = 24
+const SHAFT_TILT_DEG  = 16                     // lean, as seen from the ledge. TUNING
+const SHAFT_ALPHA     = 0.20                   // TUNING — soft; these are atmosphere, not beams
+/** z offset from the Bloom, width (m). Phones get the first two (big alpha quads are fill-rate). */
+const SHAFTS: ReadonlyArray<{ dz: number; w: number }> = [{ dz: 0.6, w: 5.5 }, { dz: -4.2, w: 3.2 }, { dz: 4.6, w: 2.6 }]
+
+const shaftEntities: { entity: Entity; w: number }[] = []
+
+function setupSunShafts(): void {
+  for (const s of SHAFTS.slice(0, fx(3, 2))) {
+    const ent = engine.addEntity()
+    Transform.create(ent, {
+      position: { x: SHAFT_X, y: SHAFT_BOTTOM_Y + SHAFT_HEIGHT / 2, z: BLOOM_CENTER.z + s.dz },
+      rotation: Quaternion.fromEulerDegrees(0, 90, SHAFT_TILT_DEG),   // face the ledge (+X), lean in the plane
+      scale:    { x: s.w, y: SHAFT_HEIGHT, z: 1 },
+    })
+    MeshRenderer.setPlane(ent)
+    Material.setPbrMaterial(ent, {
+      texture:           Material.Texture.Common({ src: SHAFT_SRC }),
+      alphaTexture:      Material.Texture.Common({ src: SHAFT_SRC }),
+      transparencyMode:  MaterialTransparencyMode.MTM_ALPHA_BLEND,
+      albedoColor:       Color4.create(1, 0.90, 0.62, SHAFT_ALPHA),
+      emissiveColor:     { r: 1, g: 0.82, b: 0.50 },   // golden hour
+      emissiveIntensity: 1.6,
+      castShadows:       false,
+    })
+    shaftEntities.push({ entity: ent, w: s.w })
+  }
+}
+
+/** Sunlight has no place in the Moonlit Bloom — moonlight.ts puts the shafts away and brings them back. */
+export function setSunShafts(visible: boolean): void {
+  for (const s of shaftEntities) {
+    Transform.getMutable(s.entity).scale = visible ? { x: s.w, y: SHAFT_HEIGHT, z: 1 } : { x: 0, y: 0, z: 0 }
+  }
+}
+
+// =============================================================
 // Public setup
 // =============================================================
 
@@ -284,6 +337,7 @@ export function setupAmbientFX(): void {
   setupShockwaves()
   setupFireflies()
   setupRipplePool()
+  setupSunShafts()
 }
 
 // =============================================================
