@@ -62,7 +62,7 @@ import {
   withArticle,
 } from './shared/config'
 import { seedSpotBlocked } from './shared/seedMask'
-import { showToast, showMoment, isTutorialActive } from './notifications'
+import { showToast, showMoment, isTutorialActive, getLuckPercent } from './notifications'
 import { triggerSparkle } from './sparkleSystem'
 import { setupGoldenSeed } from './goldenSeed'
 import { playSfx } from './sounds'
@@ -474,7 +474,10 @@ export function setupSeedSystem(): void {
       triggerSparkle({ x: BLOOM_SEED_ORIGIN.x, y: BLOOM_SEED_ORIGIN.y, z: BLOOM_SEED_ORIGIN.z })
       // (2026-09-28: distracting mid-tutorial) — the sparkle still plays, just not the
       // centre-screen line competing with the tutorial card for attention.
-      if (!isTutorialActive()) showMoment('The Bloom is dropping seeds!', 'Chase them down and walk into them', 4_500)
+      if (!isTutorialActive()) {
+        const luck = getLuckPercent()
+        showMoment('The Bloom is dropping seeds!', luck > 0 ? `Luck boost +${luck}% - chase them down and walk into them` : 'Chase them down and walk into them', 4_500)
+      }
     }
     spawnSeed(data)
   })

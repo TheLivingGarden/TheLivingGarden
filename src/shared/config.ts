@@ -582,6 +582,7 @@ export const TUTORIAL_DONE_MS    = 6_000   // the closing "you're set" moment
 /** The step cards, in order. `kind` says what finishes the step (onboarding.ts). */
 export const TUTORIAL_TEXT = {
   water:   { title: 'Water a plant', body: 'Face a plant with a water drop, press and hold to pour, and let go in the green.' },
+  ring:    { title: 'Check the garden', body: 'Tap the ring in the top corner. It shows the garden\'s health, who is gardening with you, and your Luck boost for rarer seeds.' },
   bloom:   { title: 'Water the garden', body: 'Keep the garden above 80% and the giant flower in the centre bursts open. More gardeners, and rarer flowers on show in the Gallery, both raise your Luck boost. Tap the health ring any time to see it.' },
   seeds:   { title: 'Catch the seeds', body: 'A seed has landed - follow the arrows and walk into it to catch it.' },
   arch:    { title: 'To the nursery', body: 'Follow the arrows through the arch - that is where seeds are grown.' },
@@ -1194,8 +1195,6 @@ export const AVENUE_CAMERA_MS            = 600    // transition duration
 /** Lowest rarity tier allowed on the Avenue (2 = Rare). TUNING — drop to 1 (Uncommon)
  *  if the Avenue is mostly empty after launch week (hypothesis H2-07). */
 export const AVENUE_MIN_TIER = 2
-/** Mythic and Unique are never tidied off the Avenue by the crowding rule. */
-export const AVENUE_NEVER_TIDY_TIER = 6
 /** Per-player Avenue slot cap. 0 = NO per-player limit (KJ 2026-09-22): Rare+ flowers are
  *  scarce enough to be the limiter and the crowding rule handles a full wall, and the old
  *  flair-tier ladder (1/2/3 slots at 100/500/1,000 waters) gated the feature behind 100

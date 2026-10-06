@@ -40,7 +40,7 @@ import { getSeedCount, nearestSeedPos } from './seedSystem'
 import { nearestFreeAvenueSlot } from './avenueSystem'
 import { getFlowers, getArmedAvenueFlower, getPouch, getBoxCap } from './playerInventory'
 import { hidePersistent, showMoment } from './notifications'
-import { setCoach, registerCoachActions, setTutorialActive } from './ui'
+import { setCoach, registerCoachActions, setTutorialActive, getRingTaps, pulseRing } from './ui'
 import { playSfx } from './sounds'
 import { triggerSparkle } from './sparkleSystem'
 import { PROP_LAYOUT } from './shared/layout'
@@ -58,8 +58,8 @@ import {
 
 // ── Steps ─────────────────────────────────────────────────────
 
-type StepId = 'water' | 'bloom' | 'seeds' | 'arch' | 'shed' | 'plot' | 'tend' | 'harvest' | 'shelf' | 'toFame' | 'fame' | 'loop'
-const STEPS: ReadonlyArray<StepId> = ['water', 'bloom', 'seeds', 'arch', 'shed', 'plot', 'tend', 'harvest', 'shelf', 'toFame', 'fame', 'loop']
+type StepId = 'water' | 'ring' | 'bloom' | 'seeds' | 'arch' | 'shed' | 'plot' | 'tend' | 'harvest' | 'shelf' | 'toFame' | 'fame' | 'loop'
+const STEPS: ReadonlyArray<StepId> = ['water', 'ring', 'bloom', 'seeds', 'arch', 'shed', 'plot', 'tend', 'harvest', 'shelf', 'toFame', 'fame', 'loop']
 
 const RACK:  TutorialPoint = { x: PROP_LAYOUT['PouchRack'].x,   z: PROP_LAYOUT['PouchRack'].z }
 const SHELF: TutorialPoint = { x: PROP_LAYOUT['FlowerShelf'].x, z: PROP_LAYOUT['FlowerShelf'].z }
@@ -84,7 +84,7 @@ let active     = false
 let stepIdx    = 0
 let cardHidden = false
 let routeFloor = -1                 // index of the waypoint being walked to; -1 = pick the entry on the next tick
-let snap = { waters: 0, pouch: 0, planters: 0, tends: 0, flowers: 0 }
+let snap = { waters: 0, pouch: 0, planters: 0, tends: 0, flowers: 0, ringTaps: 0 }
 
 // First-time players are dropped into the walk on join, once per session, off the server's flags.
 let autoStartDecided = false
@@ -352,18 +352,23 @@ function drawTrail(player: Vector3, to: Vector3): void {
 
 let avenueArrow: Entity | null = null
 
-function showAvenueArrow(slot: { x: number; y: number; z: number; rot: number } | null): void {
+function ensureAvenueArrow(): Entity {
   if (avenueArrow === null) {
-    if (!slot) return
     avenueArrow = engine.addEntity()
     Transform.create(avenueArrow, { scale: Vector3.create(ARROW_SCALE, ARROW_SCALE, ARROW_SCALE) })
     GltfContainer.create(avenueArrow, { src: ARROW_MODEL_SRC, visibleMeshesCollisionMask: ColliderLayer.CL_NONE, invisibleMeshesCollisionMask: ColliderLayer.CL_NONE })
     VisibilityComponent.create(avenueArrow, { visible: false })
   }
-  VisibilityComponent.getMutable(avenueArrow).visible = !!slot
+  return avenueArrow
+}
+
+function showAvenueArrow(slot: { x: number; y: number; z: number; rot: number } | null): void {
+  if (avenueArrow === null && !slot) return
+  const arrow = ensureAvenueArrow()
+  VisibilityComponent.getMutable(arrow).visible = !!slot
   if (!slot) return
   const r = (slot.rot * Math.PI) / 180
-  const t = Transform.getMutable(avenueArrow)
+  const t = Transform.getMutable(arrow)
   t.position = Vector3.create(slot.x + AVENUE_ARROW_STANDOFF * Math.sin(r), slot.y, slot.z + AVENUE_ARROW_STANDOFF * Math.cos(r))
   t.rotation = Quaternion.fromEulerDegrees(0, (slot.rot + 180) % 360 + ARROW_FORWARD_YAW, 0)
 }
@@ -380,9 +385,19 @@ function enterStep(i: number): void {
   repickIn   = 0
   retryIn    = 0
   target     = null
-  snap = { waters: myWaterCount(), pouch: pouchTotal(), planters: myPlanterCount(), tends: myTendsTotal(), flowers: getFlowers().length }
+  snap = { waters: myWaterCount(), pouch: pouchTotal(), planters: myPlanterCount(), tends: myTendsTotal(), flowers: getFlowers().length, ringTaps: getRingTaps() }
   room.send('tourProgress', { step: i, done: false })   // a rejoin resumes here
   console.log(`[Tutorial] step ${i + 1}/${STEPS.length} → ${step()}`)
+}
+
+/** Build every guidance entity up front, hidden (KJ 2026-10-05: "a couple of frames' hiccup when completing a step" on mobile). They were
+ *  each created on first use — the 24 trail arrows, the planter shell model, the beacon, the Gallery arrow — and "first use" is the moment a
+ *  new step begins, so a phone paid for loading a model right at the step boundary. Hidden entities keep their models loaded. */
+function warmGuidance(): void {
+  ensureChevrons()
+  ensureShells(2)     // my planter + the one the 'plot' step points at
+  ensureBeacons(1)
+  ensureAvenueArrow()
 }
 
 function start(i = 0): void {
@@ -390,6 +405,7 @@ function start(i = 0): void {
   setTutorialActive(true)
   celebrate = null
   hidePersistent()
+  warmGuidance()
   enterStep(i)
 }
 
@@ -408,7 +424,9 @@ function stop(): void {
 // A finished step gets a rising chime, a sparkle burst at your feet, and a short green beat on
 // the card (its dot turns gold) before the next step's card takes over. Skipping gets none of it.
 const CELEBRATE_MS = 2_800   // KJ 2026-09-27: 1.4 s was too short to enjoy
-const ACTION_STEPS: ReadonlySet<StepId> = new Set<StepId>(['water', 'bloom', 'seeds', 'plot', 'tend', 'harvest'])
+const RING_PULSE_S = 1.8   // one nudge lasts this long (ui.tsx NUDGE_MS), so the outline never rests
+let ringPulsedAt = -RING_PULSE_S
+const ACTION_STEPS: ReadonlySet<StepId> = new Set<StepId>(['water', 'ring', 'bloom', 'seeds', 'plot', 'tend', 'harvest'])
 const PRAISE = ['Nice!', 'Lovely!', 'Well done!', 'Beautiful!', 'Perfect!']
 let celebrate: { until: number; step: number; title: string; body: string } | null = null
 
@@ -453,6 +471,7 @@ function stepDone(p: Vector3): boolean {
   if (route) return flat(p, route[route.length - 1]) < (s === 'loop' ? BLOOM_ARRIVE_M : TUTORIAL_ARRIVE_M)
   switch (s) {
     case 'water':   return myWaterCount() > snap.waters
+    case 'ring':    return getRingTaps() > snap.ringTaps
     // A real Bloom and a real catch, even on a replay: seeds already in the pouch used to finish
     // both at once and send a veteran straight to the nursery (KJ 2026-09-27). Skip step is the out.
     case 'bloom':   return isBloomActive() || getSeedCount() > 0
@@ -586,6 +605,8 @@ function tutorialSystem(dt: number): void {
     // A bloom that ends with nothing caught sends the player back to wake the next one.
     if (step() === 'seeds' && !isBloomActive() && getSeedCount() === 0 && pouchTotal() <= snap.pouch) enterStep(STEPS.indexOf('bloom'))
     target = pickTarget(player, ONBOARDING_REPICK_S)
+    // The ring step has nothing in the world to point at: the ring itself keeps breathing instead.
+    if (step() === 'ring' && elapsed - ringPulsedAt >= RING_PULSE_S) { ringPulsedAt = elapsed; pulseRing() }
     // No Skip on the last step (KJ 2026-09-27) — there is nothing to skip to; End tutorial stays.
     if (celebrate && Date.now() >= celebrate.until) celebrate = null
     if (!cardHidden) setCoach(celebrate

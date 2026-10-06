@@ -559,7 +559,7 @@ function playRevealBeat(v: BoxView): void {
 // one I already watered this session (the server would refuse — after a rejoin it just
 // toasts, since boxState does not carry the waterer list). Bounded by players x planter cap.
 const wateredByMe = new Set<string>()   // boxIds I watered this session, client-side only
-const SEEDLING_DROP_Y = 0.8             // above the rim, like WATER_DROP_Y over a garden plant
+const SEEDLING_DROP_Y = 0.5             // above the rim, like WATER_DROP_Y over a garden plant (KJ 2026-10-05: 0.3 m lower, was 0.8)
 
 /** My own seedling has reached a stage I have not yet tended (tending = the owner's water, once per stage). */
 const lastTendLocal = new Map<string, number>()   // boxId → when I last tended it (TEND_COOLDOWN_MS)

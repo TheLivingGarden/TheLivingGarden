@@ -86,11 +86,19 @@ function nudgeRing(): void { ringNudgeAt = Date.now() }
 const RING_HINT_MS = 60_000
 const sessionStart = Date.now()
 let ringTapped = false
+let ringTaps = 0
+/** The banner is open because the player tapped the ring — the one case it shows during the tutorial. */
+let bannerTapped = false
+/** How many times the health ring has been tapped this session — the tutorial's "tap the ring" step watches it rise. */
+export function getRingTaps(): number { return ringTaps }
+/** Make the ring breathe (its gold "something changed" outline) — the tutorial calls this while it is pointing at the ring. */
+export function pulseRing(): void { nudgeRing() }
 function onRingTap(): void {
   ringTapped = true
+  ringTaps++
   // Countdown / bloom hold the banner open on their own; tapping only toggles the resting states.
-  if (bannerState === 'idle' && bannerIsOpen(Date.now())) bannerOpenUntil = 0
-  else openBanner()
+  if (bannerState === 'idle' && bannerIsOpen(Date.now())) { bannerOpenUntil = 0; bannerTapped = false }
+  else { openBanner(); bannerTapped = true }
 }
 
 // ---------------------------------------------------------------
@@ -190,6 +198,8 @@ export function updatePlayerCount(n: number): void {
  *  whole-number percent over solo-with-an-empty-Gallery. No banner-reopen on change (2026-09-28):
  *  unlike the gardener count, a Gallery-driven change isn't urgent enough to interrupt. */
 export function updateLuckPercent(n: number): void { luckPercent = n }
+/** The live Luck boost, for other surfaces that name it (the seed-drop moment). */
+export function getLuckPercent(): number { return luckPercent }
 
 /** During a bloom the ring shows time left (wateringSystem's reset ticker pushes it). */
 export function updateBloomRemaining(label: string, remainingMs: number, totalMs = BLOOM_RESET_DELAY_MS): void {
@@ -358,7 +368,9 @@ function uiComponent() {
 
   // banner fade (alpha only) — hidden while the tutorial card is up (2026-09-28: the two
   // competed for the top of the screen); reuses the same fade so it doesn't just pop.
-  const open = bannerIsOpen(now) && !tutorialActive
+  // A banner the player asked for (a ring tap) does show: the tutorial's ring step is exactly that.
+  if (!bannerIsOpen(now)) bannerTapped = false
+  const open = bannerIsOpen(now) && (!tutorialActive || bannerTapped)
   if (open !== bannerWasOpen) { bannerWasOpen = open; bannerFlipAt = now }
   const t = Math.min(1, (now - bannerFlipAt) / FADE_MS)
   const a = open ? t : 1 - t
@@ -470,7 +482,11 @@ function uiComponent() {
         onMouseDown={() => toggleSeedMenu()}
       >
         <UiEntity uiTransform={{ width: px(CHIP_GLYPH), height: px(CHIP_GLYPH), margin: { right: px(12) } }} uiBackground={{ textureMode: 'stretch', texture: { src: `${UI_DIR}glyph_seed.png` }, color: { ...TINT_SEED, a: seedCount > 0 ? 1 : 0.5 } }} />
-        <Label value={`${seedCount}`} fontSize={fs(CHIP_FONT)} color={{ ...CREAM, a: seedCount > 0 ? 1 : 0.55 }} textAlign="middle-center" uiTransform={{ height: '100%' }} />
+        {/* The count in an explicitly sized box, the same shape as the "?" beside it (KJ 2026-10-06: on some phones the number sat low in
+            the chip while the "?" was centred). The only difference between the two was that this label had no width and a % height. */}
+        <UiEntity uiTransform={{ width: Math.ceil(`${seedCount}`.length * fs(CHIP_FONT) * 0.62), height: px(CHIP_H), alignItems: 'center', justifyContent: 'center' }}>
+          <Label value={`${seedCount}`} fontSize={fs(CHIP_FONT)} color={{ ...CREAM, a: seedCount > 0 ? 1 : 0.55 }} textAlign="middle-center" textWrap="nowrap" uiTransform={{ width: '100%', height: '100%' }} />
+        </UiEntity>
         <UiEntity uiTransform={{ display: seedRare > 0 ? 'flex' : 'none', width: px(18), height: px(18), margin: { left: px(14) }, borderRadius: px(9) }} uiBackground={{ color: { ...GOLD, a: 1 } }} />
       </UiEntity>
       {/* ? — "how the garden works", beside the pouch so both live in one place */}
@@ -580,8 +596,9 @@ function uiComponent() {
         return (
           // Right at the top edge (KJ 2026-09-29: even under the banner's tallest state it reached the
           // explorer's interaction prompt / the hold-to-water meter, which live at the screen centre). The
-          // banner is hidden while the tutorial runs (see `open` above), so nothing needs the 122 px under it.
-          <UiEntity uiTransform={{ positionType: 'absolute', position: { top: topPx + px(GAP), left: 0 }, width: '100%', flexDirection: 'row', justifyContent: 'center' }}>
+          // banner is hidden while the tutorial runs (see `open` above), so nothing needs the 122 px under it —
+          // except when the player taps the ring open (the ring step): the card steps down under it until it closes.
+          <UiEntity uiTransform={{ positionType: 'absolute', position: { top: topPx + px(GAP) + (bannerShown ? bannerH + px(GAP) : 0), left: 0 }, width: '100%', flexDirection: 'row', justifyContent: 'center' }}>
             <UiEntity uiTransform={{ width: cardW, flexDirection: 'column', alignItems: 'center', padding: { left: px(28), right: px(28), top: px(14), bottom: px(18) }, borderRadius: px(26) }} uiBackground={{ color: { r: 0.07, g: 0.063, b: 0.055, a: 0.9 } }}>
               <UiEntity uiTransform={{ width: '100%', height: px(30), flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 }}>
                 {/* Progress dots: done gold, current cream, to come faint */}

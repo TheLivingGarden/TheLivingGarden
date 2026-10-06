@@ -108,7 +108,7 @@ const views   = new Map<string, SlotView>()
 const plaques: Plaque[] = []
 const synced  = new Set<string>()   // had the join snapshot — no sounds for that one
 let   plaqueAccum = 0
-const questionKids = new Map<Entity, { bob: Entity; all: Entity[] }>()   // root -> its bobbing child + every child, for cleanup
+const questionKids = new Map<Entity, { pop: Entity; bob: Entity; all: Entity[] }>()   // root -> its pop-scale child, its bobbing child + every child, for cleanup
 const questionShown = new Set<Entity>()   // "?" marks currently popped in
 let   questionAccum = 0
 
@@ -128,7 +128,9 @@ function slotPoint(pos: SlotPos, lx: number, lz: number): { x: number; z: number
 /** Streaming (streaming.ts): each slot's flower, for the distance sweep. */
 export function avenueStreamItems(): Array<{ key: string; x: number; z: number; entities: Entity[] }> {
   const out: Array<{ key: string; x: number; z: number; entities: Entity[] }> = []
-  for (const v of views.values()) if (v.plant !== null) out.push({ key: v.slotId, x: v.pos.x, z: v.pos.z, entities: [v.plant] })
+  // A "?" is a small tree (root > pop > bob > model + glow): list every entity, because streaming.ts gives each one its OWN
+  // VisibilityComponent — the phone client does not reliably hide children with their parent (KJ 2026-10-05: the "?" flickered on mobile).
+  for (const v of views.values()) if (v.plant !== null) out.push({ key: v.slotId, x: v.pos.x, z: v.pos.z, entities: [v.plant, ...(questionKids.get(v.plant)?.all ?? [])] })
   return out
 }
 
@@ -171,14 +173,19 @@ function labelFor(v: SlotView): string {
 }
 
 /** Empty slot: a floating gold "?" over the soil — a stand waiting for a flower. Decoration
- *  only, no attribution, removed the instant a player plants here. Root = pop-in scale + Y billboard;
- *  children = the bobbing model and a soft glow sprite behind it. */
+ *  only, no attribution, removed the instant a player plants here. Root = Y billboard at unit scale;
+ *  pop = the pop-in scale; then the bobbing model and a soft glow sprite behind it.
+ *  The billboard and the pop scale are on SEPARATE entities on purpose (KJ 2026-10-05): with both on the root the "?" vanished for a
+ *  moment on approach and snapped back on mobile, while desktop was fine — an explorer that rebuilds a billboarded entity's
+ *  orientation cannot be trusted to keep that same entity's scale, so the billboarded one never carries a scale to lose. */
 function setWildBloom(v: SlotView): void {
   const e = engine.addEntity()
-  Transform.create(e, { position: { x: v.pos.x, y: v.pos.y + QUESTION_LIFT, z: v.pos.z }, scale: { x: 0.001, y: 0.001, z: 0.001 } })   // popped in by questionPopSystem
+  Transform.create(e, { position: { x: v.pos.x, y: v.pos.y + QUESTION_LIFT, z: v.pos.z } })
   Billboard.create(e, { billboardMode: BillboardMode.BM_Y })
+  const pop = engine.addEntity()
+  Transform.create(pop, { parent: e, scale: { x: 0.001, y: 0.001, z: 0.001 } })   // popped in by questionPopSystem
   const bob = engine.addEntity()
-  Transform.create(bob, { parent: e })
+  Transform.create(bob, { parent: pop })
   const model = engine.addEntity()
   Transform.create(model, { parent: bob, position: { x: 0, y: -0.265 * QUESTION_SCALE, z: 0 }, scale: { x: QUESTION_SCALE, y: QUESTION_SCALE, z: QUESTION_SCALE } })
   GltfContainer.create(model, { src: QUESTION_SRC, visibleMeshesCollisionMask: ColliderLayer.CL_NONE, invisibleMeshesCollisionMask: ColliderLayer.CL_NONE })
@@ -194,7 +201,7 @@ function setWildBloom(v: SlotView): void {
     emissiveIntensity: 1.6,
     castShadows:      false,
   })
-  questionKids.set(e, { bob, all: [bob, model, glow] })
+  questionKids.set(e, { pop, bob, all: [pop, bob, model, glow] })
   v.plant = e
 }
 
@@ -240,20 +247,18 @@ function questionPopSystem(dt: number): void {
     if (v.owner || e === null || !Transform.has(e)) continue
     const d = Math.hypot(v.pos.x - me.x, v.pos.z - me.z)
     const hide = isSeedMenuOpen()   // (the hide-when-closer-than-3 m rule was removed 2026-10-05: it read as the "?" vanishing on approach)
+    const kids = questionKids.get(e)
+    if (!kids) continue
     if (!questionShown.has(e) && d <= QUESTION_RANGE_M && !hide) {
       questionShown.add(e)
-      Tween.setScale(e, { x: 0.001, y: 0.001, z: 0.001 }, { x: 1, y: 1, z: 1 }, QUESTION_POP_MS, EasingFunction.EF_EASEOUTBACK)
-      const bob = questionKids.get(e)?.bob
-      if (bob) {
-        Tween.setMove(bob, { x: 0, y: -QUESTION_BOB_M, z: 0 }, { x: 0, y: QUESTION_BOB_M, z: 0 }, QUESTION_BOB_MS, EasingFunction.EF_EASESINE)
-        TweenSequence.create(bob, { sequence: [], loop: TweenLoop.TL_YOYO })
-      }
+      Tween.setScale(kids.pop, { x: 0.001, y: 0.001, z: 0.001 }, { x: 1, y: 1, z: 1 }, QUESTION_POP_MS, EasingFunction.EF_EASEOUTBACK)
+      Tween.setMove(kids.bob, { x: 0, y: -QUESTION_BOB_M, z: 0 }, { x: 0, y: QUESTION_BOB_M, z: 0 }, QUESTION_BOB_MS, EasingFunction.EF_EASESINE)
+      TweenSequence.create(kids.bob, { sequence: [], loop: TweenLoop.TL_YOYO })
     } else if (questionShown.has(e) && (d > QUESTION_RANGE_M + 3 || hide)) {
       questionShown.delete(e)
-      Tween.deleteFrom(e)
-      const bob = questionKids.get(e)?.bob
-      if (bob) { Tween.deleteFrom(bob); TweenSequence.deleteFrom(bob) }
-      Transform.getMutable(e).scale = { x: 0.001, y: 0.001, z: 0.001 }
+      Tween.deleteFrom(kids.pop)
+      Tween.deleteFrom(kids.bob); TweenSequence.deleteFrom(kids.bob)
+      Transform.getMutable(kids.pop).scale = { x: 0.001, y: 0.001, z: 0.001 }
     }
   }
 }
@@ -332,7 +337,33 @@ function onTap(v: SlotView): void {
     openSeedMenuForAvenue(v.slotId)
     return
   }
-  if (!isMine(v)) room.send('inspectAvenue', { slotId: v.slotId })   // a look is someone else stopping by
+  const armed = getArmedAvenueFlower()
+  if (isMine(v)) {
+    // 3. MY OWN stand, with another flower ready (armed from the menu, or an eligible one in hand): swap them in one tap
+    //    (KJ 2026-10-05) — the server sends the one on show back to My flowers first. With nothing ready, the card (Recall lives there).
+    const held    = getHeld()
+    const heldIdx = held ? heldFlowerIndex() : null
+    const idx     = armed !== null ? armed : (held && heldIdx !== null && held.rarityTier >= AVENUE_MIN_TIER ? heldIdx : null)
+    if (idx !== null) {
+      armAvenuePlacement(null)
+      const id = keepsakeIdentity(idx)
+      if (id) room.send('displayFlower', { slotId: v.slotId, ...id })
+      return
+    }
+    openCard(v)
+    return
+  }
+  if (armed !== null) {
+    // 4. SOMEONE ELSE'S stand while placing: it stays theirs. If a stand is free, point at those; if EVERY stand is taken, ask the
+    //    server for a place — it frees the stand whose owner has been away longest (never Mythic/Unique, never someone here), or says
+    //    the Gallery is full. Before this there was no way to reach that rule: a full Gallery left an armed flower nowhere to go.
+    if ([...views.values()].some(s => !s.owner)) { showToast('That stand is taken — tap an empty one (they have a ? over them)', TOAST_MS, false); return }
+    armAvenuePlacement(null)
+    const id = keepsakeIdentity(armed)
+    if (id) room.send('displayFlower', { slotId: '', ...id })
+    return
+  }
+  room.send('inspectAvenue', { slotId: v.slotId })   // a look is someone else stopping by
   openCard(v)
 }
 

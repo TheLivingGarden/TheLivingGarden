@@ -135,7 +135,7 @@ const WATER_ANIM_MS = 1500
 
 // ── Water drop indicator ──────────────────────────────────────
 const WATER_DROP_SRC = WATER_DROP_MODEL_SRC   // waterDrop.glb + baked 'Bob' clip (shared with boxSystem's seedling drops)
-const WATER_DROP_Y   = 0.8   // local Y above plant pivot
+const WATER_DROP_Y   = 0.5   // local Y above plant pivot (KJ 2026-10-05: all drops 0.3 m lower, was 0.8)
 const DROP_FADE_MS   = 1600  // ms for scale-in / scale-out tween
 
 /** plant entity → its waterDrop entity */
@@ -685,10 +685,7 @@ function startBloomResetTicker(elapsedMs = 0): void {
     const totalSecs = Math.ceil(remaining / 1_000)
     const m = Math.floor(totalSecs / 60)
     const s = totalSecs % 60
-    const label = totalSecs > 0
-      ? (m > 0 ? `${m}m ${s}s` : `${s}s`)
-      : '…'
-    setBloomResetText(label)
+    // The pedestal no longer repeats the time left (KJ 2026-10-05: it sat over the "Collect the seeds" band) — the HUD ring carries it.
     updateBloomRemaining(totalSecs > 0 ? `${m}:${String(s).padStart(2, '0')}` : '', remaining, bloomDurationMs)   // HUD ring shows time left
     if (remaining > 0) timers.setTimeout(tick, 1_000)
     // No startBloomClose() here — the dedicated timer above handles it
@@ -728,10 +725,6 @@ function updateSceneAssets() {
 
 function setBloomCountdownText(text: string) {
   for (const e of bloomCountdownLabels) TextShape.getMutable(e).text = text
-}
-
-function setBloomResetText(text: string) {
-  for (const e of bloomResetLabels) TextShape.getMutable(e).text = text
 }
 
 function clearBloomLabels() {

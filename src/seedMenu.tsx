@@ -409,7 +409,7 @@ export function SeedMenuUi(props: { px: (n: number) => number; fs: (n: number) =
       <UiEntity uiTransform={{ width: '100%', height: px(46), flexDirection: 'row', alignItems: 'center', margin: { bottom: px(4) } }}>
         {tabButton('seeds',   `Seeds${total > 0 ? `  ${total}` : ''}`)}
         {tabButton('flowers', `Flowers${allGroups.length > 0 ? `  ${getFlowers().length}` : ''}`)}
-        {tabButton('almanac', `Almanac  ${speciesFound}/${PLANT_SPECIES.length}`)}
+        {tabButton('almanac', `Collection  ${speciesFound}/${PLANT_SPECIES.length}`)}
         <UiEntity uiTransform={{ flexGrow: 1, height: '100%' }} />
         {/* Close: a bare floating "x" read as unfinished next to three pill tabs. */}
         <UiEntity uiTransform={{ width: px(40), height: px(40), alignItems: 'center', justifyContent: 'center', borderRadius: px(20) }} uiBackground={{ color: RAISED }} onMouseDown={() => toggleSeedMenu()}>
@@ -606,10 +606,6 @@ export function SeedMenuUi(props: { px: (n: number) => number; fs: (n: number) =
     </UiEntity>
   )
 
-  // Phone: a centred sheet from the top (both thumbs stay free). Desktop: rises from the
-  // seed chip, which now sits bottom centre — a panel still docked top right would have
-  // opened nowhere near the control that opens it.
-  return mobile
-    ? <UiEntity uiTransform={{ positionType: 'absolute', position: { top: props.topPx, left: 0 }, width: '100%', flexDirection: 'row', justifyContent: 'center' }}>{panel}</UiEntity>
-    : <UiEntity uiTransform={{ positionType: 'absolute', position: { bottom: props.aboveChipPx, left: 0 }, width: '100%', flexDirection: 'row', justifyContent: 'center' }}>{panel}</UiEntity>
+  // Centred between the top edge and the seed chip, on the phone and the desktop alike (KJ 2026-10-06).
+  return <UiEntity uiTransform={{ positionType: 'absolute', position: { top: props.topPx, bottom: props.aboveChipPx, left: 0 }, width: '100%', flexDirection: 'row', justifyContent: 'center', alignItems: 'center' }}>{panel}</UiEntity>
 }

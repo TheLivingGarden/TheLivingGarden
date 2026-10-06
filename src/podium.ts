@@ -22,6 +22,7 @@ import {
   pointerEventsSystem, InputAction, Entity, TextShape, TextAlignMode,
 } from '@dcl/sdk/ecs'
 import { Quaternion, Vector3, Color4 } from '@dcl/sdk/math'
+import { isMobile } from '@dcl/sdk/platform'
 import { room } from './shared/messages'
 import {
   PODIUM_SLOTS, PODIUM_ROTATION_Y, PODIUM_COUNT,
@@ -41,7 +42,7 @@ interface BoardEntry { displayName: string; count: number; tier: number; address
  *  that renders at a distance is native explorer behaviour with no scene-side control
  *  (PBAvatarShape has no size/distance field to tune — checked the schema). */
 interface Slot {
-  avatar: Entity; rank: Entity; waters: Entity
+  avatar: Entity; rank: Entity; waters: Entity; name: Entity
   /** What the avatar entity currently shows — a NEW entity is made whenever the person changes (see render). */
   shownAddress: string; sig: string
 }
@@ -56,6 +57,13 @@ const CAP_RANK_Y   = 5.2
 const CAP_WATERS_Y = 4.6
 const CAP_GOLD     = Color4.create(1, 0.84, 0.1, 1)
 const CAP_GREEN    = Color4.create(0.6, 1, 0.6, 1)
+// PHONE ONLY — the figure's own name (KJ 2026-10-06: "not seeing the top gardener nametags on mobile"). The streak plates hide the
+// explorer's nametags garden-wide (AvatarModifierArea, waterStreakBadgeSystem.ts). The desktop explorer applies that area to real
+// players only, so a podium figure keeps its native tag; the phone explorer (godot avatar.gd, _on_set_avatar_modifier_area) applies
+// it to scene AvatarShapes too, so the tag goes. excludeIds would bring it back, but it matches by wallet, so the same gardener
+// walking the garden in person would then wear a native tag AND a streak plate. So the phone gets a caption where the tag would be.
+const NAME_ABOVE_FEET_M = 2.15
+const NAME_FONT         = 1.5
 
 let entries: BoardEntry[] = []
 let page = 0
@@ -185,7 +193,10 @@ function build(): void {
       TextShape.create(e, { text, fontSize: font, textColor: color, textAlign: TextAlignMode.TAM_MIDDLE_CENTER })
       return e
     }
-    slots.push({ avatar, rank: caption(CAP_RANK_Y, '', 3.2, CAP_GOLD), waters: caption(CAP_WATERS_Y, '', 1.7, CAP_GREEN), shownAddress: '', sig: '' })
+    const name = engine.addEntity()
+    Transform.create(name, { position: { x: at.x, y: at.y + NAME_ABOVE_FEET_M, z: at.z }, rotation: Quaternion.fromEulerDegrees(0, 180, 0) })
+    TextShape.create(name, { text: '', fontSize: NAME_FONT, textColor: Color4.White(), outlineColor: Color4.Black(), outlineWidth: 0.12, textAlign: TextAlignMode.TAM_MIDDLE_CENTER })
+    slots.push({ avatar, rank: caption(CAP_RANK_Y, '', 3.2, CAP_GOLD), waters: caption(CAP_WATERS_Y, '', 1.7, CAP_GREEN), name, shownAddress: '', sig: '' })
   }
   makePageButton(-1)
   makePageButton(1)
@@ -220,6 +231,7 @@ function render(): void {
     // A different person = a different ENTITY. Re-pointing one AvatarShape at another wallet left the explorer showing the
     // previous gardener's name plate (and sometimes a half-swapped body): it treats the entity's avatar as already loaded.
     const want = near && address ? address : ''
+    TextShape.getMutable(slot.name).text = e && want && isMobile() ? e.displayName : ''
     if (want !== slot.shownAddress) {
       const at = Transform.get(slot.avatar).position
       engine.removeEntity(slot.avatar)

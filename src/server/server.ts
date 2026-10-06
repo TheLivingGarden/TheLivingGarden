@@ -92,7 +92,6 @@ import {
   galleryBoost,
   AVENUE_POSITIONS,
   AVENUE_MIN_TIER,
-  AVENUE_NEVER_TIDY_TIER,
   avenueSlotCap,
 } from '../shared/config'
 import { seedSpotBlocked } from '../shared/seedMask'
@@ -158,7 +157,7 @@ const V = {
 /** Shape version per player-scoped key, stamped when its writer is created. */
 const PLAYER_KEY_VERSION: Record<string, number> = {
   seeds: 1, flowers: 1, boxCap: 1, lifetime: 1,
-  onboarding: 1, discovered: 1, milestones: 1, keptSafe: 1,
+  onboarding: 1, discovered: 1, milestones: 1, keptSafe: 1, streak: 1,
 }
 
 const plantsWriter       = createSceneWriter('plants',             V.plants)
@@ -1339,31 +1338,39 @@ function refreshHandSeed(address: string): void {
 function sendAllHeld(to: string[]): void { for (const a of heldFlowers.keys()) sendHeld(a, to) }
 function clearHeld(address: string): void { if (heldFlowers.delete(address)) sendHeld(address) }
 
-// ── v2: water streak — consecutive PERFECT (sweet) pours this connection, for the nametag
-// badge (2026-09-28, "avatar name tag extension with the streak number of waters"). A
-// waterRejected breaks it, and so does an accepted-but-not-sweet pour — same rule as
-// skillCheck.tsx's own streak. In memory only, per connection: a rejoin starts fresh at 0.
-const waterStreak = new Map<string, number>()   // lowercase address → streak
+// ── v2: water streak — consecutive PERFECT (sweet) pours, for the nametag badge (2026-09-28,
+// "avatar name tag extension with the streak number of waters"). A waterRejected breaks it, and
+// so does an accepted-but-not-sweet pour — same rule as skillCheck.tsx's own streak.
+// PERSISTED per player (KJ 2026-10-05; it used to be in memory only, so a rejoin — or a dropped
+// connection on a phone — wiped it): the stored record is the truth, `waterStreak` mirrors it
+// for the gardeners who are here, because that map is what streakUpdate broadcasts.
+const waterStreak = new Map<string, number>()   // lowercase address → streak (connected gardeners only)
+interface StreakRecord { n: number }
+const loadStreak = (address: string): Promise<StreakRecord> => loadPlayerJson<StreakRecord>(address, 'streak', () => ({ n: 0 }))
+const streakValue = (rec: StreakRecord): number => Math.max(0, Math.floor(Number(rec.n) || 0))
 
 function sendStreak(address: string, to?: string[]): void {
   const key = address.toLowerCase()
   room.send('streakUpdate', { address: key, name: displayNameOf(address), streak: waterStreak.get(key) ?? 0, tier: tierOf(address) }, to ? { to } : undefined)
 }
 function sendAllStreaks(to: string[]): void { for (const a of waterStreak.keys()) sendStreak(a, to) }
-function bumpStreak(address: string): void {
+/** Change the streak from its STORED value (never from the map alone: a pour can land before the join has
+ *  loaded the record, and counting from a missing map entry would overwrite a real streak with 1). */
+async function changeStreak(address: string, next: (prev: number) => number): Promise<void> {
+  const rec  = await loadStreak(address)
+  const prev = streakValue(rec)
+  const n    = next(prev)
+  if (n !== prev) { rec.n = n; savePlayerJson(address, 'streak') }
+  if (!isConnected(address)) return            // left while the record loaded — it is saved, nothing to show
   const key = address.toLowerCase()
-  waterStreak.set(key, (waterStreak.get(key) ?? 0) + 1)
-  sendStreak(address)
+  const unchanged = waterStreak.get(key) === n
+  waterStreak.set(key, n)
+  // No echo when nothing moved (a break at 0), so there is no spurious "streak: 0" before a gardener's first pour.
+  if (!unchanged && n !== prev) sendStreak(address)
 }
-/** Any waterRejected, or an accepted pour that wasn't sweet, breaks the streak — no-ops if
- *  it was already 0, so neither one broadcasts a spurious "streak: 0" before a gardener's
- *  first water this connection. */
-function breakStreak(address: string): void {
-  const key = address.toLowerCase()
-  if ((waterStreak.get(key) ?? 0) === 0) return
-  waterStreak.set(key, 0)
-  sendStreak(address)
-}
+function bumpStreak(address: string): void { void changeStreak(address, prev => prev + 1) }
+/** Any waterRejected, or an accepted pour that wasn't sweet, breaks the streak. */
+function breakStreak(address: string): void { void changeStreak(address, () => 0) }
 
 /** Every test-panel handler is gated on this (pre-production gate, todo.md). */
 function isAdmin(address: string): boolean { return ADMIN_ADDRESSES.includes(address.toLowerCase()) }
@@ -1712,14 +1719,13 @@ async function returnAvenueFlower(r: AvenueRecord, why: 'recall' | 'tidy'): Prom
   else { (await loadKeptSafe(owner)).push(note); void savePlayerJson(owner, 'keptSafe') }
 }
 
-/** Crowding rule: the slot whose owner has been away longest — never a Mythic/Unique,
- *  never someone here now or away less than PLANTER_TIDY_MIN_AWAY_MS. */
+/** Crowding rule: the slot whose owner has been away longest, whatever its rarity (KJ 2026-10-06:
+ *  Mythic and Unique used to be exempt) — never someone here now or away less than PLANTER_TIDY_MIN_AWAY_MS. */
 function avenueTidyCandidate(): AvenueRecord | null {
   const now = Date.now()
   let best: AvenueRecord | null = null, bestSeen = Infinity
   for (const r of avenue.values()) {
     if (!r.owner || !r.keepsake) continue
-    if (r.keepsake.rarityTier >= AVENUE_NEVER_TIDY_TIER) continue
     if (isConnected(r.owner)) continue
     const seen = lastSeen.get(r.owner.toLowerCase()) ?? 0
     if (now - seen < PLANTER_TIDY_MIN_AWAY_MS) continue
@@ -2422,15 +2428,23 @@ export async function server(): Promise<void> {
   // ── The Avenue: display / recall / inspect ───────────────────
   onRoomMessage<{ slotId: string; flower: string; rarityTier: number; at: number }>('displayFlower', async (data, playerAddress) => {
     if (avenue.size === 0) { sendNotice(playerAddress, 'The Rare Plant Gallery is not open yet'); return }
+    let slot = data.slotId ? avenue.get(data.slotId) : undefined
+    // KJ 2026-10-05: tapping YOUR OWN stand with another flower swaps them in one go — the one on show goes back to My flowers first.
+    // Only ever your own: someone else's stand stays theirs. A swap does not add a stand, so the cap does not apply to it.
+    const swap = !!slot && !!slot.owner && slot.owner === playerAddress
     const cap = avenueSlotCap()   // every slot when AVENUE_SLOT_CAP is 0 — then only a full wall stops you
-    if (avenueSlotsOwnedBy(playerAddress) >= cap) { sendNotice(playerAddress, cap === 1 ? 'You already have a flower in the Gallery — take it back first' : `You already have ${cap} flowers in the Gallery`); return }
+    if (!swap && avenueSlotsOwnedBy(playerAddress) >= cap) { sendNotice(playerAddress, cap === 1 ? 'You already have a flower in the Gallery — take it back first' : `You already have ${cap} flowers in the Gallery`); return }
     const flowers = await loadFlowers(playerAddress)
     let idx = findKeepsake(flowers, data)
     if (idx < 0) { sendNotice(playerAddress, 'You no longer have that flower'); return }
     const f = flowers[idx]
     if (f.rarityTier < AVENUE_MIN_TIER) { sendNotice(playerAddress, `The Rare Plant Gallery is for ${rarityTierById(AVENUE_MIN_TIER).name} flowers and up`); return }
-    let slot = data.slotId ? avenue.get(data.slotId) : undefined
-    if (slot && slot.owner) { sendNotice(playerAddress, `${slot.ownerName}'s flower is on show there`); return }
+    if (slot && slot.owner && !swap) { sendNotice(playerAddress, `${slot.ownerName}'s flower is on show there`); return }
+    if (swap && slot) {
+      await returnAvenueFlower(slot, 'recall')        // empties the stand and puts the old flower back in the collection
+      slot = avenue.get(data.slotId)
+      if (!slot || slot.owner) return                 // someone took the stand while it was being returned
+    }
     if (!slot) slot = [...avenue.values()].find(r => !r.owner)
     if (!slot) {
       const victim = avenueTidyCandidate()
@@ -2738,7 +2752,7 @@ export async function server(): Promise<void> {
     // without a perfect pour showed their wallet address (KJ 2026-09-29). Seed an entry (0) and announce it: this
     // reaches everyone now, and sendAllStreaks hands it to later joiners.
     const key = address.toLowerCase()
-    if (!waterStreak.has(key)) waterStreak.set(key, 0)
+    waterStreak.set(key, streakValue(await loadStreak(address)))   // the streak they left with (0 for a new gardener)
     sendStreak(address)
     console.log(`[Server] Registered player: ${displayName} (${address})`)
   })

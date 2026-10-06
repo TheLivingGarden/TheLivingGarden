@@ -17,7 +17,7 @@
 // =============================================================
 
 import {
-  engine, Entity, Transform, MeshRenderer, MeshCollider, Material, TextShape,
+  engine, Entity, Transform, MeshRenderer, MeshCollider, Material, MaterialTransparencyMode, TextShape,
   GltfContainer, ColliderLayer, Name, pointerEventsSystem, InputAction,
 } from '@dcl/sdk/ecs'
 import { Color4, Quaternion } from '@dcl/sdk/math'
@@ -269,7 +269,13 @@ const TAB_PITCH = GRID_H / N
 const TAB_H = TAB_PITCH - 0.07
 const tabY = (i: number): number => GRID_TOP - TAB_PITCH * (i + 0.5)
 
-interface Tile { e: Entity; found: boolean; speciesId: string }
+/** `e` = the dark-brown backing square (also the tap target); `img` = the thumbnail on a plane just in front of it. */
+interface Tile { e: Entity; img: Entity; found: boolean; speciesId: string }
+// The thumbnail plane's UVs are EXPLICIT (KJ 2026-10-05): the tiles used to be textured BOXES, and each explorer has its own default box UVs,
+// so the same code drew them upright on desktop and upside down on the phone. Both faces get the full texture, bottom-left first
+// (bottom-left, bottom-right, top-right, top-left), so nothing depends on an explorer's defaults.
+const TILE_UVS = [0, 0, 1, 0, 1, 1, 0, 1,   0, 0, 1, 0, 1, 1, 0, 1]
+const TILE_BG = PLATE   // dark brown, the same as the footer strip
 interface Tab  { bg: Entity; name: Entity; count: Entity; tier: number }
 let tiles: Tile[] = []
 let tabs: Tab[] = []
@@ -330,9 +336,15 @@ function setupAlmanacWall(): void {
     const e = engine.addEntity()
     Transform.create(e, { parent: root, position: { x, y, z: -0.03 }, scale: ZERO })
     MeshRenderer.setBox(e)
+    Material.setBasicMaterial(e, { diffuseColor: TILE_BG })   // unlit, like the wall: one fixed colour at any time of day
     MeshCollider.setBox(e, ColliderLayer.CL_POINTER)
     tileTap(e, t)
-    tiles.push({ e, found: false, speciesId: '' })
+    // The thumbnail: a child plane just proud of the backing's front face (the reader is on -Z; the backing is 0.04 deep, so -0.63 of its
+    // local depth is ~5 mm in front). It inherits the tile's scale, so it hides with it.
+    const img = engine.addEntity()
+    Transform.create(img, { parent: e, position: { x: 0, y: 0, z: -0.63 } })
+    MeshRenderer.setPlane(img, TILE_UVS)
+    tiles.push({ e, img, found: false, speciesId: '' })
   }
 }
 
@@ -385,17 +397,17 @@ function refreshAlmanac(): void {
     if (!sp) { setScale(tile.e, ZERO); tile.speciesId = ''; continue }
     const found = !!seen.get(sp.id)?.has(selTier)
     if (tile.speciesId !== sp.id || tile.found !== found) {
-      // SELF-LIT: the scene is at night and lit materials rendered every tile near-black, so found tiles glow at
-      // full strength. Missing ones are a PURE black silhouette (KJ 2026-09-29: black and transparent only, no
-      // grey detail): an UNLIT black material keeps the thumbnail's alpha cut-out and nothing else — no lighting,
-      // emissive or specular can lift it off black.
+      // The thumbnail's alpha is CUT OUT so the dark-brown backing shows through (KJ 2026-10-05). A basic (unlit) material's alphaTest was
+      // honoured on the phone but not on desktop, where the PNG's transparent pixels came out black — so this is a PBR material with an
+      // alphaTexture and MTM_ALPHA_TEST, the path the flair icons already use on both. Black albedo means scene light adds nothing:
+      //  - found: the PNG as drawn, from the emissive channel alone (lit albedo + emissive double-counted golden hour, KJ 2026-09-30);
+      //  - missing: a PURE black silhouette (KJ 2026-09-29: black and transparent only, no grey detail) — no emissive, no specular.
       const tex = Material.Texture.Common({ src: `assets/images/plantThumbs/${sp.id}.png` })
+      const cutout = { texture: tex, alphaTexture: tex, transparencyMode: MaterialTransparencyMode.MTM_ALPHA_TEST, alphaTest: 0.5, albedoColor: Color4.Black(), metallic: 0, roughness: 1, specularIntensity: 0, castShadows: false }
       if (found) {
-        // UNLIT, like the silhouettes (KJ 2026-09-30: thumbnails looked washed out and pink). The old lit albedo + emissive of the
-        // same texture double-counted the golden-hour light and pushed every colour to pastel; a basic material shows the PNG as drawn.
-        Material.setBasicMaterial(tile.e, { texture: tex, alphaTest: 0.5 })
+        Material.setPbrMaterial(tile.img, { ...cutout, emissiveTexture: tex, emissiveColor: Color4.White(), emissiveIntensity: 1 })
       } else {
-        Material.setBasicMaterial(tile.e, { texture: tex, diffuseColor: Color4.Black(), alphaTest: 0.5 })
+        Material.setPbrMaterial(tile.img, cutout)
       }
       tile.speciesId = sp.id; tile.found = found
     }
