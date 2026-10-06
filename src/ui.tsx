@@ -493,7 +493,7 @@ function uiComponent() {
       <UiEntity
         uiTransform={{ width: px(CHIP_H), height: px(CHIP_H), margin: { left: px(GAP) }, alignItems: 'center', justifyContent: 'center', borderRadius: px(CHIP_H / 2) }}
         uiBackground={{ color: isInfoOpen() ? { r: 0.18, g: 0.49, b: 0.34, a: 0.95 } : DARK }}
-        onMouseDown={() => toggleInfo()}
+        onMouseDown={() => { if (!isInfoOpen() && isSeedMenuOpen()) toggleSeedMenu(); toggleInfo() }}   // …and opening "?" closes the pouch
       >
         <Label value="?" fontSize={fs(CHIP_FONT)} color={{ ...CREAM, a: 0.9 }} textAlign="middle-center" uiTransform={{ width: '100%', height: '100%' }} />
       </UiEntity>

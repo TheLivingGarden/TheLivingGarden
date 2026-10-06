@@ -19,6 +19,7 @@ import ReactEcs, { UiEntity, Label } from '@dcl/sdk/react-ecs'
 import { PLANT_SPECIES, LEGEND_PLANTS, legendTier, RARITY_TIERS, rarityTierById, plantSpeciesById, nextMilestone, milestoneTarget, milestoneTitle, growMsForTier, shortGrowTime, AVENUE_MIN_TIER, stampTotal, nextStampMilestone, stampMilestoneTarget } from './shared/config'
 import { setPreferredTier, nextSeedTier, getPouch, getFlowers, getDiscovered, stampsFound, gardenersHere, giveFlower, getHeld, holdFlower, holdSeed, displayOnAvenue, armAvenuePlacement } from './playerInventory'
 import { showToast } from './notifications'
+import { closeInfo } from './infoPanel'   // one centre-screen panel at a time: opening the pouch closes the "?" panel
 
 /** 128 px thumbnails made from each species' asset-pack thumbnail.png (assets/images/plantThumbs). */
 const thumbSrc = (flower: string) => `assets/images/plantThumbs/${flower}.png`
@@ -41,14 +42,14 @@ let plantTarget: { boxId: string; plant: (tier: number) => void } | null = null 
 let confirm: { kind: 'plant'; tier: number } | { kind: 'display'; key: string } | null = null
 
 export function isSeedMenuOpen(): boolean { return open }
-export function toggleSeedMenu(): void { open = !open; if (!open) { selectedKey = ''; giftMode = false; giftPage = 0; page = 0; almanacPage = 0; almanacSel = null; tierFilter = null; avenueSlot = null; plantTarget = null; confirm = null } }
-export function openSeedMenu(): void { open = true }
+export function toggleSeedMenu(): void { open = !open; if (open) closeInfo(); if (!open) { selectedKey = ''; giftMode = false; giftPage = 0; page = 0; almanacPage = 0; almanacSel = null; tierFilter = null; avenueSlot = null; plantTarget = null; confirm = null } }
+export function openSeedMenu(): void { closeInfo(); open = true }
 /** Opened from the world seed rack's gift board: the Flowers tab, where a kept flower is picked and given. */
-export function openSeedMenuFlowers(): void { open = true; tab = 'flowers'; selectedKey = ''; giftMode = false; page = 0 }
+export function openSeedMenuFlowers(): void { closeInfo(); open = true; tab = 'flowers'; selectedKey = ''; giftMode = false; page = 0 }
 /** Tapped an empty planter while holding more than one kind of seed (KJ 2026-10-02): the Seeds tab asks which to plant, and the tile you tap plants it there. */
-export function openSeedMenuForPlanter(boxId: string, plant: (tier: number) => void): void { open = true; tab = 'seeds'; plantTarget = { boxId, plant }; selectedKey = ''; giftMode = false; page = 0; confirm = null }
+export function openSeedMenuForPlanter(boxId: string, plant: (tier: number) => void): void { closeInfo(); open = true; tab = 'seeds'; plantTarget = { boxId, plant }; selectedKey = ''; giftMode = false; page = 0; confirm = null }
 /** Tapped an empty Avenue planter with nothing in hand: open Flowers so they can pick one for it. */
-export function openSeedMenuForAvenue(slotId: string): void { open = true; tab = 'flowers'; avenueSlot = slotId; selectedKey = ''; giftMode = false; page = 0; confirm = null; armAvenuePlacement(null) }
+export function openSeedMenuForAvenue(slotId: string): void { closeInfo(); open = true; tab = 'flowers'; avenueSlot = slotId; selectedKey = ''; giftMode = false; page = 0; confirm = null; armAvenuePlacement(null) }
 
 /** The keepsake index the menu currently has selected for gifting, or null if none —
  *  the world tap-a-player shortcut reuses this instead of guessing "the newest one". */

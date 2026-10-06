@@ -20,6 +20,8 @@ let page = 0
 
 export function isInfoOpen(): boolean { return open }
 export function toggleInfo(): void { open = !open; if (!open) page = 0 }
+/** The seed pouch closes this when it opens: both sit centre screen (KJ 2026-10-06). */
+export function closeInfo(): void { open = false; page = 0 }
 
 const DARK   = { r: 0.085, g: 0.078, b: 0.067, a: 0.95 }
 const RAISED = { r: 1, g: 1, b: 1, a: 0.08 }
