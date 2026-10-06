@@ -79,6 +79,8 @@ export const PROP_LAYOUT: Readonly<Record<string, PropPlacement>> = {
   'FlowerShelf': { x: -21.5, y: 1.65, z: 53.5, rotY: 0 },
   'AlmanacWall': { x: -31.4, y: 2.38, z: 49.68, rotY: 270 },   // 2026-10-05: on the shelf (top y 2.34), +0.08 m right; collectionDisplay.ts has the fit
   'ExamTable': { x: -23.3, y: 1.8, z: 51.2, rotY: 0 },
+  'PlanterSign': { x: -39.4, y: 3.45, z: 27.3, rotY: 270 },   // 2026-10-06: KJ's Prop editor export — on the nursery's west fence, right of the Nursery sign
+  'GrowSign': { x: -39.4, y: 3.45, z: 20.7, rotY: 270 },      // 2026-10-06: KJ's Prop editor export (boxSystem.ts createInfoSigns)
   'ProgressBar_1': { x: 4.4, y: 2.6, z: 8.4 },
   'ProgressBar_2': { x: 4.5, y: 2.6, z: 39.7 },
   'ProgressBar_3': { x: 0.4, y: 4.75, z: 18.375 },

@@ -285,126 +285,129 @@ export function plantDecayMs(plantId: string, gardeners: number): number {
 // box_100) are still bed 1 (now the strip nearest the door, x -16.85). Previous tables: design/layout-tables.bak-0929.ts. Before that: 2026-09-25 bake.
 // 2026-09-30: each row of four is now TWO pairs — the inner pairs were pushed 0.25 m apart each way (pair gap 2.0 m centre to centre, same as the
 // gap between fours) so beds of two read as pairs. Backup of the pre-shift table: scratchpad config.ts.bak-before-pair-shift.
-export const BOX_POSITIONS: ReadonlyArray<{ id: string; x: number; z: number; rot: number }> = [
-  { id: 'box_4', x: -16.85, z: 37, rot: 270 },
-  { id: 'box_6', x: -16.85, z: 35.5, rot: 270 },
-  { id: 'box_99', x: -16.85, z: 33.5, rot: 270 },
-  { id: 'box_100', x: -16.85, z: 32, rot: 270 },
+// 2026-10-06 (KJ, after a mock-up in the scene): pairs read as pairs and the field is TERRACED. Within a pair 1.5 -> 1.3 m, between pairs
+// 2.0 -> 2.3 m (strip centred on z 24), and each strip further from the door axis stands 0.25 m higher: `y`, absent = 0. The stepped strips
+// themselves are in scene.glb. Pre-bake table: scratchpad config.ts.pre-terrace-bake.
+export const BOX_POSITIONS: ReadonlyArray<{ id: string; x: number; z: number; rot: number; y?: number }> = [
+  { id: 'box_4', x: -16.85, z: 37.25, rot: 270 },
+  { id: 'box_6', x: -16.85, z: 35.95, rot: 270 },
+  { id: 'box_99', x: -16.85, z: 33.65, rot: 270 },
+  { id: 'box_100', x: -16.85, z: 32.35, rot: 270 },
 
-  { id: 'box_1', x: -12.85, z: 37, rot: 270 },
-  { id: 'box_2', x: -12.85, z: 35.5, rot: 270 },
-  { id: 'box_3', x: -12.85, z: 33.5, rot: 270 },
-  { id: 'box_50', x: -12.85, z: 32, rot: 270 },
+  { id: 'box_1', x: -12.85, z: 37.25, rot: 270, y: 0.25 },
+  { id: 'box_2', x: -12.85, z: 35.95, rot: 270, y: 0.25 },
+  { id: 'box_3', x: -12.85, z: 33.65, rot: 270, y: 0.25 },
+  { id: 'box_50', x: -12.85, z: 32.35, rot: 270, y: 0.25 },
 
-  { id: 'box_51', x: -8.84, z: 37, rot: 270 },
-  { id: 'box_52', x: -8.84, z: 35.5, rot: 270 },
-  { id: 'box_53', x: -8.84, z: 33.5, rot: 270 },
-  { id: 'box_54', x: -8.84, z: 32, rot: 270 },
+  { id: 'box_51', x: -8.84, z: 37.25, rot: 270, y: 0.5 },
+  { id: 'box_52', x: -8.84, z: 35.95, rot: 270, y: 0.5 },
+  { id: 'box_53', x: -8.84, z: 33.65, rot: 270, y: 0.5 },
+  { id: 'box_54', x: -8.84, z: 32.35, rot: 270, y: 0.5 },
 
-  { id: 'box_55', x: -31.24, z: 37, rot: 90 },
-  { id: 'box_56', x: -31.24, z: 35.5, rot: 90 },
-  { id: 'box_57', x: -31.24, z: 33.5, rot: 90 },
-  { id: 'box_58', x: -31.24, z: 32, rot: 90 },
+  { id: 'box_55', x: -31.24, z: 37.25, rot: 90 },
+  { id: 'box_56', x: -31.24, z: 35.95, rot: 90 },
+  { id: 'box_57', x: -31.24, z: 33.65, rot: 90 },
+  { id: 'box_58', x: -31.24, z: 32.35, rot: 90 },
 
-  { id: 'box_59', x: -4.83, z: 37, rot: 270 },
-  { id: 'box_60', x: -4.83, z: 35.5, rot: 270 },
-  { id: 'box_61', x: -4.83, z: 33.5, rot: 270 },
-  { id: 'box_62', x: -4.83, z: 32, rot: 270 },
+  { id: 'box_59', x: -4.83, z: 37.25, rot: 270, y: 0.75 },
+  { id: 'box_60', x: -4.83, z: 35.95, rot: 270, y: 0.75 },
+  { id: 'box_61', x: -4.83, z: 33.65, rot: 270, y: 0.75 },
+  { id: 'box_62', x: -4.83, z: 32.35, rot: 270, y: 0.75 },
 
-  { id: 'box_63', x: -35.25, z: 37, rot: 90 },
-  { id: 'box_64', x: -35.25, z: 35.5, rot: 90 },
-  { id: 'box_65', x: -35.25, z: 33.5, rot: 90 },
-  { id: 'box_66', x: -35.25, z: 32, rot: 90 },
+  { id: 'box_63', x: -35.25, z: 37.25, rot: 90, y: 0.25 },
+  { id: 'box_64', x: -35.25, z: 35.95, rot: 90, y: 0.25 },
+  { id: 'box_65', x: -35.25, z: 33.65, rot: 90, y: 0.25 },
+  { id: 'box_66', x: -35.25, z: 32.35, rot: 90, y: 0.25 },
 
-  { id: 'box_67', x: -16.85, z: 30, rot: 270 },
-  { id: 'box_68', x: -16.85, z: 28.5, rot: 270 },
-  { id: 'box_69', x: -16.85, z: 26.5, rot: 270 },
-  { id: 'box_70', x: -16.85, z: 25, rot: 270 },
+  { id: 'box_67', x: -16.85, z: 30.05, rot: 270 },
+  { id: 'box_68', x: -16.85, z: 28.75, rot: 270 },
+  { id: 'box_69', x: -16.85, z: 26.45, rot: 270 },
+  { id: 'box_70', x: -16.85, z: 25.15, rot: 270 },
 
-  { id: 'box_71', x: -12.85, z: 30, rot: 270 },
-  { id: 'box_72', x: -12.85, z: 28.5, rot: 270 },
-  { id: 'box_73', x: -12.85, z: 26.5, rot: 270 },
-  { id: 'box_74', x: -12.85, z: 25, rot: 270 },
+  { id: 'box_71', x: -12.85, z: 30.05, rot: 270, y: 0.25 },
+  { id: 'box_72', x: -12.85, z: 28.75, rot: 270, y: 0.25 },
+  { id: 'box_73', x: -12.85, z: 26.45, rot: 270, y: 0.25 },
+  { id: 'box_74', x: -12.85, z: 25.15, rot: 270, y: 0.25 },
 
-  { id: 'box_75', x: -8.84, z: 30, rot: 270 },
-  { id: 'box_76', x: -8.84, z: 28.5, rot: 270 },
-  { id: 'box_77', x: -8.84, z: 26.5, rot: 270 },
-  { id: 'box_78', x: -8.84, z: 25, rot: 270 },
+  { id: 'box_75', x: -8.84, z: 30.05, rot: 270, y: 0.5 },
+  { id: 'box_76', x: -8.84, z: 28.75, rot: 270, y: 0.5 },
+  { id: 'box_77', x: -8.84, z: 26.45, rot: 270, y: 0.5 },
+  { id: 'box_78', x: -8.84, z: 25.15, rot: 270, y: 0.5 },
 
-  { id: 'box_79', x: -31.24, z: 30, rot: 90 },
-  { id: 'box_80', x: -31.24, z: 28.5, rot: 90 },
-  { id: 'box_81', x: -31.24, z: 26.5, rot: 90 },
-  { id: 'box_82', x: -31.24, z: 25, rot: 90 },
+  { id: 'box_79', x: -31.24, z: 30.05, rot: 90 },
+  { id: 'box_80', x: -31.24, z: 28.75, rot: 90 },
+  { id: 'box_81', x: -31.24, z: 26.45, rot: 90 },
+  { id: 'box_82', x: -31.24, z: 25.15, rot: 90 },
 
-  { id: 'box_83', x: -4.83, z: 30, rot: 270 },
-  { id: 'box_84', x: -4.83, z: 28.5, rot: 270 },
-  { id: 'box_85', x: -4.83, z: 26.5, rot: 270 },
-  { id: 'box_86', x: -4.83, z: 25, rot: 270 },
+  { id: 'box_83', x: -4.83, z: 30.05, rot: 270, y: 0.75 },
+  { id: 'box_84', x: -4.83, z: 28.75, rot: 270, y: 0.75 },
+  { id: 'box_85', x: -4.83, z: 26.45, rot: 270, y: 0.75 },
+  { id: 'box_86', x: -4.83, z: 25.15, rot: 270, y: 0.75 },
 
-  { id: 'box_87', x: -35.25, z: 30, rot: 90 },
-  { id: 'box_88', x: -35.25, z: 28.5, rot: 90 },
-  { id: 'box_89', x: -35.25, z: 26.5, rot: 90 },
-  { id: 'box_90', x: -35.25, z: 25, rot: 90 },
+  { id: 'box_87', x: -35.25, z: 30.05, rot: 90, y: 0.25 },
+  { id: 'box_88', x: -35.25, z: 28.75, rot: 90, y: 0.25 },
+  { id: 'box_89', x: -35.25, z: 26.45, rot: 90, y: 0.25 },
+  { id: 'box_90', x: -35.25, z: 25.15, rot: 90, y: 0.25 },
 
-  { id: 'box_91', x: -16.85, z: 23, rot: 270 },
-  { id: 'box_92', x: -16.85, z: 21.5, rot: 270 },
-  { id: 'box_93', x: -16.85, z: 19.5, rot: 270 },
-  { id: 'box_94', x: -16.85, z: 18, rot: 270 },
+  { id: 'box_91', x: -16.85, z: 22.85, rot: 270 },
+  { id: 'box_92', x: -16.85, z: 21.55, rot: 270 },
+  { id: 'box_93', x: -16.85, z: 19.25, rot: 270 },
+  { id: 'box_94', x: -16.85, z: 17.95, rot: 270 },
 
-  { id: 'box_97', x: -12.85, z: 23, rot: 270 },
-  { id: 'box_98', x: -12.85, z: 21.5, rot: 270 },
-  { id: 'box_101', x: -12.85, z: 19.5, rot: 270 },
-  { id: 'box_102', x: -12.85, z: 18, rot: 270 },
+  { id: 'box_97', x: -12.85, z: 22.85, rot: 270, y: 0.25 },
+  { id: 'box_98', x: -12.85, z: 21.55, rot: 270, y: 0.25 },
+  { id: 'box_101', x: -12.85, z: 19.25, rot: 270, y: 0.25 },
+  { id: 'box_102', x: -12.85, z: 17.95, rot: 270, y: 0.25 },
 
-  { id: 'box_103', x: -8.84, z: 23, rot: 270 },
-  { id: 'box_104', x: -8.84, z: 21.5, rot: 270 },
-  { id: 'box_105', x: -8.84, z: 19.5, rot: 270 },
-  { id: 'box_106', x: -8.84, z: 18, rot: 270 },
+  { id: 'box_103', x: -8.84, z: 22.85, rot: 270, y: 0.5 },
+  { id: 'box_104', x: -8.84, z: 21.55, rot: 270, y: 0.5 },
+  { id: 'box_105', x: -8.84, z: 19.25, rot: 270, y: 0.5 },
+  { id: 'box_106', x: -8.84, z: 17.95, rot: 270, y: 0.5 },
 
-  { id: 'box_107', x: -31.24, z: 23, rot: 90 },
-  { id: 'box_108', x: -31.24, z: 21.5, rot: 90 },
-  { id: 'box_109', x: -31.24, z: 19.5, rot: 90 },
-  { id: 'box_110', x: -31.24, z: 18, rot: 90 },
+  { id: 'box_107', x: -31.24, z: 22.85, rot: 90 },
+  { id: 'box_108', x: -31.24, z: 21.55, rot: 90 },
+  { id: 'box_109', x: -31.24, z: 19.25, rot: 90 },
+  { id: 'box_110', x: -31.24, z: 17.95, rot: 90 },
 
-  { id: 'box_111', x: -4.83, z: 23, rot: 270 },
-  { id: 'box_112', x: -4.83, z: 21.5, rot: 270 },
-  { id: 'box_113', x: -4.83, z: 19.5, rot: 270 },
-  { id: 'box_114', x: -4.83, z: 18, rot: 270 },
+  { id: 'box_111', x: -4.83, z: 22.85, rot: 270, y: 0.75 },
+  { id: 'box_112', x: -4.83, z: 21.55, rot: 270, y: 0.75 },
+  { id: 'box_113', x: -4.83, z: 19.25, rot: 270, y: 0.75 },
+  { id: 'box_114', x: -4.83, z: 17.95, rot: 270, y: 0.75 },
 
-  { id: 'box_115', x: -35.25, z: 23, rot: 90 },
-  { id: 'box_116', x: -35.25, z: 21.5, rot: 90 },
-  { id: 'box_117', x: -35.25, z: 19.5, rot: 90 },
-  { id: 'box_118', x: -35.25, z: 18, rot: 90 },
+  { id: 'box_115', x: -35.25, z: 22.85, rot: 90, y: 0.25 },
+  { id: 'box_116', x: -35.25, z: 21.55, rot: 90, y: 0.25 },
+  { id: 'box_117', x: -35.25, z: 19.25, rot: 90, y: 0.25 },
+  { id: 'box_118', x: -35.25, z: 17.95, rot: 90, y: 0.25 },
 
-  { id: 'box_119', x: -16.85, z: 16, rot: 270 },
-  { id: 'box_120', x: -16.85, z: 14.5, rot: 270 },
-  { id: 'box_121', x: -16.85, z: 12.5, rot: 270 },
-  { id: 'box_122', x: -16.85, z: 11, rot: 270 },
+  { id: 'box_119', x: -16.85, z: 15.65, rot: 270 },
+  { id: 'box_120', x: -16.85, z: 14.35, rot: 270 },
+  { id: 'box_121', x: -16.85, z: 12.05, rot: 270 },
+  { id: 'box_122', x: -16.85, z: 10.75, rot: 270 },
 
-  { id: 'box_123', x: -12.85, z: 16, rot: 270 },
-  { id: 'box_124', x: -12.85, z: 14.5, rot: 270 },
-  { id: 'box_125', x: -12.85, z: 12.5, rot: 270 },
-  { id: 'box_126', x: -12.85, z: 11, rot: 270 },
+  { id: 'box_123', x: -12.85, z: 15.65, rot: 270, y: 0.25 },
+  { id: 'box_124', x: -12.85, z: 14.35, rot: 270, y: 0.25 },
+  { id: 'box_125', x: -12.85, z: 12.05, rot: 270, y: 0.25 },
+  { id: 'box_126', x: -12.85, z: 10.75, rot: 270, y: 0.25 },
 
-  { id: 'box_127', x: -8.84, z: 16, rot: 270 },
-  { id: 'box_128', x: -8.84, z: 14.5, rot: 270 },
-  { id: 'box_129', x: -8.84, z: 12.5, rot: 270 },
-  { id: 'box_130', x: -8.84, z: 11, rot: 270 },
+  { id: 'box_127', x: -8.84, z: 15.65, rot: 270, y: 0.5 },
+  { id: 'box_128', x: -8.84, z: 14.35, rot: 270, y: 0.5 },
+  { id: 'box_129', x: -8.84, z: 12.05, rot: 270, y: 0.5 },
+  { id: 'box_130', x: -8.84, z: 10.75, rot: 270, y: 0.5 },
 
-  { id: 'box_131', x: -31.24, z: 16, rot: 90 },
-  { id: 'box_132', x: -31.24, z: 14.5, rot: 90 },
-  { id: 'box_133', x: -31.24, z: 12.5, rot: 90 },
-  { id: 'box_134', x: -31.24, z: 11, rot: 90 },
+  { id: 'box_131', x: -31.24, z: 15.65, rot: 90 },
+  { id: 'box_132', x: -31.24, z: 14.35, rot: 90 },
+  { id: 'box_133', x: -31.24, z: 12.05, rot: 90 },
+  { id: 'box_134', x: -31.24, z: 10.75, rot: 90 },
 
-  { id: 'box_135', x: -4.83, z: 16, rot: 270 },
-  { id: 'box_136', x: -4.83, z: 14.5, rot: 270 },
-  { id: 'box_137', x: -4.83, z: 12.5, rot: 270 },
-  { id: 'box_138', x: -4.83, z: 11, rot: 270 },
+  { id: 'box_135', x: -4.83, z: 15.65, rot: 270, y: 0.75 },
+  { id: 'box_136', x: -4.83, z: 14.35, rot: 270, y: 0.75 },
+  { id: 'box_137', x: -4.83, z: 12.05, rot: 270, y: 0.75 },
+  { id: 'box_138', x: -4.83, z: 10.75, rot: 270, y: 0.75 },
 
-  { id: 'box_139', x: -35.25, z: 16, rot: 90 },
-  { id: 'box_140', x: -35.25, z: 14.5, rot: 90 },
-  { id: 'box_141', x: -35.25, z: 12.5, rot: 90 },
-  { id: 'box_142', x: -35.25, z: 11, rot: 90 },
+  { id: 'box_139', x: -35.25, z: 15.65, rot: 90, y: 0.25 },
+  { id: 'box_140', x: -35.25, z: 14.35, rot: 90, y: 0.25 },
+  { id: 'box_141', x: -35.25, z: 12.05, rot: 90, y: 0.25 },
+  { id: 'box_142', x: -35.25, z: 10.75, rot: 90, y: 0.25 },
 ]
 // ── Sky ──────────────────────────────────────────────────────
 /** The garden's resting sky: golden hour, all the time (KJ 2026-09-29). Seconds since 00:00
@@ -477,7 +480,7 @@ export const SHOW_DEV_OVERLAY = false
  *  76 x 8 = 608 of those, and a Common Rose and a Legendary Rose are the same model with
  *  different VFX, so a pair-based goal is both unreachable and hollow.
  *  Each one pays a guaranteed seed, and the later ones a permanent extra planter. The
- *  planter grants are BOUNDED on purpose (+3 across the whole ladder, once ever): planters
+ *  planter grants are BOUNDED on purpose (+2 on this ladder, +2 on the stamp ladder, once ever — BOX_CAP_MAX): planters
  *  are a fixed commons of 96, and GDD 3.1 promises "new players can always plant", so an
  *  unbounded reward would eat the commons — see the planter-scaling note in design/todo.md.
  *  `species: -1` means the whole catalogue, so adding species never strands the last rung. */
@@ -486,7 +489,8 @@ export const ALMANAC_MILESTONES: ReadonlyArray<AlmanacMilestone> = [
   { species: 10, seedTier: 2, planters: 0, title: 'Gardener' },       // TUNING
   { species: 25, seedTier: 3, planters: 1, title: 'Botanist' },
   { species: 50, seedTier: 5, planters: 1, title: 'Curator' },
-  { species: -1, seedTier: 5, planters: 1, title: 'Keeper of the Garden' },   // Exotic, NOT Unique: a Unique for every Keeper is a Unique for everyone (KJ 2026-09-25)
+  // Exotic, NOT Unique: a Unique for every Keeper is a Unique for everyone (KJ 2026-09-25). No planter since 2026-10-05: 6 is the most anyone holds (BOX_CAP_MAX).
+  { species: -1, seedTier: 5, planters: 0, title: 'Keeper of the Garden' },
 ]
 /** STAMP milestones (KJ 2026-09-25): a second ladder on RARITY STAMPS (each species in each rarity). The species
  *  ladder above ends within a day or two at a 2-minute growth base, so this one paces the rest of the month. Same
@@ -1128,6 +1132,9 @@ export const BEDS_EXPLICIT: ReadonlyArray<ReadonlyArray<string>> = [
 ]
 export const BED_FILL_ORIGIN = { x: -18.9, z: 50.0 } as const
 export const BOX_CAP_DEFAULT       = 2   // TUNING
+/** The most planters one gardener can hold (KJ 2026-10-05): 2 to start + the four milestone grants (25 / 50 species, 100 / 300 stamps).
+ *  The server clamps to this as well, so a cap stored before the change (7) reads as 6. */
+export const BOX_CAP_MAX           = 6
 /** Crowding rule (GDD §3.1): keep this many planters free. When fewer are free, the
  *  planter of the owner away longest (not connected, away ≥ PLANTER_TIDY_MIN_AWAY_MS) is
  *  tidied up — opened flower → their My flowers, growing seed → back to their pouch. */

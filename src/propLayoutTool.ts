@@ -75,6 +75,7 @@ function groupDefs(): Array<{ id: string; names: string[] }> {
   defs.push({ id: 'PouchRack', names: ['PouchRack'] })   // the world seed rack (pouchRack.ts)
   defs.push({ id: 'FlowerShelf', names: ['FlowerShelf'] }, { id: 'AlmanacWall', names: ['AlmanacWall'] })   // collectionDisplay.ts
   defs.push({ id: 'ExamTable', names: ['ExamTable'] })   // examTable.ts
+  defs.push({ id: 'PlanterSign', names: ['PlanterSign'] }, { id: 'GrowSign', names: ['GrowSign'] })   // boxSystem.ts — the nursery's two info boards
   for (let i = 1; i <= 4; i++) defs.push({ id: `ProgressBar_${i}`, names: [`ProgressBar_${i}`] })   // progressBarsSystem.ts
   return defs
 }

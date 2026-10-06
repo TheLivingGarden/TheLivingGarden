@@ -35,6 +35,7 @@ import {
   ColliderLayer,
   MeshCollider,
   TextShape,
+  Name,
   TextAlignMode,
   PointerEvents,
   pointerEventsSystem,
@@ -51,7 +52,8 @@ import { isMobile } from '@dcl/sdk/platform'
 import { BALLOON_TEXT_TRACK } from './balloonTextTrack'
 import { getPlayer } from '@dcl/sdk/players'
 import { room } from './shared/messages'
-import { BOX_POSITIONS, TEND_COOLDOWN_MS, BOX_WATER_MAX, WATER_DROP_MODEL_SRC, BOX_MODEL_SRC, BOX_MODEL_SCALE, BOX_MODEL_RIM_Y, BED_FILL_ORIGIN, BEDS_EXPLICIT, growMsForTier, growStageOf, tendsAvailable, BALLOON_MODEL_SRC, BALLOON_ANIMATED_SRC, BALLOON_ANIM_CLIPS, SEED_MODEL_HEIGHT, seedModelSrc, SEEDLING_MODEL_SRC_NORMAL, SEEDLING_MODEL_SRC_RARE, rarityTierById, plantSpeciesById, withArticle } from './shared/config'
+import { PROP_LAYOUT } from './shared/layout'
+import { BOX_POSITIONS, ALMANAC_MILESTONES, STAMP_MILESTONES, BOX_CAP_DEFAULT, BOX_CAP_MAX, TEND_COOLDOWN_MS, BOX_WATER_MAX, WATER_DROP_MODEL_SRC, BOX_MODEL_SRC, BOX_MODEL_SCALE, BOX_MODEL_RIM_Y, BED_FILL_ORIGIN, BEDS_EXPLICIT, growMsForTier, growStageOf, tendsAvailable, BALLOON_MODEL_SRC, BALLOON_ANIMATED_SRC, BALLOON_ANIM_CLIPS, SEED_MODEL_HEIGHT, seedModelSrc, SEEDLING_MODEL_SRC_NORMAL, SEEDLING_MODEL_SRC_RARE, rarityTierById, plantSpeciesById, withArticle } from './shared/config'
 import { showToast } from './notifications'
 import { makeBeds, bedOwner, checkPlant, Bed } from './shared/beds'
 import { attachPlantVfx, attachSeedlingVfx, detachPlantVfx, setupPlantVfx } from './plantVfx'
@@ -135,47 +137,10 @@ const views  = new Map<string, BoxView>()
 // Beds (shared/beds.ts): two planters that belong to whoever planted in them. Derived from the baked layout
 // (BOX_POSITIONS) so the client and the server compute the same beds; owners come from the planters themselves.
 // ---------------------------------------------------------------
-// ── MOCK-UP (KJ 2026-10-05): "a bit more separation between the pairs of planter beds — also step them up at the back so it's easier
-// to see everything". CLIENT ONLY and visual: the server still knows planters by id and by their baked x/z (they move < 0.5 m here).
-//   pairs   — planters in a pair closer together (1.5 -> 1.3 m), pairs further apart (2.0 -> 2.3 m). Same strip, same 8 pairs.
-//   terrace — each strip further from the door axis stands MOCK_STEP_M higher, on a plain box plinth (the real strips are in scene.glb).
-// Set PLANTER_MOCK to false for the baked layout, exactly as before. NOT FOR DEPLOY while true.
-const PLANTER_MOCK = true
-const MOCK_PAIR_PITCH = 1.3, MOCK_PAIR_GAP = 2.3, MOCK_STEP_M = 0.25
-const MOCK_STRIP_MID_Z = 24, MOCK_DOOR_X = BED_FILL_ORIGIN.x
-/** Which way the terrace climbs: 1 = away from the door axis (the planters face it), -1 = towards it. */
-const MOCK_CLIMB = 1
-type BakedPos = { id: string; x: number; z: number; rot: number; y?: number }
-function mockLayout(src: ReadonlyArray<BakedPos>): BakedPos[] {
-  if (!PLANTER_MOCK) return [...src]
-  const strips = [...new Set(src.map(p => p.x))]
-  const rankOf = (x: number): number => {
-    const side = strips.filter(o => (o > MOCK_DOOR_X) === (x > MOCK_DOOR_X)).sort((a, b) => Math.abs(a - MOCK_DOOR_X) - Math.abs(b - MOCK_DOOR_X))
-    return MOCK_CLIMB > 0 ? side.indexOf(x) : side.length - 1 - side.indexOf(x)
-  }
-  return src.map(p => {
-    const i = src.filter(o => o.x === p.x).sort((a, b) => a.z - b.z).findIndex(o => o.id === p.id)
-    const pairs = src.filter(o => o.x === p.x).length / 2
-    const z = MOCK_STRIP_MID_Z + (Math.floor(i / 2) - (pairs - 1) / 2) * (MOCK_PAIR_PITCH + MOCK_PAIR_GAP) + ((i % 2) - 0.5) * MOCK_PAIR_PITCH
-    return { ...p, z, y: rankOf(p.x) * MOCK_STEP_M }
-  })
-}
-const BOXES: ReadonlyArray<BakedPos> = mockLayout(BOX_POSITIONS)
-/** A planter's height off the strip floor (0 everywhere but the terrace mock-up). */
+/** A planter's height off the strip floor: the field is terraced (BOX_POSITIONS `y`, absent = 0). */
 const ly = (p: { y?: number } | undefined): number => p?.y ?? 0
-function createMockPlinths(): void {
-  for (const x of new Set(BOXES.map(p => p.x))) {
-    const h = ly(BOXES.find(p => p.x === x))
-    if (h <= 0) continue
-    const e = engine.addEntity()
-    Transform.create(e, { position: { x, y: h / 2, z: MOCK_STRIP_MID_Z }, scale: { x: 1.38, y: h, z: 28.4 } })
-    MeshRenderer.setBox(e)
-    MeshCollider.setBox(e, ColliderLayer.CL_PHYSICS)
-    Material.setPbrMaterial(e, { albedoColor: { r: 0.55, g: 0.30, b: 0.16, a: 1 }, roughness: 0.9, metallic: 0 })
-  }
-}
 
-const beds: Bed[] = makeBeds(BOXES, BED_FILL_ORIGIN, BEDS_EXPLICIT)
+const beds: Bed[] = makeBeds(BOX_POSITIONS, BED_FILL_ORIGIN, BEDS_EXPLICIT)
 function bedInfo(id: string): { owner: string; ownerName: string; plantedAt: number } | undefined {
   const v = views.get(id)
   return v && v.owner ? { owner: v.owner.toLowerCase(), ownerName: v.ownerName, plantedAt: v.plantedAt } : undefined
@@ -304,10 +269,10 @@ export function myPlanterCount(): number { return myBoxCount() }
  *  watches it rise rather than trusting a one-off flag, so a replay works too. */
 export function myTendsTotal(): number { let n = 0; for (const v of views.values()) if (isMine(v)) n += v.tends; return n }
 /** Tutorial: the centre of the bed I own, or null if I have none yet. */
-export function myBedCentre(): { x: number; z: number } | null {
+export function myBedCentre(): { x: number; z: number; y: number } | null {
   const me = localId()
   const b = beds.find(b => bedOwner(b, bedInfo)?.owner === me)
-  return b ? { x: b.cx, z: b.cz } : null
+  return b ? { x: b.cx, z: b.cz, y: ly(layout.get(b.boxIds[0])) } : null
 }
 function myBoxCount(): number { let n = 0; for (const v of views.values()) if (isMine(v)) n++; return n }
 
@@ -737,6 +702,7 @@ export function getPlanterLayout(): PlanterPose[] {
 export function setPlanterPose(id: string, pose: PlanterPos): void {
   const v = views.get(id)
   if (!v) return
+  pose = { ...pose, y: pose.y ?? layout.get(id)?.y }   // the planter editor moves x / z / rot only: a planter keeps its terrace height
   layout.set(id, pose)
   const base = Transform.getMutable(v.base)
   base.position = { x: pose.x, y: ly(pose), z: pose.z }
@@ -874,7 +840,7 @@ const PANEL_TEX   = 'assets/images/roundedPanel.png'
 function createBedSigns(): void {
   for (const bed of beds) {
     const root = engine.addEntity()
-    Transform.create(root, { position: { x: bed.cx, y: BED_SIGN_Y + ly(BOXES.find(b => b.id === bed.boxIds[0])), z: bed.cz }, scale: { x: 0, y: 0, z: 0 } })
+    Transform.create(root, { position: { x: bed.cx, y: BED_SIGN_Y + ly(BOX_POSITIONS.find(b => b.id === bed.boxIds[0])), z: bed.cz }, scale: { x: 0, y: 0, z: 0 } })
     Billboard.create(root, { billboardMode: BillboardMode.BM_Y })
     // Brown plaque, the owner's picture in a circle at the left, the text to its right. The viewer is on the -Z side, so
     // depth order from the back: panel, avatar (a plain SQUARE — the explorer ignores a separate mask on it), the
@@ -1241,12 +1207,47 @@ function plaqueHomeSystem(dt: number): void {
   }
 }
 
+/** The nursery's info boards (KJ 2026-10-05 / 06): dark brown board, amber title, cream lines. Static, and Named so the Prop editor can
+ *  move them (PROP_LAYOUT). Read from the -Z side. Both are the same width, so they hang as a pair. */
+const INFO_SIGN_W = 3.0, INFO_SIGN_LINE = 0.24
+const INFO_BOARD = { r: 0.40, g: 0.21, b: 0.11, a: 1 }, INFO_AMBER = { r: 1, g: 0.72, b: 0.22, a: 1 }, INFO_CREAM = { r: 1, g: 0.95, b: 0.82, a: 1 }
+function createInfoSign(name: string, title: string, lines: string[], rows: number, fallback: { x: number; y: number; z: number; rotY: number }): void {
+  const o = PROP_LAYOUT[name] ?? fallback
+  const H = 0.95 + INFO_SIGN_LINE * rows
+  const root = engine.addEntity()
+  Transform.create(root, { position: { x: o.x, y: o.y, z: o.z }, rotation: Quaternion.fromEulerDegrees(0, o.rotY ?? 0, 0) })
+  Name.create(root, { value: name })
+  const panel = engine.addEntity()
+  Transform.create(panel, { parent: root, position: { x: 0, y: 0, z: 0.03 }, scale: { x: INFO_SIGN_W, y: H, z: 0.04 } })
+  MeshRenderer.setBox(panel)
+  // UNLIT (basic material): a lit dark-brown board went black in the garden's dusk light (KJ 2026-10-06), so the colour is drawn as given.
+  Material.setBasicMaterial(panel, { diffuseColor: INFO_BOARD })
+  const head = engine.addEntity()
+  Transform.create(head, { parent: root, position: { x: 0, y: H / 2 - 0.26, z: -0.01 } })
+  TextShape.create(head, { text: title, fontSize: 2.2, textColor: INFO_AMBER, textAlign: TextAlignMode.TAM_MIDDLE_CENTER })
+  const body = engine.addEntity()
+  Transform.create(body, { parent: root, position: { x: 0, y: -0.2, z: -0.01 } })
+  TextShape.create(body, { text: lines.join('\n'), fontSize: 1.4, textColor: INFO_CREAM, textAlign: TextAlignMode.TAM_MIDDLE_CENTER, lineSpacing: 30 })
+}
+function createInfoSigns(): void {
+  // "More planters": its lines are read from the milestone tables, so it cannot drift from what the server pays.
+  const grants = [
+    ...ALMANAC_MILESTONES.filter(m => m.planters > 0 && m.species > 0).map(m => `+${m.planters}  at ${m.species} species discovered`),
+    ...STAMP_MILESTONES.filter(m => m.planters > 0 && m.stamps > 0).map(m => `+${m.planters}  at ${m.stamps} rarity stamps`),
+  ]
+  const planters = [`Everyone starts with ${BOX_CAP_DEFAULT}. Earn up to ${BOX_CAP_MAX}:`, ...grants]
+  const growing = ['Tap an empty planter to plant a seed', 'Rarer seeds take longer to grow', 'Tend your seedling to speed it up', 'Friends can water it to help', 'Tap the flower to harvest it']
+  const rows = Math.max(planters.length, growing.length) - 1   // same height for both boards
+  createInfoSign('PlanterSign', 'More planters', planters, rows, { x: -39.4, y: 3.45, z: 27.3, rotY: 270 })
+  createInfoSign('GrowSign', 'How to grow', growing, rows, { x: -39.4, y: 3.45, z: 20.7, rotY: 270 })
+}
+
 /** Register handlers — MUST be called after wateringSystem's room.clear(). */
 export function setupBoxSystem(): void {
   for (let i = 0; i < PLAQUE_POOL; i++) plaques.push({ sign: createSign({ x: 0, y: -50, z: 0 }, 0, PLAQUE_SIZE, PLAQUE_FONT, false), boxId: null })
-  for (const p of BOXES) { layout.set(p.id, { x: p.x, z: p.z, rot: p.rot, y: p.y }); views.set(p.id, createBox(p)) }
-  if (PLANTER_MOCK) createMockPlinths()
+  for (const p of BOX_POSITIONS) { layout.set(p.id, { x: p.x, z: p.z, rot: p.rot, y: p.y }); views.set(p.id, createBox(p)) }
   createBedSigns()
+  createInfoSigns()
   // Distance streaming (streaming.ts): far planters + their balloon / plant / drop are hidden. Never mine, and never the ones the
   // tutorial or bed steering is pointing at (their shell + arrow would float over an invisible planter).
   registerStreamSource('planters', () => {

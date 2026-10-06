@@ -80,17 +80,8 @@ const GROUP_DEFS: {
     startLevel: -1,   // Off until first watering
     single:     true,
   },
-  {
-    id:         'lamppost',
-    offName:    null,  // no Off variant — lampposts always on at Low
-    sets: [
-      ['lamppost_light_low',   'lamppost_light_mid',   'lamppost_light_high'],
-      ['lamppost_light_low_2', 'lamppost_light_mid_2', 'lamppost_light_high_2'],
-      ['lamppost_light_low_3', 'lamppost_light_mid_3', 'lamppost_light_high_3'],
-      ['lamppost_light_low_4', 'lamppost_light_mid_4', 'lamppost_light_high_4'],
-    ],
-    startLevel: 0,    // Low from the start
-  },
+  // (The 'lamppost' group was removed 2026-10-06: KJ took the lampposts out of the scene, and the missing entities logged an error on
+  // every load. setLamppostLevel / setLamppostBloomIntensity are no-ops without it.)
   {
     id:         'circle1',
     offName:    'Circle1_Off',

@@ -269,7 +269,7 @@ function heldPlanter(from: Vector3, dt: number): Vector3 | null {
   retryIn -= dt
   if (heldBoxId) {
     const p = freePlanterPos(heldBoxId)
-    if (p) return Vector3.create(p.x, 0, p.z)
+    if (p) return Vector3.create(p.x, p.y, p.z)   // y: the planter's terrace height, so the beacon stands ON it
     heldBoxId = ''            // someone planted in it — ask for another
   }
   if (retryIn <= 0) {
@@ -281,7 +281,7 @@ function heldPlanter(from: Vector3, dt: number): Vector3 | null {
   // to it anyway, arrows AND shell, instead of showing nothing (KJ 2026-09-30). The server still validates the plant when they tap.
   const pick = nearestFreePlanter(from)
   pickedBoxId = pick?.boxId ?? ''
-  return pick ? Vector3.create(pick.x, 0, pick.z) : null
+  return pick ? Vector3.create(pick.x, pick.y, pick.z) : null
 }
 
 /** Can the plot step actually plant? Needs a seed AND room under the planter cap — pointing
@@ -291,7 +291,7 @@ function canPlant(): boolean {
 }
 
 /** My seedling that is still growing, nearest first. */
-function myGrowingPlanter(from: Vector3): { x: number; z: number } | null {
+function myGrowingPlanter(from: Vector3): { x: number; z: number; y: number } | null {
   const opened = new Set(myOpenedPlanters(from).map(b => b.boxId))
   return myPlanters(from).find(b => !opened.has(b.boxId)) ?? null
 }
@@ -491,7 +491,7 @@ function stepDone(p: Vector3): boolean {
 
 /** A player who can't plant right now is shown their bed instead: theirs if they own
  *  one, else one of their planters, else the planter they would be steered to. */
-function plotLookTarget(p: Vector3): { x: number; z: number } | null {
+function plotLookTarget(p: Vector3): { x: number; z: number; y: number } | null {
   return myBedCentre() ?? myPlanters(p)[0] ?? nearestFreePlanter(p)
 }
 
@@ -555,12 +555,12 @@ function pickTarget(p: Vector3, dt: number): Vector3 | null {
     case 'plot': {
       if (canPlant()) return heldPlanter(p, dt)
       const b = plotLookTarget(p)
-      return b ? Vector3.create(b.x, 0, b.z) : null
+      return b ? Vector3.create(b.x, b.y, b.z) : null
     }
-    case 'tend': { const g = myGrowingPlanter(p); return g ? Vector3.create(g.x, 0, g.z) : null }
+    case 'tend': { const g = myGrowingPlanter(p); return g ? Vector3.create(g.x, g.y, g.z) : null }
     case 'harvest': {
       const o = myOpenedPlanter(p) ?? myGrowingPlanter(p)
-      return o ? Vector3.create(o.x, 0, o.z) : null
+      return o ? Vector3.create(o.x, o.y, o.z) : null
     }
     default: return null   // fame: you are already there
   }

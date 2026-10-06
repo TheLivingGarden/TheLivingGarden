@@ -77,6 +77,7 @@ import {
   growShaveMsForTier,
   formatGrowTime,
   BOX_CAP_DEFAULT,
+  BOX_CAP_MAX,
   PLANTER_RESERVE_TTL_MS,
   FINALE_RARE_TIER,
   PLANTER_RESERVE_FREE,
@@ -1149,7 +1150,7 @@ const RARITY_TIER_COUNT = RARITY_TIERS.length   // Common..Unique; the pouch has
 /** Effective planter cap: a stored cap (e.g. bought planters) never drops below the default. */
 async function planterCap(address: string): Promise<number> {
   if (unlimitedPlanters.has(address)) return UNLIMITED_CAP
-  return Math.max((await loadBoxCap(address)).cap, BOX_CAP_DEFAULT)
+  return Math.min(BOX_CAP_MAX, Math.max((await loadBoxCap(address)).cap, BOX_CAP_DEFAULT))
 }
 
 // ── Discovered species (2026-09-21) — the ALMANAC's source of truth, and deliberately
@@ -1200,7 +1201,7 @@ async function payMilestoneReward(address: string, seedTier: number, planters: n
   sendPouch(address)
   if (planters > 0) {
     const cap = await loadBoxCap(address)
-    cap.cap = Math.max(cap.cap, BOX_CAP_DEFAULT) + planters
+    cap.cap = Math.min(BOX_CAP_MAX, Math.max(cap.cap, BOX_CAP_DEFAULT) + planters)
     void savePlayerJson(address, 'boxCap')
     await sendCollection(address)   // carries boxCap — the client's own planting gate
   }
