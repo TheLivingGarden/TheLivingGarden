@@ -52,7 +52,7 @@ import {
   TOON_HIGHLIGHT_SRC, TOON_HIGHLIGHT_SCALE,
   ONBOARDING_REPICK_S, ONBOARDING_MAX_RANGE,
   PLANTER_RESERVE_RETRY_S, AVENUE_ARROW_STANDOFF, BLOOM_CENTER, BLOOM_THRESHOLD, BLOOM_OPEN_MS,
-  ARCH_NORTH, ARCH_SHED, ARCH_SOUTH, ARCH_FAME, ARCH_FAME_SOUTH, ARCH_SOUTH_SOUTH,
+  ARCH_NORTH, ARCH_SHED, ARCH_SHED_SOUTH, ARCH_SOUTH, ARCH_FAME, ARCH_FAME_SOUTH, ARCH_SOUTH_SOUTH,
   TUTORIAL_ARRIVE_M, TUTORIAL_WAYPOINT_M, TUTORIAL_DONE_MS, TUTORIAL_TEXT, TutorialPoint,
 } from './shared/config'
 
@@ -73,7 +73,7 @@ let bloomTrailOn = true
 const ROUTES: Partial<Record<StepId, ReadonlyArray<TutorialPoint>>> = {
   arch:   [ARCH_NORTH],
   shed:   [ARCH_SHED, RACK],
-  shelf:  [ARCH_SHED, SHELF],
+  shelf:  [ARCH_SHED_SOUTH, SHELF],   // KJ 2026-10-15: back in through the shed's OTHER (south) doorway, then to the shelf
   toFame: [ARCH_SHED, ARCH_NORTH, ARCH_SOUTH, ARCH_FAME],
   loop:   [ARCH_FAME_SOUTH, ARCH_SOUTH_SOUTH, BLOOM],
 }
@@ -84,6 +84,7 @@ let active     = false
 let stepIdx    = 0
 let cardHidden = false
 let routeFloor = -1                 // index of the waypoint being walked to; -1 = pick the entry on the next tick
+let viaDoorPassed = false           // the plot step's detour through the shed's south doorway is behind us
 let snap = { waters: 0, pouch: 0, planters: 0, tends: 0, flowers: 0, ringTaps: 0 }
 
 // First-time players are dropped into the walk on join, once per session, off the server's flags.
@@ -316,6 +317,18 @@ function routeTarget(route: ReadonlyArray<TutorialPoint>, p: Vector3): TutorialP
   return route[routeFloor]
 }
 
+/** KJ 2026-10-15: the walk from the seed rack to your plot leaves the shed by its SOUTH doorway (the same one the shelf step comes
+ *  back in by). Point at the doorway first; once you are through it — or already nearer the planter than the doorway is, as when the
+ *  step is replayed from outside — point at the planter. Same pass rule as routeTarget. */
+function viaShedSouthDoor(p: Vector3, dest: Vector3): Vector3 {
+  if (!viaDoorPassed) {
+    const door = ARCH_SHED_SOUTH
+    if (flat(p, door) < TUTORIAL_WAYPOINT_M || flat(p, dest) < flat(door, dest)) { viaDoorPassed = true; playSfx('tutorialWaypoint') }
+    else return Vector3.create(door.x, 0, door.z)
+  }
+  return dest
+}
+
 // ── The trail ─────────────────────────────────────────────────
 
 /** Lay the chevrons from `to` all the way back to the player's feet, every one aimed at
@@ -379,6 +392,7 @@ function enterStep(i: number): void {
   stepIdx    = i
   cardHidden = false
   routeFloor = -1
+  viaDoorPassed = false
   waterTarget = null
   waterHeldSince = 0
   bloomTrailOn = true
@@ -553,9 +567,8 @@ function pickTarget(p: Vector3, dt: number): Vector3 | null {
       return bloomTrailOn ? Vector3.create(BLOOM.x, 0, BLOOM.z) : null
     }
     case 'plot': {
-      if (canPlant()) return heldPlanter(p, dt)
-      const b = plotLookTarget(p)
-      return b ? Vector3.create(b.x, b.y, b.z) : null
+      const b = canPlant() ? heldPlanter(p, dt) : plotLookTarget(p)
+      return b ? viaShedSouthDoor(p, Vector3.create(b.x, b.y, b.z)) : null
     }
     case 'tend': { const g = myGrowingPlanter(p); return g ? Vector3.create(g.x, g.y, g.z) : null }
     case 'harvest': {
@@ -624,6 +637,12 @@ function tutorialSystem(dt: number): void {
 /** Test panel: wipe my record on the server AND start the walk here and now. The join-time
  *  auto-start decides once per session, so a reset alone never restarted it (KJ 2026-09-27:
  *  worked on a fresh mobile account, not on desktop after a reset). */
+/** Test panel: log where I'm standing to the server log (placing tutorial waypoints). */
+export function adminWhereAmI(): void {
+  const p = Transform.getOrNull(engine.PlayerEntity)?.position
+  if (p) room.send('adminWhereAmI', { x: p.x, y: p.y, z: p.z })
+}
+
 export function adminResetOnboarding(): void {
   room.send('adminResetOnboarding', {})
   endedThisSession = false

@@ -18,7 +18,8 @@ import { BLOOM_CENTER, BLOOM_WINDOWS, BLOOM_MODEL_OFFSET_X } from './shared/conf
 // Configuration
 // ---------------------------------------------------------------
 
-const BASE_LOOP_VOLUME  = 1.0   // max — boost the audio file itself if more is needed
+const BASE_LOOP_VOLUME  = 0.8   // KJ 2026-10-15: global now, so a touch under full — the sfx have to sit above it
+const CHIMES_VOLUME     = 0.25  // TUNING — the file is ~12 dB louder than BaseLoop (RMS -9.8 vs -21.8 dB), so it needs a low volume to sit WITH the ambience; — the Bloom-area chimes (positional: they fade out as you walk away from the Bloom)
 const PULSE_BASE_VOLUME = 0.45
 const SWELL_BASE_VOLUME = 0.85
 const TEST_MODE_BLOOM_DELAY_MS = 10_000
@@ -144,7 +145,9 @@ export function setupBloomSystem(opts: {
   onResetCallback = opts.onReset
   onVisualBloomCallback = opts.onVisualBloom ?? (() => {})
 
-  // Continuous base layer — always playing
+  // Continuous base layer — always playing. GLOBAL (KJ 2026-10-15: "should the soundscape be louder?"): it was a point source at the
+  // Bloom centre, already at full volume, so it faded with distance and was barely there in the nursery, the shed (~31 m away) and the
+  // Gallery. Now it plays at that full level everywhere in the scene. The Bloom's Pulse / Swell stay positional — they belong to it.
   baseLoopEntity = engine.addEntity()
   Transform.create(baseLoopEntity, { position: BLOOM_CENTER })
   AudioSource.create(baseLoopEntity, {
@@ -152,6 +155,20 @@ export function setupBloomSystem(opts: {
     playing: true,
     loop: true,
     volume: BASE_LOOP_VOLUME,
+    pitch: 1,
+    global: true,
+  })
+
+  // KJ 2026-10-15: "some special sound around the main bloom area". A positional loop AT the Bloom — sparse C-major wind chimes and a
+  // faint breathing shimmer (synthesised: empty for claude/tools/bloom_ambience.py) — so walking up to the Bloom sounds different from
+  // the rest of the garden. Not global on purpose: the fade with distance IS the effect.
+  const chimesEntity = engine.addEntity()
+  Transform.create(chimesEntity, { position: BLOOM_CENTER })
+  AudioSource.create(chimesEntity, {
+    audioClipUrl: 'assets/scene/Audio/BloomChimes.wav',
+    playing: true,
+    loop: true,
+    volume: CHIMES_VOLUME,
     pitch: 1,
   })
 

@@ -272,9 +272,11 @@ const tabY = (i: number): number => GRID_TOP - TAB_PITCH * (i + 0.5)
 /** `e` = the dark-brown backing square (also the tap target); `img` = the thumbnail on a plane just in front of it. */
 interface Tile { e: Entity; img: Entity; found: boolean; speciesId: string }
 // The thumbnail plane's UVs are EXPLICIT (KJ 2026-10-05): the tiles used to be textured BOXES, and each explorer has its own default box UVs,
-// so the same code drew them upright on desktop and upside down on the phone. Both faces get the full texture, bottom-left first
-// (bottom-left, bottom-right, top-right, top-left), so nothing depends on an explorer's defaults.
-const TILE_UVS = [0, 0, 1, 0, 1, 1, 0, 1,   0, 0, 1, 0, 1, 1, 0, 1]
+// so the same code drew them upright on desktop and upside down on the phone. The UVs follow the explorers' PLANE VERTEX order, which
+// is bottom-left, top-left, top-right, bottom-right on the front and the mirror of that on the back (unity-explorer PlaneFactory.cs;
+// godot-explorer copies it). The first version listed corners anticlockwise (BL, BR, TR, TL), which transposed every thumbnail —
+// drawn on its side on desktop AND phone (week-4 follow-up, KJ 2026-10-15). These are the explorers' own default plane UVs, written out.
+const TILE_UVS = [0, 0, 0, 1, 1, 1, 1, 0,   1, 0, 1, 1, 0, 1, 0, 0]
 const TILE_BG = PLATE   // dark brown, the same as the footer strip
 interface Tab  { bg: Entity; name: Entity; count: Entity; tier: number }
 let tiles: Tile[] = []

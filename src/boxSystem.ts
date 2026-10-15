@@ -615,7 +615,7 @@ function tendOnto(v: BoxView): void {
   beginHold((outcome) => {
     if (outcome === 'tap' || outcome === 'over') return   // meter itself says why; no send
     console.log(`[Boxes] tending ${v.boxId}`)
-    playWateringBeat()
+    playWateringBeat(at)
     room.send('tendBox', { boxId: v.boxId })
     lastTendLocal.set(v.boxId, Date.now())
     v.tends += 1          // optimistic; the next boxState carries the server's count
@@ -636,7 +636,7 @@ function onTap(v: BoxView): void {
   if (v.waters >= BOX_WATER_MAX) { showToast(`${v.ownerName}'s seed has had all the water it can take`, TOAST_MS, false); return }
   if (isWateringEmoteActive() || isHolding()) return   // one water at a time (KJ 2026-09-30): a tap during the previous pour's animation does nothing
   console.log(`[Boxes] watering ${v.ownerName}'s ${v.boxId}`)
-  playWateringBeat()   // same optimistic timing as a garden plant; the server still validates
+  playWateringBeat(layout.get(v.boxId))   // same optimistic timing as a garden plant; the server still validates
   room.send('waterBox', { boxId: v.boxId })
   wateredByMe.add(v.boxId)
   removeSeedlingDrop(v)   // one water per visitor — the marker's job here is done

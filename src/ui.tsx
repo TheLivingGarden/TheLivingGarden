@@ -598,7 +598,9 @@ function uiComponent() {
           // explorer's interaction prompt / the hold-to-water meter, which live at the screen centre). The
           // banner is hidden while the tutorial runs (see `open` above), so nothing needs the 122 px under it —
           // except when the player taps the ring open (the ring step): the card steps down under it until it closes.
-          <UiEntity uiTransform={{ positionType: 'absolute', position: { top: topPx + px(GAP) + (bannerShown ? bannerH + px(GAP) : 0), left: 0 }, width: '100%', flexDirection: 'row', justifyContent: 'center' }}>
+          // Only as wide as the card (week-4 review, "ring doesn't respond in step 2"): the row used to span the whole
+          // screen from just under the ring's top edge, and being drawn after the ring it swallowed the ring's taps.
+          <UiEntity uiTransform={{ positionType: 'absolute', position: { top: topPx + px(GAP) + (bannerShown ? bannerH + px(GAP) : 0), left: Math.round((currentVirtualW * (1 - hIns * 2) - cardW) / 2) }, width: cardW }}>
             <UiEntity uiTransform={{ width: cardW, flexDirection: 'column', alignItems: 'center', padding: { left: px(28), right: px(28), top: px(14), bottom: px(18) }, borderRadius: px(26) }} uiBackground={{ color: { r: 0.07, g: 0.063, b: 0.055, a: 0.9 } }}>
               <UiEntity uiTransform={{ width: '100%', height: px(30), flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 }}>
                 {/* Progress dots: done gold, current cream, to come faint */}
@@ -618,7 +620,7 @@ function uiComponent() {
               <Label value={c.body} fontSize={bodyFont} color={{ ...CREAM, a: 1 }} textAlign="middle-center" textWrap="wrap" uiTransform={{ width: '100%', height: bodyH, margin: { top: px(4), bottom: px(12) }, flexShrink: 0 }} />
               <UiEntity uiTransform={{ display: c.celebrate ? 'none' : 'flex', height: px(44), flexDirection: 'row', justifyContent: 'center', flexShrink: 0 }}>
                 {c.primary ? btn(c.primary, () => coachActions?.primary(), true) : null}
-                {c.skip === false ? null : btn('Skip step', () => coachActions?.skip())}
+                {c.skip === false ? null : btn('Next step', () => coachActions?.skip())}
                 {btn('End tutorial', () => coachActions?.end())}
               </UiEntity>
             </UiEntity>

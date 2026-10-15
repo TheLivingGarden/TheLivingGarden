@@ -28,7 +28,7 @@ import { getCanvasCalibration } from './ui'
 import { spawnTestPots, removeTestPots, getTestPotCount, getFps } from './potStressTest'
 import { demoSeedlings, demoRevealedFlowers, adminTidyPlanter, adminSetUnlimitedPlanters } from './boxSystem'
 import { adminFillAvenue, adminClearAvenue } from './avenueSystem'
-import { adminResetOnboarding } from './onboarding'
+import { adminResetOnboarding, adminWhereAmI } from './onboarding'
 import { vfxFlags, setVfxFlag } from './plantVfx'
 import { waterFxFlags } from './sparkleSystem'
 import { isLayoutToolOn, setLayoutTool, layoutCount, layoutSelectedInfo, layoutIsCarrying, layoutSelectNearest, layoutPickUpOrDrop, layoutNudge, layoutRotateLeft, layoutRotateRight, layoutSnap90, layoutAddHere, layoutDelete, layoutExport } from './planterLayoutTool'
@@ -328,6 +328,13 @@ export function TestPanelUi() {
           onMouseDown={adminResetOnboarding}
         >
           <Label value="Reset MY onboarding (replay the tutorial)" fontSize={12} color={WHITE} textAlign="middle-center" />
+        </UiEntity>
+        <UiEntity
+          uiTransform={{ width: '100%', height: 34, alignItems: 'center', justifyContent: 'center', margin: { bottom: 8 } }}
+          uiBackground={{ color: BTN_WATER }}
+          onMouseDown={adminWhereAmI}
+        >
+          <Label value="Log my position (server log)" fontSize={12} color={WHITE} textAlign="middle-center" />
         </UiEntity>
 
         {/* 100-planter performance test — local only */}

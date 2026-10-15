@@ -24,7 +24,7 @@ import {
   MaterialTransparencyMode,
 } from '@dcl/sdk/ecs'
 import { Quaternion, Color4 } from '@dcl/sdk/math'
-import { flairIcon, almanacTitleByRank } from './shared/config'
+import { flairIcon, almanacTitleByRank, isPlaytester, PLAYTESTER_ICON } from './shared/config'
 
 // ===============================================================
 //  BOARD CONFIG — edit anything in this block; no other files need touching.
@@ -70,7 +70,9 @@ interface BoardLayout {
 // rows 0.28 m higher, and the YOU row lifted onto its own cream band.
 // No title text here: "Leaderboard" / "Weekly Leaderboard" are modelled into the beams in Blender now (KJ 2026-10-05), so the old
 // ALL TIME / THIS WEEK titles (and the weekly "resets in …" countdown that rode in the weekly one) were removed.
-const LB_COLUMN: BoardColumn = { flairX: -3.20, rankX: -2.75, nameX: -2.55, scoreX: 3.30 }
+// KJ 2026-10-15 ("nicer margins for icons"): the playtester badge sat 0.17 m off the panel's left edge while the waters column keeps 0.4 m
+// on the right. The icon column now mirrors that margin (two icons span -3.30..-2.84), with the rank and name moved right to keep their gaps.
+const LB_COLUMN: BoardColumn = { flairX: -2.94, rankX: -2.50, nameX: -2.30, scoreX: 3.30 }
 const LB_BOARDS: ReadonlyArray<BoardLayout> = [
   {
     kind: 'allTime',
@@ -94,6 +96,7 @@ const LB_DEPTH = 0.08              // local Z lift off the board face — increa
 const LB_HEADER_NAME    = 'NAME'
 const LB_HEADER_SCORE   = 'WATERS'
 const LB_FLAIR_SIZE = 0.2
+const LB_TESTER_STEP = 0.26   // second icon's offset left of the flair slot: a 0.06 m gap between the two (panel edge is at x -3.705)
 // The weekly reset time rides on the weekly board's cream YOU band (KJ 2026-10-05: the beam titles that used to carry it went to Blender).
 // Right-aligned just left of the waters column, so it never meets the name on the left.
 const LB_COUNTDOWN_TICK_MS = 30_000
@@ -111,7 +114,7 @@ const LB_YOU_BAND = { w: 6.9, h: 0.40 }
 
 // ── Mock data ─────────────────────────────────────────────────
 // Shown immediately on load until the server sends real data.
-export interface BoardEntry { displayName: string; count: number; tier?: number; almanac?: number }
+export interface BoardEntry { displayName: string; count: number; tier?: number; almanac?: number; address?: string }
 export interface BoardData  { weekly: BoardEntry[]; allTime: BoardEntry[]; weeklyResetAt: number }
 
 const LB_MOCK_DATA: BoardEntry[] = [
@@ -131,7 +134,7 @@ const LB_MOCK_DATA: BoardEntry[] = [
 //                  end of config
 // =============================================================
 
-interface Row { rank: Entity; name: Entity; score: Entity; flair: Entity }
+interface Row { rank: Entity; name: Entity; score: Entity; flair: Entity; tester: Entity }
 const boardRows: Row[][] = []             // per board, rows in rank order
 const youRows: (Row | null)[] = []        // per board, the pinned "YOU" row (null if none)
 let   resetLabel: Entity | null = null    // "resets in 2d 18h" on the weekly board's YOU band
@@ -147,8 +150,7 @@ export function setYourStanding(s: YourStanding): void {
   refreshYouRows()
 }
 
-function setRowFlair(icon: Entity, tier: number): void {
-  const f = flairIcon(tier)
+function paintIcon(icon: Entity, f: { src: string; tint: { r: number; g: number; b: number } } | null): void {
   const k = f ? LB_FLAIR_SIZE : 0
   Transform.getMutable(icon).scale = { x: k, y: k, z: k }
   if (!f) return
@@ -157,6 +159,15 @@ function setRowFlair(icon: Entity, tier: number): void {
     albedoColor: Color4.create(f.tint.r, f.tint.g, f.tint.b, 1), emissiveColor: f.tint, emissiveIntensity: 0.9,
     transparencyMode: MaterialTransparencyMode.MTM_ALPHA_BLEND, castShadows: false,
   })
+}
+
+/** Tier flair hugs the rank; the playtester badge sits outside it, or takes the flair slot when there is no tier yet. */
+function setRowFlair(row: Row, tier: number, address: string | undefined): void {
+  const f = flairIcon(tier)
+  const flairX = Transform.get(row.flair).position.x
+  paintIcon(row.flair, f)
+  paintIcon(row.tester, isPlaytester(address) ? PLAYTESTER_ICON : null)
+  Transform.getMutable(row.tester).position.x = f ? flairX - LB_TESTER_STEP : flairX
 }
 
 function formatCountdown(ms: number): string {
@@ -182,6 +193,9 @@ function makeRow(board: Entity, col: BoardColumn, y: number, font: number, nameC
   const flair = engine.addEntity()
   Transform.create(flair, { position: { x: col.flairX, y, z: LB_DEPTH }, scale: { x: 0, y: 0, z: 0 }, parent: board })
   MeshRenderer.setPlane(flair)
+  const tester = engine.addEntity()
+  Transform.create(tester, { position: { x: col.flairX, y, z: LB_DEPTH }, scale: { x: 0, y: 0, z: 0 }, parent: board })
+  MeshRenderer.setPlane(tester)
   const rank = engine.addEntity()
   Transform.create(rank, { position: { x: col.rankX, y, z: LB_DEPTH }, parent: board })
   TextShape.create(rank, { text: '', fontSize: font, textColor: oneColor ? nameColor : LB_COLOR_RANK, textAlign: TextAlignMode.TAM_MIDDLE_RIGHT })
@@ -191,7 +205,7 @@ function makeRow(board: Entity, col: BoardColumn, y: number, font: number, nameC
   const score = engine.addEntity()
   Transform.create(score, { position: { x: col.scoreX, y, z: LB_DEPTH }, parent: board })
   TextShape.create(score, { text: '', fontSize: font, textColor: oneColor ? nameColor : LB_COLOR_SCORE, textAlign: TextAlignMode.TAM_MIDDLE_RIGHT })
-  return { rank, name, score, flair }
+  return { rank, name, score, flair, tester }
 }
 
 export function setupLeaderboardBoards(): void {
@@ -268,7 +282,7 @@ export function updateLeaderboardDisplay(data: BoardData): void {
       TextShape.getMutable(row.rank).text  = entry ? `${i + 1}.` : ''
       TextShape.getMutable(row.name).text  = entry ? `${entry.displayName}${title ? `  ·  ${title}` : ''}` : ''
       TextShape.getMutable(row.score).text = entry ? `${entry.count}` : ''
-      setRowFlair(row.flair, entry?.tier ?? 0)
+      setRowFlair(row, entry?.tier ?? 0, entry?.address)
     }
   }
   refreshReset()

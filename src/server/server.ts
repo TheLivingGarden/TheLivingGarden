@@ -2723,6 +2723,13 @@ export async function server(): Promise<void> {
     void savePlayerJson(address, 'onboarding')
   })
 
+  // ── Message: adminWhereAmI (test panel) — a position read-out for placing tutorial waypoints ──
+  onRoomMessage<{ x: number; y: number; z: number }>('adminWhereAmI', async (data, address) => {
+    if (!isAdmin(address)) { sendNotice(address, 'Test tools: admin wallet only'); return }
+    console.log(`[Server] WHERE AM I: x ${data.x.toFixed(2)}, y ${data.y.toFixed(2)}, z ${data.z.toFixed(2)}`)
+    sendNotice(address, `Logged: ${data.x.toFixed(1)}, ${data.z.toFixed(1)}`)
+  })
+
   // ── Message: adminResetOnboarding (test panel) ───────────────
   onRoomMessage<Record<string, never>>('adminResetOnboarding', async (_data, address) => {
     if (!isAdmin(address)) { sendNotice(address, 'Test tools: admin wallet only'); return }

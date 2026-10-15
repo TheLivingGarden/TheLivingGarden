@@ -1,5 +1,5 @@
 import { isServer } from '@dcl/sdk/network'
-import { engine, VisibilityComponent } from '@dcl/sdk/ecs'
+import { engine, VisibilityComponent, TouchScreenControls, InputAction } from '@dcl/sdk/ecs'
 import { setupNotifications } from './notifications'
 import { setupWateringSystem } from './wateringSystem'
 import { setupOnboarding } from './onboarding'
@@ -32,6 +32,9 @@ export async function main() {
 
   // ── Client only ────────────────────────────────────────────
   setGoldenHour()   // the resting sky (config GOLDEN_HOUR_S); the Moonlit Bloom rolls to night and back
+  // Phone HUD (week-4 follow-up, KJ 2026-10-15): the garden only uses tap (IA_POINTER), movement and jump, so E / F / 1-4 are
+  // clutter. With two buttons left there is no "+" menu either. No-op on desktop; the explorer restores them when you leave.
+  TouchScreenControls.hide([InputAction.IA_PRIMARY, InputAction.IA_SECONDARY, InputAction.IA_ACTION_3, InputAction.IA_ACTION_4, InputAction.IA_ACTION_5, InputAction.IA_ACTION_6])
   setupNotifications()
   setupWateringSystem()
   // AFTER setupWateringSystem: it calls room.clear() partway through, and any

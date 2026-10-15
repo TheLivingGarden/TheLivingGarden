@@ -70,10 +70,6 @@ function onCardTap(): void {
   if (card && cardStage(Date.now(), card.tier) < 3) { revealSkipped = true; return }
   dismissDiscovery()
 }
-function harvestFromCard(): void {
-  if (card) for (const it of card.items) if (it.boxId) room.send('harvestBox', { boxId: it.boxId })
-  dismissDiscovery()
-}
 
 const FADE_MS = 400
 const DARK  = { r: 0.07, g: 0.063, b: 0.055, a: 0.94 }
@@ -343,13 +339,11 @@ export function DiscoveryCardUi(props: { px: (n: number) => number; fs: (n: numb
           textWrap="wrap"
           uiTransform={{ width: '100%', height: fs(20), margin: { top: px(2) } }}
         />
-        {/* What now? The reveal ends on a decision (GDD 3.1: harvest it, or leave it standing on show). */}
+        {/* No Harvest button any more (week-4 follow-up, KJ 2026-10-15): you harvest by going to the planter and tapping the flower,
+            so the card only closes. The flower stays on show until then. */}
         <UiEntity uiTransform={{ display: btnA > 0.02 ? 'flex' : 'none', width: '100%', flexDirection: 'row', justifyContent: 'center', margin: { top: px(14) } }}>
-          <UiEntity uiTransform={{ height: px(38), padding: { left: px(20), right: px(20) }, margin: { right: px(10) }, alignItems: 'center', justifyContent: 'center', borderRadius: px(19) }} uiBackground={{ color: { ...MOSS, a: btnA } }} onMouseDown={harvestFromCard}>
-            <Label value={batch ? 'Harvest all' : 'Harvest'} fontSize={fs(15)} color={{ ...CREAM, a: btnA }} textAlign="middle-center" textWrap="nowrap" uiTransform={{ height: '100%' }} />
-          </UiEntity>
-          <UiEntity uiTransform={{ height: px(38), padding: { left: px(20), right: px(20) }, alignItems: 'center', justifyContent: 'center', borderRadius: px(19) }} uiBackground={{ color: { ...PLATE, a: PLATE.a * btnA * 1.6 } }} onMouseDown={dismissDiscovery}>
-            <Label value="Leave on show" fontSize={fs(15)} color={{ ...CREAM, a: btnA }} textAlign="middle-center" textWrap="nowrap" uiTransform={{ height: '100%' }} />
+          <UiEntity uiTransform={{ height: px(38), padding: { left: px(20), right: px(20) }, alignItems: 'center', justifyContent: 'center', borderRadius: px(19) }} uiBackground={{ color: { ...MOSS, a: btnA } }} onMouseDown={dismissDiscovery}>
+            <Label value="Got it" fontSize={fs(15)} color={{ ...CREAM, a: btnA }} textAlign="middle-center" textWrap="nowrap" uiTransform={{ height: '100%' }} />
           </UiEntity>
         </UiEntity>
       </UiEntity>

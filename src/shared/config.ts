@@ -166,6 +166,8 @@ export const BLOOM_TRIGGER_COOLDOWN_MS = 65_000   // TUNING
  *  water inside that window is accepted as a top-up — full timer again, counts as a water.
  *  The in-pillar answer to "add a skill check": a decision, not a reflex. */
 export const EXPIRY_TELL_MS = 20_000   // TUNING
+/** The tell's drop starts at this fraction of full size and grows to full as the plant dries (week-4 review). */
+export const EXPIRY_TELL_DROP_MIN = 0.25   // TUNING
 /** Server anti-cheat (2026-09-28): the minimum gap between two accepted waters from the
  *  same address, and how close (metres, scene-local) they must be standing to the plant.
  *  waterPlant had neither before — a scripted client could farm the lifetime-water
@@ -573,6 +575,8 @@ export interface TutorialPoint { x: number; z: number }
  *  re-exported scene.glb (shed arch moved ~1 m; the Fame arches moved 6.41 m east with the stands). */
 export const ARCH_NORTH      = { x: 0.10,   z: 49.89 }   // garden → nursery
 export const ARCH_SHED       = { x: -17.42, z: 49.38 }   // nursery → potting shed
+/** The potting shed's second (south) doorway — logged in-world by KJ 2026-10-15 (test panel "Log my position"), not read off scene.glb. */
+export const ARCH_SHED_SOUTH = { x: -24.34, z: 45.15 }
 export const ARCH_SOUTH      = { x: 31.90,  z: 49.21 }   // garden → Walk of Fame side
 export const ARCH_SOUTH_SOUTH = { x: 31.90, z: -1.21 }
 export const ARCH_FAME       = { x: 50.50,  z: 45.27 }   // into the Walk of Fame
@@ -1092,6 +1096,40 @@ export function flairIcon(tier: number): { src: string; tint: { r: number; g: nu
   if (tier === 2) return { src: 'assets/scene/Images/ui/glyph_flower.png', tint: { r: 0.96, g: 0.55, b: 0.75 } }   // flower
   if (tier === 1) return { src: 'assets/scene/Images/ui/glyph_seed.png',   tint: { r: 0.45, g: 0.85, b: 0.55 } }   // sprout
   return null
+}
+/** Playtester badge (a flask with a sprout): a second icon beside the tier flair on nametags and boards. Lower-case wallets.
+ *  Client-side only — board entries already carry their address, nametags have PlayerIdentityData. */
+// Everyone with a lifetime score on afkj.dcl.eth as of 2026-10-15 (storage 'lifetimeTop', 27 entries, under the top-50 cap so complete),
+// minus PeterParker (TBD) and the two unnamed 0-water rows.
+export const PLAYTESTER_ADDRESSES: ReadonlyArray<string> = [
+  '0x29c0618f099a6097b3bf6cf7e07136c206ceb8b2',   // SqueakyClean
+  '0x8967ad851ccbd4c1a2d57a128d3c606fcab29bad',   // KJwalker3D
+  '0xdef54a61f77041631d5f268a2576290448912768',   // GuardianAngel
+  '0xd545b9e0a5f3638a5026d1914cc9b47ed16b5ae9',   // PixelPixie
+  '0x8a89a7348d464bbb8c516a4d5390e7de51affa5d',   // Kenz0
+  '0x51777c0b8dba8b4dfe8a1c3d0a1edaa5b139b4e0',   // Pravus
+  '0xc2877b05cfe462e585fe3de8046f7528998af6f1',   // Unknower
+  '0xa7cdf25a0211c089a0338c0e5b204a34ac180489',   // Dafucita
+  '0x1e93e534c5e26b01ed242410b43ae23dd0faa52b',   // ile
+  '0xfdbc134cb8f2a639938eea23758469885508b3b0',   // AdventureLand
+  '0xc9c29ab98e6bc42015985165a11153f564e9f8c2',   // Ryumi
+  '0xf4ab0b827863352bb551027c385c9e5476fe2cf9',   // Ziena
+  '0x4b538e1e044922aec2f428ec7e17a99f44205ff9',   // carlosmu
+  '0x2fccbd73444193e1446ad4453a3e18a79d758a4a',   // vit
+  '0x0fac2f8df694335ebcb29f871be72dfcff431b6c',   // Dalkia
+  '0xcec7e38e088a87d77f2b60fcae6840d00e018155',   // stom
+  '0xc1fc4a94af8ac60df3667deb45a83f1896bb17d2',   // Evee
+  '0x1e105bb213754519903788022b962fe2b9c4b263',   // BayBackner
+  '0xa856e64368312ea05ab4ebf5634a093a8dddee2a',   // vicsondc
+  '0xd8166f3e3cbbb70fb7ec78ad4238ec7a440c1ef4',   // pepino
+  '0x327f74101f930c76653fd11ac7c8ba3c8694678f',   // DanL
+  '0x070f99855d4a4544340ab461eae53922aec14a5d',   // carrito
+  '0xb3568b818962abb9da2375bd184cd9362eab8f31',   // FrogwortHogwash (0 waters, added by KJ)
+  '0x23be90335e79d3245615985d91f69814f98a0fab',   // SWISSVERSE (0 waters, added by KJ)
+]
+export const PLAYTESTER_ICON = { src: 'assets/scene/Images/ui/glyph_playtester.png', tint: { r: 0.67, g: 0.55, b: 1.0 } }   // lavender, apart from the tier green/pink/gold
+export function isPlaytester(address: string | undefined): boolean {
+  return !!address && PLAYTESTER_ADDRESSES.includes(address.toLowerCase())
 }
 /** Weekly board cadence — the reset moment is shown in-world (GDD §4.3). */
 export const WEEKLY_RESET_MS = 7 * 24 * 60 * 60 * 1000

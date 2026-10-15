@@ -219,16 +219,22 @@
     "portableExperiences": "enabled"
   },
   "creator": "",
-  "skyboxConfig": {},
+  "skyboxConfig": {
+    "fixedTime": 57600
+  },
   "source": {
     "origin": "creator-hub",
     "projectId": "a2839c17-a9d3-429b-be46-41ea47df952b"
   },
   "authoritativeMultiplayer": true,
   "logsPermissions": [
-    "0x8967AD851cCbD4C1a2D57A128D3C606fCAB29bad"
+    "0x8967AD851cCbD4C1a2D57A128D3C606fCAB29bad",
+    "0x0F4DfbDBF6045E9aFd65a6B7B5E4A0DE7123e7e6"
   ],
   "worldConfiguration": {
-    "name": "afkj.dcl.eth"
+    "name": "afkj.dcl.eth",
+    "skyboxConfig": {
+      "fixedTime": 57600
+    }
   }
 }

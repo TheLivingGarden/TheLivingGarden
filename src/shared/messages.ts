@@ -212,6 +212,8 @@ export const room = registerMessages({
   /** Test-panel only — wipe MY onboarding record so the whole tutorial replays. Without
    *  this, whoever built the tutorial can never see it again after doing it once. */
   adminResetOnboarding: Schemas.Map({}),
+  /** Test-panel only — logs where I'm standing (scene metres) in the server log, so layout points can be read off a live session. */
+  adminWhereAmI:    Schemas.Map({ x: Schemas.Number, y: Schemas.Number, z: Schemas.Number }),
   /** Plant layout editor — the 38 plants players water. Same draft/bake contract as the
    *  planter tool: deploys read PLANT_LAYOUT, never this. */
   adminPlantDraft:   Schemas.Map({ json: Schemas.String }),

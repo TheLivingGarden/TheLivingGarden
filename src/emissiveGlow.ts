@@ -33,17 +33,19 @@ export interface Glow {
   entity:  Entity
   look:    GlowLook
   cur:     number   // 0..1 of the model's own emission
+  from:    number   // where the current fade started
   target:  number
+  elapsed: number   // seconds into the current fade
   written: number   // the cur last sent to the renderer (-1 = nothing pending / force a write)
-  tauS:    number   // ease time constant, seconds; 0 = snap
+  durS:    number   // how long a fade takes, seconds; 0 = snap
 }
 
 const glows: Glow[] = []
 let installed = false
 
 /** Start driving `entity`'s emission. `start` is where it begins (1 = full = the model as exported, nothing written). */
-export function makeGlow(entity: Entity, look: GlowLook, start = 1, tauS = 0.25): Glow {
-  const gl: Glow = { entity, look, cur: start, target: start, written: start >= 0.995 ? start : -1, tauS }
+export function makeGlow(entity: Entity, look: GlowLook, start = 1, durS = 2): Glow {
+  const gl: Glow = { entity, look, cur: start, from: start, target: start, elapsed: 0, written: start >= 0.995 ? start : -1, durS }
   // An own-off model must not flash at full glow while it loads: hidden until its first override has been written.
   if (look.off && start < 0.995) VisibilityComponent.createOrReplace(entity, { visible: false })
   glows.push(gl)
@@ -51,15 +53,19 @@ export function makeGlow(entity: Entity, look: GlowLook, start = 1, tauS = 0.25)
   return gl
 }
 
-/** Ease toward `target` (optionally changing the ease speed). */
-export function setGlowTarget(gl: Glow, target: number, tauS?: number): void {
+/** Fade from wherever it is now to `target`, eased in AND out, over `durS` seconds (or the glow's current fade length). */
+export function setGlowTarget(gl: Glow, target: number, durS?: number): void {
+  if (durS !== undefined) gl.durS = durS
+  if (target === gl.target) return   // already heading there — don't restart the fade
+  gl.from = gl.cur
   gl.target = target
-  if (tauS !== undefined) gl.tauS = tauS
+  gl.elapsed = 0
 }
 
 /** Jump straight to a value (e.g. start dark when lighting up from off). */
 export function snapGlow(gl: Glow, value: number): void {
   gl.cur = value
+  gl.from = value
   gl.target = value
   gl.written = -1
 }
@@ -89,14 +95,14 @@ function write(gl: Glow): void {
   if (gl.look.off && VisibilityComponent.has(gl.entity)) VisibilityComponent.deleteFrom(gl.entity)   // first write done: safe to show
 }
 
+// Week-4 review: "the flicker came across as a glitch or bug". The old ease was exponential — it lurched off at full speed and crept in —
+// so every level change read as a jolt. A smoothstep fade starts AND ends gently.
 function glowSystem(dt: number): void {
   for (const gl of glows) {
     if (gl.cur === gl.target && gl.written === gl.cur) continue
-    if (gl.tauS <= 0) gl.cur = gl.target
-    else {
-      gl.cur += (gl.target - gl.cur) * Math.min(1, dt / gl.tauS)
-      if (Math.abs(gl.target - gl.cur) < 0.01) gl.cur = gl.target
-    }
+    gl.elapsed += dt
+    const k = gl.durS <= 0 ? 1 : Math.min(1, gl.elapsed / gl.durS)
+    gl.cur = k >= 1 ? gl.target : gl.from + (gl.target - gl.from) * k * k * (3 - 2 * k)
     if (gl.written < 0 || gl.cur === gl.target || Math.abs(gl.cur - gl.written) >= (gl.look.step ?? 0.015)) write(gl)
   }
 }

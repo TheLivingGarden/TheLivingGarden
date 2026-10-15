@@ -56,12 +56,12 @@ import { beginHold, isHolding } from './skillCheck'
 import { applyPropLayout } from './propLayoutTool'
 import { showToast, showDailyLimit, hideDailyLimit, showPersistent, hidePersistent, showBannerIdle, showBannerCountdown, updateBannerCountdown, showBannerBloom, updateBannerHealth, updatePlayerCount, updateBloomRemaining, formatBloomCountdown, setNextBloomLocalTime, updateLuckPercent } from './notifications'
 import { clockSync } from './shared/clockSync'
-import { triggerSceneEmote }  from '~system/RestrictedActions'
+import { movePlayerTo, triggerSceneEmote }  from '~system/RestrictedActions'
 import { playClip } from './sounds'
 import { hasReceivedPouch } from './playerInventory'
 import { isMobile } from '@dcl/sdk/platform'
 import { room }                             from './shared/messages'
-import { TOTAL_PLANTS, BLOOM_THRESHOLD, BLOOM_CENTER, DAILY_WATER_LIMIT, PLANT_NAMES, FAST_PLANT_NAMES, FAST_PLANT_EXPIRY_MS, BLOOM_RESET_DELAY_MS, DROP_RANGE, DROP_RANGE_OUT, BLOOM_TRIGGER_COOLDOWN_MS, EXPIRY_TELL_MS, WATER_DROP_MODEL_SRC } from './shared/config'
+import { TOTAL_PLANTS, BLOOM_THRESHOLD, BLOOM_CENTER, DAILY_WATER_LIMIT, PLANT_NAMES, FAST_PLANT_NAMES, FAST_PLANT_EXPIRY_MS, BLOOM_RESET_DELAY_MS, DROP_RANGE, DROP_RANGE_OUT, BLOOM_TRIGGER_COOLDOWN_MS, EXPIRY_TELL_MS, EXPIRY_TELL_DROP_MIN, WATER_DROP_MODEL_SRC } from './shared/config'
 import { setupPlayerTrailSystem, startPlayerTrail, stopPlayerTrail } from './playerTrailSystem'
 import { setupSeedSystem } from './seedSystem'
 import { setupBoxSystem } from './boxSystem'
@@ -153,11 +153,11 @@ const SND_WATERING = 'assets/scene/Sounds/watering.mp3'
 // at ~0.8 s and ~1.4 s; MagicFX_short.wav is its first 1.05 s with a 0.28 s fade out. (MagicFX.mp3 is still used by the golden-seed sfx.)
 const SND_MAGIC    = 'assets/scene/Sounds/MagicFX_short.wav'
 const SND_WILT     = 'assets/scene/Sounds/PlantWiltSound.mp3'
-const VOL_HOVER    = 0.7
-const VOL_CLICK    = 0.4   // KJ 2026-10-02: the release click was too loud (was 0.9)
-const VOL_WATERING = 0.28   // KJ 2026-10-05: still too loud for the ambience at 0.45 (was 0.7 before 10-02)
-const VOL_MAGIC    = 0.55   // was 0.9
-const VOL_WILT     = 0.32   // KJ 2026-10-05: the droop was 0.8 — brought down by the same ratio as the watering pour (0.7 -> 0.28)
+const VOL_HOVER    = 1.0   // KJ 2026-10-15: every sfx up now the ambience plays at full level scene-wide (bloomSystem BaseLoop global)
+const VOL_CLICK    = 0.6   // KJ 2026-10-02: the release click was too loud (was 0.9); 0.4 -> 0.6 with the 10-15 sfx lift
+const VOL_WATERING = 0.55   // KJ 2026-10-15: lifted — with the ambience global the pour sat ~11 dB under it (0.28; 10-05: 0.45 felt too loud next to the old positional loop)
+const VOL_MAGIC    = 0.85   // 10-15 sfx lift (was 0.55; 0.9 before that)
+const VOL_WILT     = 0.6    // 10-15: up with the pour (was 0.32; 0.8 before 10-05)
 const SND_INIT_POS = { x: 8, y: 1, z: 8 }   // initial transform — overwritten on play
 
 // ── Clickbox (optional alternative pointer target) ────────────
@@ -454,6 +454,9 @@ let hoverSweepIn = 0
 function plantHoverSystem(dt: number): void {
   hoverSweepIn -= dt
   if (hoverSweepIn > 0) return
+  // Never mid-pour: on the phone the tap target IS the hover prompt, and the explorer rebuilds it when its text changes — the
+  // finger-up then lands on a deleted button and the pour is never let go (see holdClickbox).
+  if (isHolding()) return
   hoverSweepIn = 0.4
   for (const [entity, info] of plantRegistry) {
     const watered = PlantData.getOrNull(entity)?.isWatered ?? false
@@ -540,6 +543,14 @@ function setDropFade(plantEntity: Entity, direction: 'in' | 'out') {
   applyDropVisibility(plantEntity)
 }
 
+/** Plants whose drop went up as an expiry tell → when that plant dries (local ms). */
+const tellDropDriesAt = new Map<Entity, number>()
+/** How far a tell drop has grown: EXPIRY_TELL_DROP_MIN at the tell's start, full size when the plant dries. */
+function tellDropScale(driesAt: number): number {
+  const left = Math.min(EXPIRY_TELL_MS, Math.max(0, driesAt - Date.now()))
+  return EXPIRY_TELL_DROP_MIN + (1 - EXPIRY_TELL_DROP_MIN) * (1 - left / EXPIRY_TELL_MS)
+}
+
 /** Show the drop only if gameplay wants it AND it is near enough to be worth showing. */
 function applyDropVisibility(plantEntity: Entity): void {
   const drop = waterDropMap.get(plantEntity)
@@ -549,6 +560,15 @@ function applyDropVisibility(plantEntity: Entity): void {
   if (show) dropShown.add(plantEntity); else dropShown.delete(plantEntity)
   if (show) {
     setDropBob(drop, true)
+    // Expiry tell (week-4 review: "watering indicators stay on already-watered plants"): on a plant that is still green the
+    // drop starts tiny and grows to full size as it dries, so it reads as "drying out", not as the full "needs water" drop.
+    const driesAt = expiryTell.get(plantEntity)
+    if (driesAt !== undefined) {
+      tellDropDriesAt.set(plantEntity, driesAt)
+      const from = tellDropScale(driesAt)
+      Tween.setScale(drop, { x: from, y: from, z: from }, { x: 1, y: 1, z: 1 }, Math.max(1, driesAt - Date.now()), EasingFunction.EF_LINEAR)
+      return
+    }
     Tween.setScale(drop,
       { x: 0.001, y: 0.001, z: 0.001 },
       { x: 1,     y: 1,     z: 1     },
@@ -556,8 +576,12 @@ function applyDropVisibility(plantEntity: Entity): void {
       EasingFunction.EF_EASEOUTBACK,
     )
   } else {
+    // A topped-up tell drop shrinks away from the size it had grown to, not from full size.
+    const driesAt = tellDropDriesAt.get(plantEntity)
+    tellDropDriesAt.delete(plantEntity)
+    const from = driesAt === undefined ? 1 : tellDropScale(driesAt)
     Tween.setScale(drop,
-      { x: 1,     y: 1,     z: 1     },
+      { x: from,  y: from,  z: from  },
       { x: 0.001, y: 0.001, z: 0.001 },
       DROP_FADE_MS,
       EasingFunction.EF_EASEINBACK,
@@ -1029,16 +1053,20 @@ function emoteWatchSystem(): void {
 /** The tap feedback a garden plant gets — emote now, pour sound at WATER_FX_MS — for
  *  other tap targets that water something (seedlings, boxSystem). Week-2 playtest:
  *  watering a friend's seed played nothing. */
-export function playWateringBeat(): void {
+export function playWateringBeat(at?: { x: number; z: number }): void {
   if (emoteActive) return
   playClickSound()
-  triggerWateringEmote(engine.PlayerEntity)
+  triggerWateringEmote(at)
   timers.setTimeout(playWateringSound, WATER_FX_MS)
 }
 
-function triggerWateringEmote(_plantEntity: Entity) {
-  // movePlayerTo retired (Clean The Club precedent) — teleport-stepping players
-  // to the plant put them inside geometry; the emote now plays where they stand.
+/** @param at what is being watered; the avatar turns to face it. */
+function triggerWateringEmote(at?: { x: number; z: number }) {
+  // The 2 m teleport-step toward the plant stays retired (Clean The Club precedent: it put players inside geometry).
+  // Week-4 review ("improve the avatar's direction during watering without forcing teleportation"): movePlayerTo
+  // to the spot the player ALREADY stands on, with only avatarTarget set — the avatar turns, it does not move.
+  const me = Transform.getOrNull(engine.PlayerEntity)?.position
+  if (at && me) void movePlayerTo({ newRelativePosition: { x: me.x, y: me.y, z: me.z }, avatarTarget: { x: at.x, y: me.y, z: at.z } })
   emoteActive = true
   // Each pour owns its timers. They used to test only `emoteActive`, so pour 1's end-of-clip timer fired in the middle of
   // pour 2 (watering several plants in a row): the can's emote was cut and the seed came back into the hand while still
@@ -1076,8 +1104,9 @@ function plantExpiryMs(plantId: string): number {
 // decay than our guess) must supersede the earlier timer, not race it.
 const expiryGen = new Map<Entity, number>()
 
-/** Watered plants inside their last EXPIRY_TELL_MS: drop showing, a tap is a top-up. */
-const expiryTell = new Set<Entity>()
+/** Watered plants inside their last EXPIRY_TELL_MS: drop showing, a tap is a top-up.
+ *  Value = local ms the plant dries out, so the tell's drop knows how far it has grown. */
+const expiryTell = new Map<Entity, number>()
 
 function scheduleExpiry(entity: Entity, sessionTimestamp: number, delayMs: number) {
   const gen = (expiryGen.get(entity) ?? 0) + 1
@@ -1090,7 +1119,7 @@ function scheduleExpiry(entity: Entity, sessionTimestamp: number, delayMs: numbe
     if (expiryGen.get(entity) !== gen) return
     const pd = PlantData.get(entity)
     if (!pd.isWatered || pd.wateredAt !== sessionTimestamp) return
-    expiryTell.add(entity)
+    expiryTell.set(entity, Date.now() + Math.min(delayMs, EXPIRY_TELL_MS))
     setDropFade(entity, 'in')
   }, Math.max(0, delayMs - EXPIRY_TELL_MS))
   timers.setTimeout(() => {
@@ -1141,13 +1170,36 @@ function scheduleExpiry(entity: Entity, sessionTimestamp: number, delayMs: numbe
 /** Press on a plant to pour (skillCheck.tsx): a quick tap or too little does nothing (the meter
  *  says "hold to pour"), a pour waters, a perfect one adds watered time, too much and the plant is
  *  not watered. The can comes out on the press so the hold has a pose behind it. */
+/** Week-4 review: "fast plants get overwatered on mobile — the let-go doesn't register". On the phone, IA_POINTER is pressed and
+ *  released by the hover prompt beside the crosshair, and godot-explorer frees and rebuilds that prompt whenever what is under the
+ *  crosshair changes (pointer_tooltip.gd set_pointer_data). If that happens mid-hold, the finger-up goes to a freed button,
+ *  ia_pointer stays pressed, and the meter runs on into the red. The fast plants are small and packed beside other plants, so
+ *  their boxes are as thin as CLICKBOX_W_MIN (0.24 m) — the crosshair slips off them as the avatar turns and pours. Desktop is
+ *  unaffected: the mouse button releases wherever the cursor is.
+ *  The fix: for the length of a pour the held plant's box grows to HOLD_CLICKBOX_W, wrapping its neighbours, so the crosshair
+ *  stays on it (and plantHoverSystem leaves every hover text alone). Restored the moment the pour resolves. */
+const HOLD_CLICKBOX_W = 1.6   // m — TUNING
+function holdClickbox(entity: Entity): () => void {
+  const info = plantRegistry.get(entity)
+  const box = info?.clickboxEntity
+  const s = Transform.getOrNull(info?.anchor ?? entity)?.scale.x ?? 1
+  if (!info || !box || !Transform.has(box)) return () => {}
+  const t = Transform.getMutable(box)
+  const was = { scale: { ...t.scale }, position: { ...t.position } }
+  const w = HOLD_CLICKBOX_W / Math.max(0.05, s)
+  t.scale = { x: Math.max(was.scale.x, w), y: was.scale.y, z: Math.max(was.scale.z, w) }
+  return () => { const m = Transform.getMutableOrNull(box); if (m) { m.scale = was.scale; m.position = was.position } }
+}
+
 function pourOnto(entity: Entity, plantId: string): void {
   if (!HOLD_WATERING_ENABLED) { waterPlant(entity, plantId); return }
   if (emoteActive || isHolding()) return
   if (PlantData.get(entity).isWatered && !expiryTell.has(entity)) { waterPlant(entity, plantId); return }   // its own "already watered" toast
-  triggerWateringEmote(entity)
   const at = Transform.getOrNull(entity)?.position ?? { x: 0, y: 0, z: 0 }
+  triggerWateringEmote(at)
+  const restoreBox = holdClickbox(entity)
   beginHold((outcome) => {
+    restoreBox()
     if (outcome === 'tap') { stopWateringEmote(); return }   // no tap bypass (KJ 2026-09-27)
     if (outcome === 'over') {
       stopWateringEmote()
@@ -1186,7 +1238,7 @@ function waterPlant(entity: Entity, plantId: string, sweet = false, fromHold = f
   setDropFade(entity, 'out')    // hide drop when watering
 
   playClickSound()
-  if (!fromHold) triggerWateringEmote(entity)   // a hold already started it on the press
+  if (!fromHold) triggerWateringEmote(Transform.getOrNull(entity)?.position)   // a hold already started it on the press
   if (sweet) {   // just-right pour: the plant answers with a flourish
     const at = Transform.getOrNull(entity)?.position
     if (at) timers.setTimeout(() => { playMagicFXSound(); fxSparkle(at) }, WATER_FX_MS)

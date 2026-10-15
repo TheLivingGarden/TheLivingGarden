@@ -178,7 +178,7 @@ function timingFor(g: Group): [number, number] {
 const GLOW_LOOK    = { color: { r: 1, g: 0.5647, b: 0.0056 }, albedo: { r: 0.8, g: 0.8, b: 0.8 }, metallic: 0, roughness: 0.5, unit: 1, off: { albedo: { r: 0.90, g: 0.82, b: 0.68 }, roughness: 0.8 } }   // unit: TUNING
 const GLOW_LOW     = 0.25    // fraction of full emission per level — exactly what the old Low / Mid exports had (emissive 0.25 / 0.5 of High)
 const GLOW_MID     = 0.5
-const GLOW_TAU_S   = 0.25    // ease time constant: ~0.75 s to settle
+const GLOW_FADE_S  = 2.5     // TUNING — every level change is a slow eased fade (week-4 review: quick changes read as a glitch)
 
 function glowTargetFor(level: number): number { return level < 0 ? 0 : level === 0 ? GLOW_LOW : level === 1 ? GLOW_MID : 1 }
 
@@ -263,7 +263,7 @@ export function setupGroundLights(): void {
     if (resolvedSets.length === 0) continue
 
     const g: Group = {
-      glow:        def.single && glowEntity ? makeGlow(glowEntity, GLOW_LOOK, 0, GLOW_TAU_S) : null,
+      glow:        def.single && glowEntity ? makeGlow(glowEntity, GLOW_LOOK, 0, GLOW_FADE_S) : null,
       id:          def.id,
       sets:        resolvedSets,
       baseLevel:   def.startLevel,

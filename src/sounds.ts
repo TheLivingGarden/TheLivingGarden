@@ -11,21 +11,21 @@
 import { engine, Entity, Transform, AudioSource } from '@dcl/sdk/ecs'
 
 const SFX = {
-  seedCatch:  { src: 'assets/scene/Sounds/sfx/seedCatch.mp3',  volume: 0.6 },
+  seedCatch:  { src: 'assets/scene/Sounds/sfx/seedCatch.mp3',  volume: 1.0 },
   // Catching a Bloom seed (KJ 2026-10-05: seedCatch was lacklustre for it). Generator: empty for claude/tools/seed_sfx.py.
-  seedPickup: { src: 'assets/scene/Sounds/sfx/seedPickup.wav', volume: 0.75 },
-  plant:      { src: 'assets/scene/Sounds/sfx/plant.mp3',      volume: 0.8 },
-  harvest:    { src: 'assets/scene/Sounds/sfx/harvest.mp3',    volume: 0.8 },
-  gift:       { src: 'assets/scene/Sounds/sfx/gift.mp3',       volume: 0.9 },
-  flowerOpen: { src: 'assets/scene/Sounds/sfx/flowerOpen.mp3', volume: 0.9 },
+  seedPickup: { src: 'assets/scene/Sounds/sfx/seedPickup.wav', volume: 1.0 },
+  plant:      { src: 'assets/scene/Sounds/sfx/plant.mp3',      volume: 1.0 },
+  harvest:    { src: 'assets/scene/Sounds/sfx/harvest.mp3',    volume: 1.0 },
+  gift:       { src: 'assets/scene/Sounds/sfx/gift.mp3',       volume: 1.0 },
+  flowerOpen: { src: 'assets/scene/Sounds/sfx/flowerOpen.mp3', volume: 1.0 },
   golden:     { src: 'assets/scene/Sounds/MagicFX.mp3',         volume: 1.0 },
   // Tutorial (2026-09-27): same synthesised C-major bell family, WAV — no mp3 encoder on the
   // build machine. Generator: empty for claude/tools/tutorial_sfx.py.
-  tutorialTap:      { src: 'assets/scene/Sounds/sfx/tutorialTap.wav',      volume: 0.7 },
-  tutorialWaypoint: { src: 'assets/scene/Sounds/sfx/tutorialWaypoint.wav', volume: 0.7 },
-  tutorialStep:     { src: 'assets/scene/Sounds/sfx/tutorialStep.wav',     volume: 0.9 },
+  tutorialTap:      { src: 'assets/scene/Sounds/sfx/tutorialTap.wav',      volume: 1.0 },
+  tutorialWaypoint: { src: 'assets/scene/Sounds/sfx/tutorialWaypoint.wav', volume: 1.0 },
+  tutorialStep:     { src: 'assets/scene/Sounds/sfx/tutorialStep.wav',     volume: 1.0 },
   tutorialDone:     { src: 'assets/scene/Sounds/sfx/tutorialDone.wav',     volume: 1.0 },
-} as const   // TUNING — volumes
+} as const   // TUNING — volumes. All 1.0 since KJ 2026-10-15 ("increase ... tutorial sounds and probably all sounds"): the ambience now plays at full level everywhere
 export type SfxName = keyof typeof SFX
 
 // Voice pools. A single AudioSource entity retriggered by "playing=false then true next tick" DROPS sounds when repeats

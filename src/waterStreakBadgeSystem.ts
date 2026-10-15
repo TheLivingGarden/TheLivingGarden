@@ -20,7 +20,7 @@ import {
 } from '@dcl/sdk/ecs'
 import { Color3, Color4, Vector3 } from '@dcl/sdk/math'
 import { room } from './shared/messages'
-import { flairIcon } from './shared/config'
+import { flairIcon, isPlaytester, PLAYTESTER_ICON } from './shared/config'
 
 // Sized to sit where the real nametag did. Authored at REF_DIST_M and scaled by
 // camera distance so the plate keeps a near-constant screen size, then faded at
@@ -65,6 +65,7 @@ type Plate = {
   streakT: Entity
   flair:   Entity   // the flair icon (sprout / flower / golden flower) left of the name
   tier:    number   // last flair tier drawn, so the icon is only repainted on change
+  tester:  Entity | null   // playtester badge, outside the flair icon; null = not a playtester (fixed per wallet)
   avatar:  Entity   // the PlayerIdentityData entity, for distance/fade
   key:     string   // last rendered content, so we only rebuild on change
   fade:    number
@@ -117,8 +118,15 @@ function buildPlate(address: string, avatar: Entity): Plate {
   Transform.create(flair, { parent: carrier, position: { x: 0, y: 0, z: Z_FLAIR }, scale: { x: 0, y: 0, z: 0 } })
   MeshRenderer.setPlane(flair)
 
+  let tester: Entity | null = null
+  if (isPlaytester(address)) {
+    tester = engine.addEntity()
+    Transform.create(tester, { parent: carrier, position: { x: 0, y: 0, z: Z_FLAIR }, scale: { x: 0, y: 0, z: 0 } })
+    MeshRenderer.setPlane(tester)
+  }
+
   return {
-    root, carrier, pill, nameT, streakT, avatar, flair, tier: 0,
+    root, carrier, pill, nameT, streakT, avatar, flair, tester, tier: 0,
     key: '', fade: -1, scale: 1, streak: -1, popMs: -1,
     bob: Math.random() * Math.PI * 2,
   }
@@ -126,6 +134,7 @@ function buildPlate(address: string, avatar: Entity): Plate {
 
 function destroyPlate(p: Plate): void {
   for (const e of [p.pill, p.nameT, p.streakT, p.flair, p.carrier, p.root]) engine.removeEntity(e)
+  if (p.tester) engine.removeEntity(p.tester)
 }
 
 /** Pill paint — rounded shape from the texture's alpha over a flat dark base. No emissive:
@@ -152,13 +161,25 @@ function paintPill(p: Plate, fade: number): void {
   })
 }
 
-const FLAIR_SIZE = 0.26   // plate units: a little taller than the pill so the glyph reads
-/** Paint the flair icon at `fade` alpha (the same fade the pill and text follow). */
+// Icon slot (KJ 2026-10-15, "name tag icons need better positioning"): the icons sat on the NAME line, so beside a two-line name + streak
+// they rode high; they were 0.26 tall in a 0.32 pill and started 5 cm from its rounded end, so they crowded the cap. Now they are
+// centred on the text block, a little smaller, and inset from the cap by a fraction of the pill's height.
+const FLAIR_SIZE      = 0.22   // plate units, in a streak (two-line) pill
+const FLAIR_SIZE_NAME = 0.15   // in a name-only pill (0.19 tall)
+const ICON_GAP        = 0.035  // between two icons
+const ICON_INSET      = 0.4    // left inset from the pill's end, as a fraction of the pill's height
+// KJ 2026-10-15: "still not enough margin at the end of the text". The text width is an estimate (PILL_PER_CHAR), and wide names ran
+// close to the right cap. The pill grows by this on the right only; the text keeps its left gap to the icons.
+const TEXT_END_PAD    = 0.1
+/** Paint the flair icon (and the playtester badge) at `fade` alpha (the same fade the pill and text follow). */
 function paintFlair(p: Plate, fade: number): void {
-  const f = flairIcon(p.tier)
+  paintIcon(p.flair, flairIcon(p.tier), fade)
+  if (p.tester) paintIcon(p.tester, PLAYTESTER_ICON, fade)
+}
+function paintIcon(e: Entity, f: { src: string; tint: { r: number; g: number; b: number } } | null, fade: number): void {
   if (!f) return
   const tex = Material.Texture.Common({ src: f.src })
-  Material.setPbrMaterial(p.flair, {
+  Material.setPbrMaterial(e, {
     texture: tex, alphaTexture: tex,
     albedoColor: Color4.create(f.tint.r, f.tint.g, f.tint.b, fade), emissiveColor: Color3.create(f.tint.r, f.tint.g, f.tint.b), emissiveIntensity: 0.9,
     transparencyMode: MaterialTransparencyMode.MTM_ALPHA_BLEND, castShadows: false,
@@ -175,11 +196,17 @@ function renderPlate(p: Plate, info: StreakInfo): void {
   // lower than before and the streak line tucked under it, inside the taller pill.
   // A flair icon gets its own slot INSIDE the plate (KJ 2026-09-30: it hung off the left edge): the pill grows by the slot's width and the
   // text centres in what is left, so name and icon sit together in one plate.
+  // A playtester badge takes a second slot of the same size, outside the flair (leftmost): [badge][flair] name.
   const hasFlair = flairIcon(info.tier) !== null
-  const fsz = label ? FLAIR_SIZE : FLAIR_SIZE * 0.68   // a name-only pill is shorter, so its icon is too — it has to fit INSIDE the plate
-  const slot = hasFlair ? fsz + 0.05 : 0
-  Transform.getMutable(p.nameT).position   = { x: slot / 2, y: label ? 0.05 : -0.004, z: Z_TEXT }
-  Transform.getMutable(p.streakT).position = { x: slot / 2, y: -0.085, z: Z_TEXT }
+  const fsz = label ? FLAIR_SIZE : FLAIR_SIZE_NAME   // a name-only pill is shorter, so its icon is too — it has to fit INSIDE the plate
+  const pillH = label ? PILL_H : PILL_H * 0.6
+  const icons = (hasFlair ? 1 : 0) + (p.tester ? 1 : 0)
+  const inset = pillH * ICON_INSET
+  // The slot is everything the icons add to the pill: the inset from the cap, the icons and the gap between them. PILL_PAD's half on
+  // this side then separates the last icon from the name.
+  const slot = icons === 0 ? 0 : inset + icons * fsz + (icons - 1) * ICON_GAP
+  Transform.getMutable(p.nameT).position   = { x: (slot - TEXT_END_PAD) / 2, y: label ? 0.05 : -0.004, z: Z_TEXT }
+  Transform.getMutable(p.streakT).position = { x: (slot - TEXT_END_PAD) / 2, y: -0.085, z: Z_TEXT }
   const st = TextShape.getMutable(p.streakT)
   st.text = label
   st.textColor = STREAK_COLOR
@@ -188,14 +215,21 @@ function renderPlate(p: Plate, info: StreakInfo): void {
   // quarter of the texture; the rest is transparent padding. No streak → a shorter,
   // name-only pill, same as CTC's title-less case.
   const chars = Math.max(info.name.length, Math.round(label.length * 1.15))
-  const pillW = PILL_PER_CHAR * chars + PILL_PAD + slot
+  const pillW = PILL_PER_CHAR * chars + PILL_PAD + slot + TEXT_END_PAD
   p.tier = info.tier
-  // The icon sits in the slot at the pill's left end, vertically on the name line.
-  Transform.getMutable(p.flair).position = { x: -pillW / 2 + slot / 2 + 0.025, y: label ? 0.05 : -0.004, z: Z_FLAIR }
+  // The icons sit in the slot at the pill's left end, centred on the text block (name + streak lines); the flair is always the one
+  // next to the name, the playtester badge leftmost.
+  const iconY = label ? (0.05 + -0.085) / 2 : -0.004
+  const iconX = (i: number) => -pillW / 2 + inset + fsz / 2 + i * (fsz + ICON_GAP)
+  Transform.getMutable(p.flair).position = { x: iconX(p.tester ? 1 : 0), y: iconY, z: Z_FLAIR }
   Transform.getMutable(p.flair).scale = hasFlair ? { x: fsz, y: fsz, z: 1 } : { x: 0, y: 0, z: 0 }
+  if (p.tester) {
+    Transform.getMutable(p.tester).position = { x: iconX(0), y: iconY, z: Z_FLAIR }
+    Transform.getMutable(p.tester).scale = { x: fsz, y: fsz, z: 1 }
+  }
   Transform.getMutable(p.pill).scale = {
     x: pillW,
-    y: (label ? PILL_H : PILL_H * 0.6) / PILL_BAND,
+    y: pillH / PILL_BAND,
     z: 1,
   }
 }
