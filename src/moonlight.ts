@@ -80,6 +80,8 @@ let ramp   = 0   // 0→1 master scale, eases the whole field in
 let glowEntity: Entity | null = null
 let lightEntity: Entity | null = null
 let glowT = 0   // seconds, drives the breathing sine
+let glowOn = false   // the moon glow over the Bloom is the MOONLIT BLOOM's mark — ordinary cycle nights get wisps only
+let bloomNight = false   // a Moonlit Bloom is holding the sky at midnight
 
 function rnd(min: number, max: number): number { return min + Math.random() * (max - min) }
 
@@ -155,7 +157,7 @@ function wispSystem(dt: number): void {
     glowT += dt
     const breathe = (Math.sin((glowT / GLOW_BREATHE_S) * Math.PI * 2) + 1) / 2   // 0..1
     const mult = (isMobile() || !MOONLIGHT_REAL_LIGHT) ? GLOW_MOBILE_MULT : 1   // no real light: the sprite carries the whole effect, so it runs big
-    const k = (GLOW_SIZE_MIN + breathe * (GLOW_SIZE_MAX - GLOW_SIZE_MIN)) * ramp * mult
+    const k = glowOn ? (GLOW_SIZE_MIN + breathe * (GLOW_SIZE_MAX - GLOW_SIZE_MIN)) * ramp * mult : 0
     Transform.getMutable(glowEntity).scale = { x: k, y: k, z: k }
   }
   for (const w of wisps) {
@@ -171,46 +173,95 @@ function wispSystem(dt: number): void {
   }
 }
 
-/** The garden's resting sky — golden hour, held for everyone whatever the world clock says. */
+// ── Day / night cycle (KJ 2026-10-15: "I'd still want a day night cycle tho, just load in at night") ──
+// Each player's sky runs its own cycle from the moment they load, starting late at night, so the first thing anyone sees is the
+// garden lit up in the dark — then dawn, a long golden day, dusk, and night again. Per player, not synced: everyone loads into night.
+// Ordinary nights get the moon wisps; the moon glow over the Bloom stays the Moonlit Bloom's own mark. A Moonlit Bloom still holds
+// the sky at midnight for its whole run and hands it back to the cycle when it ends.
+// KJ 2026-10-15: KEPT for the bloomgarden.dcl.eth launch. scene.json skyboxConfig.fixedTime is 68400 (19:00) to match CYCLE_START_TOD, so the
+// sky opens at dusk instead of rolling there. Change both together. false = the old fixed golden-hour garden.
+export const DAY_NIGHT_CYCLE = true
+const CYCLE_S         = 20 * 60          // TUNING — one full day, real seconds
+const CYCLE_START_TOD = 19 * 3600        // TUNING — the time of day you load in at: DUSK, 19:00 (KJ 2026-10-15; was 22:30) — readable on arrival, night falls ~1.7 min in
+const NIGHT_FROM_TOD  = 20.5 * 3600      // wisps out from 20:30 …
+const NIGHT_TO_TOD    = 5.5 * 3600       // … until 05:30
+const SKY_STEP_S      = 2                // how often the sky is moved on (small steps read as continuous)
+let cycleT = 0, skyStepIn = 0
+
+const todNow = (): number => (CYCLE_START_TOD + (cycleT / CYCLE_S) * 86400) % 86400
+const isNightTod = (t: number): boolean => t >= NIGHT_FROM_TOD || t < NIGHT_TO_TOD
+function setSky(tod: number): void {
+  SkyboxTime.createOrReplace(engine.RootEntity, { fixedTime: Math.round(tod), transitionMode: TransitionMode.TM_FORWARD })
+}
+
+function dayNightSystem(dt: number): void {
+  cycleT += dt
+  skyStepIn -= dt
+  if (skyStepIn > 0) return
+  skyStepIn = SKY_STEP_S
+  const tod = todNow()
+  if (!bloomNight) setSky(tod)
+  setNightEffects(bloomNight || isNightTod(tod))
+}
+
+/** The garden's resting sky — golden hour, held for everyone whatever the world clock says (or, with the cycle on, the cycle). */
 export function setGoldenHour(): void {
+  if (DAY_NIGHT_CYCLE) {
+    setSky(todNow())
+    engine.removeSystem('day-night-cycle')
+    engine.addSystem(dayNightSystem, undefined, 'day-night-cycle')
+    return
+  }
   SkyboxTime.createOrReplace(engine.RootEntity, { fixedTime: GOLDEN_HOUR_S, transitionMode: TransitionMode.TM_FORWARD })
 }
 
-/** Night falls and the wisps rise. Safe to call again mid-bloom (late joiner re-send). */
-export function startMoonlight(): void {
-  SkyboxTime.createOrReplace(engine.RootEntity, { fixedTime: NIGHT_TIME_S, transitionMode: TransitionMode.TM_FORWARD })
-  if (active) return
-  active = true
-  setSunShafts(false)
-  ramp   = 0
-  glowT  = 0
-  if (wisps.length === 0) createWisps()
-  if (glowEntity === null) createGlow()
-  setBillboards(true)
-  // Desktop (Unity) only — the real point light triggers a known godot-explorer
-  // artifact on mobile (flicker); mobile relies on the boosted glow sprite instead.
-  if (MOONLIGHT_REAL_LIGHT && !isMobile()) {
-    if (lightEntity === null) createLight()
-    if (lightEntity !== null) LightSource.getMutable(lightEntity).active = true
+/** Wisps (and, in a Moonlit Bloom, the moon glow) on or off. The sky is not touched here. */
+function setNightEffects(on: boolean): void {
+  glowOn = on && bloomNight
+  if (on === active) return
+  active = on
+  if (on) {
+    setSunShafts(false)
+    ramp   = 0
+    glowT  = 0
+    if (wisps.length === 0) createWisps()
+    if (glowEntity === null) createGlow()
+    setBillboards(true)
+    // Desktop (Unity) only — the real point light triggers a known godot-explorer
+    // artifact on mobile (flicker); mobile relies on the boosted glow sprite instead.
+    if (MOONLIGHT_REAL_LIGHT && !isMobile()) {
+      if (lightEntity === null) createLight()
+      if (lightEntity !== null) LightSource.getMutable(lightEntity).active = true
+    }
+    engine.addSystem(wispSystem, undefined, SYSTEM_NAME)
+    console.log('[Moonlight] night falls')
+  } else {
+    setSunShafts(true)
+    engine.removeSystem(SYSTEM_NAME)
+    setBillboards(false)
+    for (const w of wisps) {
+      const t = Transform.getMutable(w.entity)
+      t.position = { x: w.x, y: -100, z: w.z }
+      t.scale    = { x: 0, y: 0, z: 0 }
+    }
+    if (glowEntity !== null) Transform.getMutable(glowEntity).scale = { x: 0, y: 0, z: 0 }
+    if (lightEntity !== null) LightSource.getMutable(lightEntity).active = false
+    console.log('[Moonlight] dawn')
   }
-  engine.addSystem(wispSystem, undefined, SYSTEM_NAME)
-  console.log('[Moonlight] night falls')
 }
 
-/** Dawn breaks: the sky returns to golden hour and the wisps and the glow are put away. */
+/** Moonlit Bloom: night falls and the wisps rise. Safe to call again mid-bloom (late joiner re-send). */
+export function startMoonlight(): void {
+  bloomNight = true
+  setSky(NIGHT_TIME_S)
+  setNightEffects(true)
+}
+
+/** Moonlit Bloom over: the sky goes back to golden hour (or to the cycle, which also decides the wisps). */
 export function stopMoonlight(): void {
-  if (!active) return
-  active = false
+  if (!bloomNight) return
+  bloomNight = false
+  if (DAY_NIGHT_CYCLE) { skyStepIn = 0; glowOn = false; return }   // the cycle's next tick sets the sky and the wisps
   setGoldenHour()
-  setSunShafts(true)
-  engine.removeSystem(SYSTEM_NAME)
-  setBillboards(false)
-  for (const w of wisps) {
-    const t = Transform.getMutable(w.entity)
-    t.position = { x: w.x, y: -100, z: w.z }
-    t.scale    = { x: 0, y: 0, z: 0 }
-  }
-  if (glowEntity !== null) Transform.getMutable(glowEntity).scale = { x: 0, y: 0, z: 0 }
-  if (lightEntity !== null) LightSource.getMutable(lightEntity).active = false
-  console.log('[Moonlight] dawn')
+  setNightEffects(false)
 }
