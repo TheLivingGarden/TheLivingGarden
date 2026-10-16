@@ -194,6 +194,9 @@ function setSky(tod: number): void {
   SkyboxTime.createOrReplace(engine.RootEntity, { fixedTime: Math.round(tod), transitionMode: TransitionMode.TM_FORWARD })
 }
 
+/** Is it night in this player's sky (cycle night or a Moonlit Bloom)? Always false with the cycle off — the resting garden is golden hour. */
+export function isNightNow(): boolean { return bloomNight || (DAY_NIGHT_CYCLE && isNightTod(todNow())) }
+
 function dayNightSystem(dt: number): void {
   cycleT += dt
   skyStepIn -= dt

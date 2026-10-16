@@ -13,12 +13,45 @@ import {
 import { startPetalSettle } from './petalSystem'
 import { showToast } from './notifications'
 import { BLOOM_CENTER, BLOOM_WINDOWS, BLOOM_MODEL_OFFSET_X } from './shared/config'
+import { playClip } from './sounds'
+import { isNightNow } from './moonlight'
 
 // ---------------------------------------------------------------
 // Configuration
 // ---------------------------------------------------------------
 
-const BASE_LOOP_VOLUME  = 0.8   // KJ 2026-10-15: global now, so a touch under full — the sfx have to sit above it
+const BASE_LOOP_VOLUME  = 0.56  // KJ 2026-10-16: ambience a bit quieter (-3 dB; was 0.8). 10-15: global now, so a touch under full — the sfx have to sit above it
+// Day / night music (KJ 2026-10-16: "make the soundscape more cheerful and relaxing"). BaseLoop is in C minor (C / Ab / F, almost no
+// E) — right for the moonlit nights, gloomy by day. DayLoop.wav is its daytime partner in C major (soft pad on C-Am-F-G + sparse
+// felt-piano notes; synthesised: empty for claude/tools/day_ambience.py). The two crossfade with the sky: day bed by day, BaseLoop by
+// night (moonlight.ts isNightNow). DayLoop's RMS is ~3 dB above BaseLoop's, so it plays lower to sit at the same level.
+const DAY_LOOP_VOLUME   = 0.19  // TUNING — -3 dB on 2026-10-16 (was 0.27)
+// The Bloom "drop" (KJ 2026-10-16): the same song lifting — same key, chords and 90 bpm as DayLoop, plus a soft four-on-the-floor kick,
+// claps, shaker and sub (day_ambience.py). When a Bloom opens: a 4-beat riser, then the drop loop from its first beat, the day / night
+// beds ducked under it; when the Bloom starts closing it fades back out. Global, like the beds.
+const DROP_VOLUME       = 0.5   // TUNING — sits ~4 dB above the day bed: a lift, not a club
+const RISER_VOLUME      = 0.8
+const RISER_MS          = Math.round(4 * 60_000 / 90)   // 4 beats at 90 bpm
+const DROP_FADE_IN_S    = 0.4
+const DROP_FADE_OUT_S   = 4
+const BEDS_UNDER_DROP   = 0.25  // the beds' share while the drop plays
+const MUSIC_FADE_S      = 6     // dusk / dawn crossfade time constant, seconds
+// Twilight bed (KJ 2026-10-16): CC0 field recording "Crickets, Bells, and Leaves - Whispers of Summer Twilight" by bassimat (freesound.org/s/861408,
+// credited in README.md): crickets, leaves and soft bells, made seamless and soft-limited (rms -20 dBFS, ~2 dB above BaseLoop, so it plays
+// lower). It swells in as the sky goes dark and sits low by day, where the birds carry the soundscape. Global, ducked under the Bloom drop.
+const TWILIGHT_VOLUME   = 0.35  // TUNING — at night; -3 dB on 2026-10-16 (was 0.5)
+const TWILIGHT_DAY_SHARE = 0.25 // TUNING — its share by day (crickets under the birds)// Birdsong (KJ 2026-10-16). CC0 "bird05.wav" by l0vebliss (freesound.org/s/519061) — credited in README.md. The source peaked at -44.7 dB,
+// so the file was normalised (+44.3 dB, to -0.4 dBFS; the gaps are digital silence, no hiss came up) and made mono for positional play.
+// It is a 3.6 s call, so it is NOT looped (that would be a metronome): one call at a time, every BIRD_MIN_S-BIRD_MAX_S, from a random spot
+// BIRD_DIST_MIN-MAX metres from you and a little above head height, at a slightly varied pitch. Daytime only — the garden's nights belong to
+// the moon wisps.
+const BIRD_SRC       = 'assets/scene/Sounds/ambience/BirdCall.wav'
+const BIRD_VOLUME    = 1.0    // TUNING
+const BIRD_MIN_S     = 6      // TUNING — KJ 2026-10-16 "more bird sound" (was 15-45 s)
+const BIRD_MAX_S     = 16
+const BIRD_ANSWER_P  = 0.35   // chance a second bird answers from elsewhere a moment later — reads as a garden full of birds, not one clip
+const BIRD_DIST_MIN  = 6
+const BIRD_DIST_MAX  = 14
 const CHIMES_VOLUME     = 0.25  // TUNING — the file is ~12 dB louder than BaseLoop (RMS -9.8 vs -21.8 dB), so it needs a low volume to sit WITH the ambience; — the Bloom-area chimes (positional: they fade out as you walk away from the Bloom)
 const PULSE_BASE_VOLUME = 0.45
 const SWELL_BASE_VOLUME = 0.85
@@ -43,7 +76,16 @@ const CLOSE_ACTION_MS         = 26_000
 // ---------------------------------------------------------------
 
 let bloomActive       = false
-let baseLoopEntity:   Entity | null = null   // continuous — plays always
+let baseLoopEntity:   Entity | null = null   // continuous — plays always (night music since 2026-10-16; volume follows musicMix)
+let dayLoopEntity:    Entity | null = null   // daytime music
+let twilightEntity:   Entity | null = null   // crickets / leaves / bells bed
+let musicMix = -1                             // 1 = day bed, 0 = night loop; -1 = not set yet (snaps on the first tick)
+let musicWritten = -1
+let dropEntity:       Entity | null = null   // the Bloom drop loop
+let dropMix = 0                               // 0..1 how much drop is in
+let dropWanted = false                        // a Bloom is open (riser done) and not yet closing
+let dropGen = 0                               // a newer Bloom cancels an older riser's pending start
+let dropWritten = -1
 let pulseEntity:      Entity | null = null   // bloom layer 1 — silent until bloom
 let swellEntity:      Entity | null = null   // bloom layer 2 — silent until bloom
 let bloomModelEntity: Entity | null = null
@@ -136,6 +178,59 @@ export function musicFadeSystem(_dt: number): void {}
 // Setup
 // ---------------------------------------------------------------
 
+/** Crossfade the day bed and the night loop with the sky. Volumes are only written when they move by a noticeable step. */
+function musicMixSystem(dt: number): void {
+  if (baseLoopEntity === null || dayLoopEntity === null || dropEntity === null || twilightEntity === null) return
+  if (dropWanted && closeStarted) dropWanted = false   // the Bloom has started closing: let the drop go
+  const target = isNightNow() ? 0 : 1
+  musicMix = musicMix < 0 ? target : musicMix + (target - musicMix) * Math.min(1, dt / MUSIC_FADE_S)
+  if (Math.abs(musicMix - target) < 0.005) musicMix = target
+  const dTarget = dropWanted ? 1 : 0
+  dropMix += (dTarget - dropMix) * Math.min(1, dt / (dropWanted ? DROP_FADE_IN_S : DROP_FADE_OUT_S))
+  if (Math.abs(dropMix - dTarget) < 0.005) dropMix = dTarget
+  const changed = (a: number, w: number, t: number) => w < 0 || (a !== w && (Math.abs(a - w) >= 0.02 || a === t))
+  if (changed(musicMix, musicWritten, target) || changed(dropMix, dropWritten, dTarget)) {
+    musicWritten = musicMix
+    dropWritten = dropMix
+    const beds = 1 - (1 - BEDS_UNDER_DROP) * dropMix
+    AudioSource.getMutable(dayLoopEntity).volume  = DAY_LOOP_VOLUME * musicMix * beds
+    AudioSource.getMutable(baseLoopEntity).volume = BASE_LOOP_VOLUME * (1 - musicMix) * beds
+    AudioSource.getMutable(twilightEntity).volume = TWILIGHT_VOLUME * (TWILIGHT_DAY_SHARE + (1 - TWILIGHT_DAY_SHARE) * (1 - musicMix)) * beds
+    const drop = AudioSource.getMutable(dropEntity)
+    drop.volume = DROP_VOLUME * dropMix
+    if (dropMix === 0 && !dropWanted && drop.playing) drop.playing = false   // fully faded: stop it, so the next Bloom starts from beat 1
+  }
+}
+
+/** The Bloom opened: riser now, then the drop loop from its first beat once the riser lands. */
+function startBloomDrop(): void {
+  const gen = ++dropGen
+  playClip('assets/scene/Audio/BloomRiser.wav', RISER_VOLUME)
+  timers.setTimeout(() => {
+    if (gen !== dropGen || !bloomActive || closeStarted || dropEntity === null) return
+    AudioSource.createOrReplace(dropEntity, { audioClipUrl: 'assets/scene/Audio/BloomDrop.wav', playing: true, loop: true, volume: 0, pitch: 1, global: true })
+    dropWritten = -1
+    dropWanted = true
+  }, RISER_MS)
+}
+
+/** One call from a random spot around the player, at a pitch between 0.85 and 1.2 so the single recording reads as several birds. */
+function birdCall(): void {
+  const me = Transform.getOrNull(engine.PlayerEntity)?.position
+  if (!me || isNightNow()) return
+  const a = Math.random() * Math.PI * 2
+  const d = BIRD_DIST_MIN + Math.random() * (BIRD_DIST_MAX - BIRD_DIST_MIN)
+  playClip(BIRD_SRC, BIRD_VOLUME, { x: me.x + Math.cos(a) * d, y: me.y + 3 + Math.random() * 3, z: me.z + Math.sin(a) * d }, 0.85 + Math.random() * 0.35)
+}
+
+function scheduleBird(): void {
+  timers.setTimeout(() => {
+    birdCall()
+    if (Math.random() < BIRD_ANSWER_P) timers.setTimeout(birdCall, 600 + Math.random() * 1200)
+    scheduleBird()
+  }, (BIRD_MIN_S + Math.random() * (BIRD_MAX_S - BIRD_MIN_S)) * 1000)
+}
+
 export function setupBloomSystem(opts: {
   testMode: boolean
   onReset: () => void
@@ -158,6 +253,23 @@ export function setupBloomSystem(opts: {
     pitch: 1,
     global: true,
   })
+  dayLoopEntity = engine.addEntity()
+  Transform.create(dayLoopEntity, { position: BLOOM_CENTER })
+  AudioSource.create(dayLoopEntity, {
+    audioClipUrl: 'assets/scene/Audio/DayLoop.wav',
+    playing: true,
+    loop: true,
+    volume: 0,
+    pitch: 1,
+    global: true,
+  })
+  twilightEntity = engine.addEntity()
+  Transform.create(twilightEntity, { position: BLOOM_CENTER })
+  AudioSource.create(twilightEntity, { audioClipUrl: 'assets/scene/Audio/TwilightAmbience.wav', playing: true, loop: true, volume: 0, pitch: 1, global: true })
+  dropEntity = engine.addEntity()
+  Transform.create(dropEntity, { position: BLOOM_CENTER })
+  AudioSource.create(dropEntity, { audioClipUrl: 'assets/scene/Audio/BloomDrop.wav', playing: false, loop: true, volume: 0, pitch: 1, global: true })
+  engine.addSystem(musicMixSystem, undefined, 'day-night-music')
 
   // KJ 2026-10-15: "some special sound around the main bloom area". A positional loop AT the Bloom — sparse C-major wind chimes and a
   // faint breathing shimmer (synthesised: empty for claude/tools/bloom_ambience.py) — so walking up to the Bloom sounds different from
@@ -171,6 +283,8 @@ export function setupBloomSystem(opts: {
     volume: CHIMES_VOLUME,
     pitch: 1,
   })
+
+  scheduleBird()
 
   // Bloom layers — silent until bloom sequence defines them
   pulseEntity = engine.addEntity()
@@ -223,6 +337,7 @@ export function triggerBloomEvent(): void {
   closeStarted = false  // reset so startBloomClose can fire for this new cycle
   closeGen++            // cancel any pending close→idle timer from a previous cycle
   launchVisualBloom()
+  startBloomDrop()
 }
 
 // ---------------------------------------------------------------

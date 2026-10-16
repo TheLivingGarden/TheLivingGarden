@@ -36,7 +36,7 @@ const VOICES = 6
 const pools = new Map<string, { ents: Entity[]; next: number }>()
 
 /** Play any clip once from a free voice, at `at` (default: the player). */
-export function playClip(src: string, volume: number, at?: { x: number; y: number; z: number }): void {
+export function playClip(src: string, volume: number, at?: { x: number; y: number; z: number }, pitch = 1): void {
   const pos = at ?? Transform.getOrNull(engine.PlayerEntity)?.position
   if (!pos) return
   let pool = pools.get(src)
@@ -52,7 +52,7 @@ export function playClip(src: string, volume: number, at?: { x: number; y: numbe
   const e = pool.ents[pool.next]
   pool.next = (pool.next + 1) % pool.ents.length
   Transform.getMutable(e).position = pos
-  AudioSource.createOrReplace(e, { audioClipUrl: src, playing: true, loop: false, volume, pitch: 1 })
+  AudioSource.createOrReplace(e, { audioClipUrl: src, playing: true, loop: false, volume, pitch })
 }
 
 export function playSfx(name: SfxName, at?: { x: number; y: number; z: number }): void {

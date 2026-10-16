@@ -8,6 +8,9 @@ Thank you to the Decentraland Foundation for the opportunity to develop The Livi
 - Hover, click and watering sounds sourced from Decentraland Foundation 
 - Ambient audio tracks generated with ElevenLabs
 - Sparkle sound (Magic wand.wav by olver -- https://freesound.org/s/417860/ -- License: Creative Commons 0)
+- Birdsong (bird05.wav by l0vebliss -- https://freesound.org/s/519061/ -- License: Creative Commons 0; volume-normalised and converted to mono)
+- Twilight ambience (Crickets, Bells, and Leaves - Whispers of Summer Twilight by bassimat -- https://freesound.org/s/861408/ -- License: Creative Commons 0; made into a seamless loop, soft-limited and converted to mono. Its source recordings are credited on that page to https://freesound.org/s/861045/)
+- Day and night music beds, the Bloom chimes, the Bloom drop and the tutorial sounds were synthesised for this project (tools/day_ambience.py, bloom_ambience.py, tutorial_sfx.py)
 - Earlier version (V1, since removed): Magic Potion FX by CVLTIV8R -- https://freesound.org/s/813142/ -- License: Creative Commons 0
 
 
